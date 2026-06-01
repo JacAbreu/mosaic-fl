@@ -1,6 +1,6 @@
-# MOSAICO-FL
+# MOSAIC-FL
 
-**Módulo de Predição Federada para Trajetórias Clínicas**
+**Módulo de Predição Federada para Possibilidades de Diagnóstico e Evoluções Clínicas**
 
 Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 - **Aprendizado Federado (FedProx)** para dados hospitalares fragmentados
