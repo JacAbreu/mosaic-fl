@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "Jacqueline Abreu do N. T. R. Lopes", email = "jacqueline.abreu@usp.br"}
+    {name = "Jacqueline Abreu do N. T. R. Lopes", email = "abreujacline@gmail.com"}
 ]
 keywords = [
     "federated-learning",
@@ -58,22 +58,19 @@ docs = [
 
 [project.urls]
 Repository = "https://github.com/JacAbreu/mosaic-fl"
-
-
+ 
+ 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-dir]
-"" = "src"
-
+ 
 [tool.black]
 line-length = 100
 target-version = ["py310"]
-
+ 
 [tool.ruff]
 line-length = 100
 select = ["E", "F", "I", "W"]
-
+ 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

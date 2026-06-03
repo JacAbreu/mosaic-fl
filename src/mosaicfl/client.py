@@ -8,8 +8,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from collections import OrderedDict
 from typing import Dict, List, Tuple
 
-from model import SimplifiedBEHRT
-from config import *
+from .model import SimplifiedBEHRT
+from .config import *
 
 
 class FedProxClient(fl.client.NumPyClient):

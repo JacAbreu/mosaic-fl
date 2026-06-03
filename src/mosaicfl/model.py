@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from typing import Optional, Tuple, Union
-from config import *
+from .config import *
 
 
 class PositionalEncoding(nn.Module):

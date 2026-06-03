@@ -11,7 +11,7 @@ import numpy as np
 from typing import List, Dict, Tuple
 import json
 
-from config import *
+from .config import *
 
 
 class ClinicalRAG:
@@ -24,8 +24,9 @@ class ClinicalRAG:
         # LLM leve: DistilGPT-2
         self.tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL)
         self.llm = AutoModelForCausalLM.from_pretrained(LLM_MODEL)
-        self.generator = pipeline("text-generation", model=self.llm, tokenizer=self.tokenizer, 
-                                  max_new_tokens=MAX_NEW_TOKENS, device=0 if torch.cuda.is_available() else -1)
+        self.generator = pipeline("text-generation", model=self.llm, tokenizer=self.tokenizer,
+                                  max_new_tokens=MAX_NEW_TOKENS, device=0 if torch.cuda.is_available() else -1,
+                                  truncation=True)          # evita IndexError por prompt > 1024 tokens
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
@@ -73,13 +74,28 @@ class ClinicalRAG:
         Gera justificativa textual fundamentada nos casos recuperados.
         Retorna: (justificativa, casos_usados)
         """
-        cases_text = "\n".join([f"- {c['texto']}" for c in retrieved_cases[:3]])
-        
+        # Trunca cada caso a 100 tokens para não estourar o contexto do GPT-2 (limite: 1024)
+        MAX_CASE_TOKENS = 100
+        truncated_cases = []
+        for c in retrieved_cases[:3]:
+            ids = self.tokenizer.encode(c['texto'], max_length=MAX_CASE_TOKENS, truncation=True)
+            truncated_cases.append(self.tokenizer.decode(ids, skip_special_tokens=True))
+        cases_text = "\n".join([f"- {t}" for t in truncated_cases])
+
+        # Trunca os sintomas a 50 tokens
+        symptoms_ids = self.tokenizer.encode(symptoms, max_length=50, truncation=True)
+        symptoms_trunc = self.tokenizer.decode(symptoms_ids, skip_special_tokens=True)
+
         prompt = f"""Com base nos seguintes casos clínicos semelhantes:
 {cases_text}
 
-O modelo previu {prediction} (probabilidade {probability:.2f}) para o paciente com sintomas: {symptoms}.
+O modelo previu {prediction} (probabilidade {probability:.2f}) para o paciente com sintomas: {symptoms_trunc}.
 Justifique brevemente a predição:"""
+
+        # Garante que o prompt inteiro caiba no contexto (1024 - MAX_NEW_TOKENS)
+        max_prompt_tokens = 1024 - MAX_NEW_TOKENS - 10
+        prompt_ids = self.tokenizer.encode(prompt, max_length=max_prompt_tokens, truncation=True)
+        prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=True)
 
         output = self.generator(prompt, do_sample=True, temperature=0.7, num_return_sequences=1)
         justification = output[0]['generated_text'].replace(prompt, "").strip()

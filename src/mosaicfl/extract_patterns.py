@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 from typing import List, Dict
-from model import SimplifiedBEHRT
-from config import *
+from .model import SimplifiedBEHRT
+from .config import *
 
 
 class BEHRTPatternExtractor:

@@ -15,8 +15,8 @@ import numpy as np
 import torch
 import json
 
-from model import SimplifiedBEHRT
-from config import *
+from .model import SimplifiedBEHRT
+from .config import *
 
 
 class ConvergenceTracker:
