@@ -73,10 +73,10 @@ acessíveis sem configuração adicional de `PYTHONPATH`.
 
 ```bash
 # Ative o ambiente virtual (necessário uma vez por sessão de terminal)
-source .venv/bin/activate
+ source .venv/bin/activate
 
 # Execute os 5 experimentos
-python run.py
+ python run.py
 ```
 
 ### Windows

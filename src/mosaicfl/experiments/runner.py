@@ -254,8 +254,21 @@ class ExperimentRunner:
         print(f"T_opt = {t_opt} rodadas | Custo total: {self.results['exp5']['custo_total_mb']:.2f} MB")
 
     def save_results(self, filename="experiment_results.json"):
+        class NumpyEncoder(json.JSONEncoder):
+            """Converte tipos NumPy para tipos nativos Python antes de serializar."""
+            def default(self, obj):
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                if isinstance(obj, np.floating):
+                    return float(obj)
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                if isinstance(obj, np.bool_):
+                    return bool(obj)
+                return super().default(obj)
+
         with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(self.results, f, ensure_ascii=False, indent=2)
+            json.dump(self.results, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
         print(f"\nResultados salvos em {filename}")
 
 
