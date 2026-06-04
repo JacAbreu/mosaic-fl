@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mosaicfl.server.fullname" . }}
+  labels:
+    {{- include "mosaicfl.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mosaicfl.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        {{- include "mosaicfl.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      serviceAccountName: {{ include "mosaicfl.fullname" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: server
+          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: 8080
+              protocol: TCP
+          env:
+            {{- range $key, $value := .Values.server.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          volumeMounts:
+            - name: checkpoints
+              mountPath: /app/checkpoints
+            - name: logs
+              mountPath: /app/logs
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import socket; s=socket.socket(); s.connect(('localhost', 8080)); s.close()"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import socket; s=socket.socket(); s.connect(('localhost', 8080)); s.close()"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: checkpoints
+          {{- if .Values.server.persistence.checkpoints.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "mosaicfl.server.fullname" . }}-checkpoints
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: logs
+          {{- if .Values.server.persistence.logs.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "mosaicfl.server.fullname" . }}-logs
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

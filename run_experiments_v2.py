@@ -692,7 +692,7 @@ def run_federated_learning_ray(
         return FedProxClient(cid_int, train_loader, val_loader)
 
     # Estratégia
-    from src.server import start_server, weighted_average
+    from mosaicfl.v2.server_v2 import start_server, weighted_average
     strategy, tracker, history = start_server(
         num_rounds=NUM_ROUNDS,
         num_clients=len(client_loaders),

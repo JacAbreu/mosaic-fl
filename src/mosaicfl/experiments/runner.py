@@ -1,7 +1,8 @@
 """
-MOSAICO-FL / Mosaic-FL
-Orquestrador dos 5 experimentos do TCC.
-Classes 1-6 importadas do pacote mosaicfl (src layout).
+Orquestrador dos 5 experimentos do TCC (pipeline v1 — sintético).
+
+Consumido por: python run_experiments.py
+Imports exclusivamente de mosaicfl.v1.*
 """
 import torch
 import numpy as np
@@ -11,13 +12,13 @@ import time
 from sklearn.metrics import roc_auc_score, accuracy_score
 from torch.utils.data import DataLoader, TensorDataset
 
-from mosaicfl.preprocess import EHRPreprocessor, split_by_institution
-from mosaicfl.model import SimplifiedBEHRT
-from mosaicfl.client import FedProxClient
-from mosaicfl.server import start_server, ConvergenceTracker
-from mosaicfl.rag_system import ClinicalRAG
-from mosaicfl.extract_patterns import BEHRTPatternExtractor
-from mosaicfl.config import *
+from mosaicfl.v1.preprocess import EHRPreprocessor, split_by_institution
+from mosaicfl.v1.model import SimplifiedBEHRT
+from mosaicfl.v1.client import FedProxClient
+from mosaicfl.v1.server import start_server, ConvergenceTracker
+from mosaicfl.v1.rag_system import ClinicalRAG
+from mosaicfl.v1.extract_patterns import BEHRTPatternExtractor
+from mosaicfl.v1.config import *
 
 
 class ExperimentRunner:

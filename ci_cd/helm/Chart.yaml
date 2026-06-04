@@ -1,0 +1,12 @@
+apiVersion: v2
+name: mosaicfl
+description: Helm chart para MOSAIC-FL (Federated Learning)
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+home: https://github.com/JacAbreu/mosaic-fl
+sources:
+  - https://github.com/JacAbreu/mosaic-fl
+maintainers:
+  - name: Jacqueline Abreu
+    email: jacque.abreu@usp.br

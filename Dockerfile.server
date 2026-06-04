@@ -1,0 +1,54 @@
+# Dockerfile — mosaicfl-server
+# Servidor Flower de produção para MOSAIC-FL
+
+FROM python:3.12-slim
+
+# Variáveis de build
+ARG MOSAICFL_VERSION=0.2.0
+ARG SERVER_VERSION=0.2.0
+
+# Labels
+LABEL maintainer="Jacqueline Abreu <jacque.abreu@usp.br>"
+LABEL description="MOSAIC-FL Server — Federated Learning Production Server"
+LABEL version="${SERVER_VERSION}"
+
+# Diretório de trabalho
+WORKDIR /app
+
+# Instala dependências do sistema
+RUN apt-get update && apt-get install -y --no-install-recommends     gcc     g++     libgomp1     && rm -rf /var/lib/apt/lists/*
+
+# Copia o pacote core (src/) — necessário para build
+COPY src/ /app/src/
+
+# Copia o pacote server
+COPY infrastructure/server/ /app/server/
+
+# Instala o pacote core primeiro
+RUN pip install --no-cache-dir -e /app/src
+
+# Instala o pacote server
+RUN pip install --no-cache-dir -e /app/server
+
+# Cria diretórios para dados persistentes
+RUN mkdir -p /app/checkpoints /app/logs
+
+# Porta exposta
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3     CMD python -c "import requests; requests.get('http://localhost:8080/health', timeout=5)" || exit 1
+
+# Variáveis de ambiente padrão
+ENV FL_SERVER_ADDRESS=0.0.0.0:8080
+ENV FL_MIN_AVAILABLE_CLIENTS=3
+ENV FL_NUM_ROUNDS=20
+ENV FL_PROXIMAL_MU=0.01
+ENV FL_CHECKPOINT_DIR=/app/checkpoints
+ENV FL_LOG_DIR=/app/logs
+ENV FL_DEVICE=cpu
+ENV PYTHONUNBUFFERED=1
+
+# Entrypoint
+ENTRYPOINT ["mosaicfl-server"]
+CMD ["--port", "8080", "--min-clients", "3", "--rounds", "20"]

@@ -1,0 +1,66 @@
+{{- range .Values.client.hospitals }}
+{{- $hospitalName := .name }}
+{{- $hospital := . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mosaicfl.client.fullname" (dict "Values" $.Values "Release" $.Release "Chart" $.Chart "hospitalName" $hospitalName) }}
+  labels:
+    {{- include "mosaicfl.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: client
+    mosaicfl.hospital: {{ $hospitalName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mosaicfl.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: client
+      mosaicfl.hospital: {{ $hospitalName }}
+  template:
+    metadata:
+      labels:
+        {{- include "mosaicfl.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: client
+        mosaicfl.hospital: {{ $hospitalName }}
+    spec:
+      serviceAccountName: {{ include "mosaicfl.fullname" $ }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: client
+          image: "{{ $.Values.client.image.repository }}:{{ $.Values.client.image.tag }}"
+          imagePullPolicy: {{ $.Values.client.image.pullPolicy }}
+          env:
+            - name: FL_SERVER_ADDRESS
+              value: {{ $hospital.serverAddress | quote }}
+            - name: FL_CLIENT_ID
+              value: {{ $hospital.clientId | quote }}
+            - name: FL_LOG_DIR
+              value: "/app/logs"
+            - name: FL_DEVICE
+              value: "cpu"
+          resources:
+            {{- toYaml $hospital.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+              readOnly: true
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: data
+          {{- if $hospital.persistence.data.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "mosaicfl.client.fullname" (dict "Values" $.Values "Release" $.Release "Chart" $.Chart "hospitalName" $hospitalName) }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: logs
+          {{- if $hospital.persistence.logs.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "mosaicfl.client.fullname" (dict "Values" $.Values "Release" $.Release "Chart" $.Chart "hospitalName" $hospitalName) }}-logs
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+{{- end }}

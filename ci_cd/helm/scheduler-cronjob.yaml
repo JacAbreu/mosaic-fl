@@ -1,0 +1,43 @@
+{{- if .Values.scheduler.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "mosaicfl.fullname" . }}-scheduler
+  labels:
+    {{- include "mosaicfl.labels" . | nindent 4 }}
+    app.kubernetes.io/component: scheduler
+spec:
+  schedule: {{ .Values.scheduler.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "mosaicfl.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: scheduler
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: scheduler
+              image: "{{ .Values.scheduler.image.repository }}:{{ .Values.scheduler.image.tag }}"
+              imagePullPolicy: {{ .Values.scheduler.image.pullPolicy }}
+              command:
+                - python
+                - -m
+                - mosaicfl_server.scheduler
+                - --once
+              env:
+                {{- range $key, $value := .Values.scheduler.env }}
+                - name: {{ $key }}
+                  value: {{ $value | quote }}
+                {{- end }}
+              volumeMounts:
+                - name: logs
+                  mountPath: /app/logs
+          volumes:
+            - name: logs
+              emptyDir: {}
+{{- end }}

@@ -1,0 +1,128 @@
+# Valores padrão para MOSAIC-FL
+
+# ── Servidor ──────────────────────────────────────────────
+server:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/jacabreu/mosaic-fl-server
+    pullPolicy: IfNotPresent
+    tag: "latest"
+
+  service:
+    type: LoadBalancer
+    port: 8080
+
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+
+  env:
+    FL_SERVER_ADDRESS: "0.0.0.0:8080"
+    FL_MIN_AVAILABLE_CLIENTS: "3"
+    FL_NUM_ROUNDS: "20"
+    FL_PROXIMAL_MU: "0.01"
+    FL_DEVICE: "cpu"
+
+  persistence:
+    checkpoints:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+    logs:
+      enabled: true
+      size: 5Gi
+      storageClass: ""
+
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: mosaicfl-server.local
+        paths:
+          - path: /
+            pathType: Prefix
+
+# ── Clientes ──────────────────────────────────────────────
+client:
+  enabled: false  # habilite para cada hospital
+
+  image:
+    repository: ghcr.io/jacabreu/mosaic-fl-client
+    pullPolicy: IfNotPresent
+    tag: "latest"
+
+  # Lista de hospitais (cada um é um Deployment separado)
+  hospitals:
+    - name: hospital-a
+      clientId: hospital_a
+      serverAddress: mosaicfl-server:8080
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+        requests:
+          cpu: 500m
+          memory: 1Gi
+      persistence:
+        data:
+          enabled: true
+          size: 20Gi
+          storageClass: ""
+        logs:
+          enabled: true
+          size: 2Gi
+          storageClass: ""
+
+    - name: hospital-b
+      clientId: hospital_b
+      serverAddress: mosaicfl-server:8080
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+        requests:
+          cpu: 500m
+          memory: 1Gi
+      persistence:
+        data:
+          enabled: true
+          size: 20Gi
+          storageClass: ""
+        logs:
+          enabled: true
+          size: 2Gi
+          storageClass: ""
+
+# ── Scheduler ───────────────────────────────────────────────
+scheduler:
+  enabled: true
+  schedule: "0 2 * * *"  # 2h da manhã
+  image:
+    repository: ghcr.io/jacabreu/mosaic-fl-server
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  env:
+    FL_SCHEDULER_INTERVAL_HOURS: "6"
+    FL_SCHEDULER_MIN_CLIENTS: "3"
+    FL_SCHEDULER_MAX_ROUNDS: "20"
+
+# ── Configurações globais ─────────────────────────────────
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}

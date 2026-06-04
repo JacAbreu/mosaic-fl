@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mosaicfl-server"
+version = "0.2.0"
+description = "Servidor de produção para MOSAIC-FL (Federated Learning)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Jacqueline Abreu", email = "jacque.abreu@usp.br"}
+]
+
+dependencies = [
+    "mosaicfl>=0.2.0",        # pacote core da raiz
+    "flwr>=1.5.0",
+    "torch>=2.0.0",
+    "apscheduler>=3.10.0",    # se o scheduler rodar junto
+]
+
+[project.scripts]
+mosaicfl-server = "mosaicfl_server.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/JacAbreu/mosaic-fl"
+Repository = "https://github.com/JacAbreu/mosaic-fl"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mosaicfl_server*"]

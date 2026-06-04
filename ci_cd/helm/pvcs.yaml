@@ -1,0 +1,78 @@
+{{- if .Values.server.persistence.checkpoints.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mosaicfl.server.fullname" . }}-checkpoints
+  labels:
+    {{- include "mosaicfl.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.server.persistence.checkpoints.size }}
+  {{- if .Values.server.persistence.checkpoints.storageClass }}
+  storageClassName: {{ .Values.server.persistence.checkpoints.storageClass }}
+  {{- end }}
+---
+{{- end }}
+
+{{- if .Values.server.persistence.logs.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mosaicfl.server.fullname" . }}-logs
+  labels:
+    {{- include "mosaicfl.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.server.persistence.logs.size }}
+  {{- if .Values.server.persistence.logs.storageClass }}
+  storageClassName: {{ .Values.server.persistence.logs.storageClass }}
+  {{- end }}
+---
+{{- end }}
+
+{{- range .Values.client.hospitals }}
+{{- $hospitalName := .name }}
+{{- if .persistence.data.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mosaicfl.client.fullname" (dict "Values" $.Values "Release" $.Release "Chart" $.Chart "hospitalName" $hospitalName) }}-data
+  labels:
+    {{- include "mosaicfl.labels" $ | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .persistence.data.size }}
+  {{- if .persistence.data.storageClass }}
+  storageClassName: {{ .persistence.data.storageClass }}
+  {{- end }}
+---
+{{- end }}
+
+{{- if .persistence.logs.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mosaicfl.client.fullname" (dict "Values" $.Values "Release" $.Release "Chart" $.Chart "hospitalName" $hospitalName) }}-logs
+  labels:
+    {{- include "mosaicfl.labels" $ | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .persistence.logs.size }}
+  {{- if .persistence.logs.storageClass }}
+  storageClassName: {{ .persistence.logs.storageClass }}
+  {{- end }}
+---
+{{- end }}
+{{- end }}

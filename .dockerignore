@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.venv
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.whl
+*.tar.gz
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs e dados locais (serão montados como volumes)
+logs/
+checkpoints/
+data/
+*.csv
+*.db
+*.sqlite3
+
+# Documentação
+docs/
+*.md
+!README.md
+
+# Testes
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Notebooks
+*.ipynb
+.ipynb_checkpoints/

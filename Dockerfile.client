@@ -1,0 +1,50 @@
+# Dockerfile — mosaicfl-client
+# Cliente Flower de produção para MOSAIC-FL (roda em cada hospital)
+
+FROM python:3.12-slim
+
+# Variáveis de build
+ARG MOSAICFL_VERSION=0.2.0
+ARG CLIENT_VERSION=0.2.0
+
+# Labels
+LABEL maintainer="Jacqueline Abreu <jacque.abreu@usp.br>"
+LABEL description="MOSAIC-FL Client — Federated Learning Hospital Client"
+LABEL version="${CLIENT_VERSION}"
+
+# Diretório de trabalho
+WORKDIR /app
+
+# Instala dependências do sistema
+RUN apt-get update && apt-get install -y --no-install-recommends     gcc     g++     libgomp1     && rm -rf /var/lib/apt/lists/*
+
+# Copia o pacote core (src/)
+COPY src/ /app/src/
+
+# Copia o pacote client
+COPY infrastructure/client/ /app/client/
+
+# Instala o pacote core primeiro
+RUN pip install --no-cache-dir -e /app/src
+
+# Instala o pacote client
+RUN pip install --no-cache-dir -e /app/client
+
+# Cria diretórios para dados e logs
+RUN mkdir -p /app/data /app/logs
+
+# Health check (verifica se consegue escrever heartbeat)
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3     CMD python -c "from mosaicfl_client.heartbeat import write_heartbeat; write_heartbeat('healthy')" || exit 1
+
+# Variáveis de ambiente padrão
+ENV FL_SERVER_ADDRESS=localhost:8080
+ENV FL_CLIENT_ID=client_0
+ENV FL_HEARTBEAT_INTERVAL=60
+ENV FL_RECONNECT_DELAY=30
+ENV FL_LOG_DIR=/app/logs
+ENV FL_DEVICE=cpu
+ENV PYTHONUNBUFFERED=1
+
+# Entrypoint
+ENTRYPOINT ["mosaicfl-client"]
+CMD ["--server", "localhost:8080", "--client-id", "client_0"]
