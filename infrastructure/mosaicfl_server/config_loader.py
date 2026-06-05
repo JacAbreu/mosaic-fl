@@ -66,7 +66,7 @@ class ChromaDBConfigLoader:
             raw = result["metadatas"][0]
             return self._cast(raw)
         except Exception as e:
-            logger.warning("ChromaDBConfigLoader.load erro (round %s): %s", round_num, e)
+            logger.warning("config_load_error", extra={"backend": "chroma", "round": round_num, "error": str(e)})
             return {}
 
     def write(self, config: Dict) -> None:
@@ -84,15 +84,15 @@ class ChromaDBConfigLoader:
                 documents=["runtime_config"],
                 metadatas=[metadata],
             )
-            logger.info("Config escrita no ChromaDB: %s", metadata)
+            logger.info("config_written", extra={"backend": "chroma", "keys": list(metadata.keys())})
         except Exception as e:
-            logger.error("ChromaDBConfigLoader.write erro: %s", e)
+            logger.error("config_write_error", extra={"backend": "chroma", "error": str(e)})
 
     def clear(self) -> None:
         """Remove o documento de config (volta para defaults da strategy)."""
         try:
             self._collection.delete(ids=[_DOC_ID])
-            logger.info("Config runtime removida do ChromaDB.")
+            logger.info("config_cleared", extra={"backend": "chroma"})
         except Exception:
             pass
 
@@ -131,14 +131,14 @@ class FileConfigLoader:
             with open(self._path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            logger.warning("FileConfigLoader.load erro (round %s): %s", round_num, e)
+            logger.warning("config_load_error", extra={"backend": "file", "round": round_num, "error": str(e)})
             return {}
 
     def write(self, config: Dict) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with open(self._path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
-        logger.info("Config escrita em %s: %s", self._path, config)
+        logger.info("config_written", extra={"backend": "file", "path": str(self._path)})
 
     def clear(self) -> None:
         self._path.unlink(missing_ok=True)
@@ -153,7 +153,7 @@ def get_config_loader() -> ChromaDBConfigLoader | FileConfigLoader:
     """
     backend = os.getenv("FL_CONFIG_BACKEND", "chroma").lower()
     if backend == "file":
-        logger.info("Config loader: arquivo local")
+        logger.info("config_loader_selected", extra={"backend": "file"})
         return FileConfigLoader()
-    logger.info("Config loader: ChromaDB (%s)", _CHROMA_PATH)
+    logger.info("config_loader_selected", extra={"backend": "chroma", "db_path": _CHROMA_PATH})
     return ChromaDBConfigLoader()

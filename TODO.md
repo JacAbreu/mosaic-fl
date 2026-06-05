@@ -69,13 +69,13 @@ Dividido em duas partes:
 
 ### Observabilidade
 
-- [ ] **Structured logging em JSON**
+- [x] ~~**Structured logging em JSON**~~
 
-  Hoje os logs são strings livres (`logger.info("Rodada %d: ...", round)`). Em produção, logs precisam ser parseáveis por ferramentas como Loki, Datadog ou CloudWatch. Substituir por structured logging:
+  ~~Hoje os logs são strings livres (`logger.info("Rodada %d: ...", round)`). Em produção, logs precisam ser parseáveis por ferramentas como Loki, Datadog ou CloudWatch. Substituir por structured logging:~~
   ```python
   logger.info("round_completed", extra={"round": 3, "accuracy": 0.82, "loss": 0.31})
   ```
-  Usar `python-json-logger` ou `structlog`.
+  Implementado em `infrastructure/logging_setup.py` com `python-json-logger`. Saída JSON por padrão (`FL_LOG_FORMAT=json`); fallback texto com `FL_LOG_FORMAT=text`. Eventos estruturados: `round_dispatched`, `round_completed`, `convergence_reached`, `checkpoint_saved`, `proximal_mu_updated`, `config_written`, `client_registered`, etc. Todos os daemons e strategy atualizados.
 
 - [ ] **Health check endpoint nos daemons**
 

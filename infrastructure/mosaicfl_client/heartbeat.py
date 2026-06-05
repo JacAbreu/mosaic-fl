@@ -64,11 +64,11 @@ def write_heartbeat(status: str = "ready", registry_path: Optional[str] = None):
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
                 
     except json.JSONDecodeError as e:
-        logger.error(f"Erro ao decodificar JSON do registry: {e}")
+        logger.error("registry_json_error", extra={"client_id": CLIENT_ID, "error": str(e)})
         # Backup e recria com JSON válido contendo este cliente.
         backup = registry_file.with_suffix(".json.bak")
         registry_file.rename(backup)
-        logger.info(f"Registry corrompido salvo em {backup}. Criando novo.")
+        logger.info("registry_recovered", extra={"client_id": CLIENT_ID, "backup": str(backup)})
         new_registry = {
             CLIENT_ID: {
                 "last_seen": datetime.now().timestamp(),
@@ -81,11 +81,11 @@ def write_heartbeat(status: str = "ready", registry_path: Optional[str] = None):
         )
         
     except PermissionError as e:
-        logger.error(f"Permissão negada ao acessar registry: {e}")
+        logger.error("registry_permission_error", extra={"client_id": CLIENT_ID, "error": str(e)})
         raise
-        
+
     except Exception as e:
-        logger.error(f"Erro inesperado ao escrever heartbeat: {e}")
+        logger.error("heartbeat_write_error", extra={"client_id": CLIENT_ID, "error": str(e)})
         raise
 
 
@@ -122,7 +122,7 @@ def read_heartbeat(client_id: Optional[str] = None, registry_path: Optional[str]
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
                 
     except (json.JSONDecodeError, IOError) as e:
-        logger.error(f"Erro ao ler registry: {e}")
+        logger.error("registry_read_error", extra={"client_id": client_id, "error": str(e)})
         return None
 
 

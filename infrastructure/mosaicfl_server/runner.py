@@ -29,6 +29,7 @@ from mosaicfl.v2.server_v2 import get_evaluate_fn, weighted_average_accuracy, we
 
 from .config_loader import get_config_loader
 from .strategy import ProductionFedProxStrategy
+from infrastructure.logging_setup import setup_logging as _setup_logging
 
 SERVER_ADDRESS = os.getenv("FL_SERVER_ADDRESS", "0.0.0.0:8080")
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
@@ -38,18 +39,9 @@ logger = logging.getLogger(__name__)
 
 
 def setup_logging() -> None:
-    """Configura logging em arquivo e stdout (idempotente se já configurado)."""
+    """Configura logging estruturado (JSON ou texto) via logging_setup central."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    if logging.getLogger().handlers:
-        return
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[
-            logging.FileHandler(LOG_DIR / "server_daemon.log", encoding="utf-8"),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
+    _setup_logging(log_file="server_daemon.log")
 
 
 def write_health_status(status: str, round_num: int = 0, clients: int = 0):
@@ -94,8 +86,8 @@ class FederatedServer:
     def _init_model(self) -> torch.nn.Module:
         model = SimplifiedBEHRT(use_cls_token=True).to(DEVICE)
         logger.info(
-            "Modelo global (v2): %s parâmetros",
-            f"{sum(p.numel() for p in model.parameters()):,}",
+            "model_initialized",
+            extra={"param_count": sum(p.numel() for p in model.parameters()), "device": str(DEVICE)},
         )
         return model
 
@@ -104,7 +96,7 @@ class FederatedServer:
         return None
 
     def _signal_handler(self, signum, frame):
-        logger.info("Sinal %s recebido. Graceful shutdown...", signum)
+        logger.info("signal_received", extra={"signum": signum})
         self._shutdown_event.set()
 
     def _on_round_start(self, round_num: int, runtime_config: dict) -> None:
@@ -124,7 +116,7 @@ class FederatedServer:
         self.test_loader = self._load_test_data()
         if self.test_loader is not None:
             evaluate_fn = get_evaluate_fn(self.test_loader)
-            logger.info("Avaliação global ativada.")
+            logger.info("evaluate_fn_enabled")
 
         config_loader = get_config_loader()
 
@@ -144,17 +136,17 @@ class FederatedServer:
             on_fit_config_fn=lambda rnd: {"proximal_mu": self.proximal_mu, "round": rnd},
         )
 
-        logger.info("=" * 60)
-        logger.info("MOSAIC-FL — SERVIDOR DE PRODUÇÃO (v2)")
-        logger.info("=" * 60)
-        logger.info("Endereço:       %s", self.address)
-        logger.info("Rounds:         %s", self.num_rounds)
-        logger.info("Min clientes:   %s", self.min_clients)
-        logger.info("Proximal mu:    %s", self.proximal_mu)
-        logger.info("Device:         %s", DEVICE)
-        logger.info("Checkpoints:    %s", CHECKPOINT_DIR)
-        logger.info("=" * 60)
-        logger.info("Aguardando conexões de clientes...")
+        logger.info(
+            "server_startup",
+            extra={
+                "address": self.address,
+                "rounds": self.num_rounds,
+                "min_clients": self.min_clients,
+                "proximal_mu": self.proximal_mu,
+                "device": str(DEVICE),
+                "checkpoint_dir": str(CHECKPOINT_DIR),
+            },
+        )
 
         write_health_status("starting")
 
@@ -165,12 +157,12 @@ class FederatedServer:
                 strategy=strategy,
             )
         except Exception as e:
-            logger.error("Erro no servidor: %s", e)
+            logger.error("server_error", extra={"error": str(e)})
             write_health_status("error", clients=0)
             raise
         finally:
             write_health_status("stopped", round_num=strategy.round_counter)
-            logger.info("Servidor finalizado.")
+            logger.info("server_stopped", extra={"rounds_completed": strategy.round_counter})
 
 
 def main() -> None:

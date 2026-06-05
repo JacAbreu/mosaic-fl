@@ -281,7 +281,7 @@ O [`TODO.md`](TODO.md) tem a lista priorizada de trabalho pendente. Os itens mai
 **Infraestrutura (médio risco):**
 - Implementar `_save_checkpoint` real em `server_v2.py` com `torch.save`
 - Adicionar `PostgresConfigLoader` em `config_loader.py` (o protocolo já existe)
-- Structured logging em JSON nos daemons
+- Health check endpoint nos daemons (`/healthz` via FastAPI ou `http.server`)
 
 **Antes de começar um item grande**, abra uma issue ou discuta no PR para evitar trabalho duplicado.
 

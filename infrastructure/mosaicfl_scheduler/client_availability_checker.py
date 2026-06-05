@@ -52,10 +52,10 @@ class ClientAvailabilityChecker:
                 cid for cid, info in registry.items()
                 if isinstance(info, dict) and (now - info.get("last_seen", 0)) < 600  # 10 min
             ]
-            logger.info(f"Clientes ativos via registry: {active}")
+            logger.info("clients_active", extra={"count": len(active), "clients": active})
             return len(active), active
         except Exception as e:
-            logger.warning(f"Erro ao ler registry de clientes: {e}")
+            logger.warning("registry_read_error", extra={"error": str(e)})
             return 0, []
 
     def check_via_ping(self, timeout: float = 5.0) -> Tuple[int, List[str]]:
@@ -69,9 +69,9 @@ class ClientAvailabilityChecker:
                 sock = socket.create_connection((host, int(port)), timeout=timeout)
                 sock.close()
                 active.append(client_addr)
-                logger.debug(f"Cliente {client_addr} respondendo.")
+                logger.debug("client_ping_ok", extra={"client": client_addr})
             except Exception:
-                logger.debug(f"Cliente {client_addr} offline.")
+                logger.debug("client_ping_fail", extra={"client": client_addr})
 
         return len(active), active
 
@@ -80,6 +80,6 @@ class ClientAvailabilityChecker:
         addr = f"{host}:{port}"
         if addr not in self.known_clients:
             self.known_clients.append(addr)
-            logger.info(f"Cliente registrado: {client_id} @ {addr}")
+            logger.info("client_registered", extra={"client_id": client_id, "address": addr})
         else:
-            logger.debug(f"Cliente {client_id} @ {addr} já registrado.")
+            logger.debug("client_already_registered", extra={"client_id": client_id, "address": addr})

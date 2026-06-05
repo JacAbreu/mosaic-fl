@@ -45,7 +45,7 @@ class ConvergenceTracker:
         converged = all(d < self.threshold for d in deltas)
         if converged and self.converged_round is None:
             self.converged_round = len(self.history)
-            logger.info("Convergência atingida na rodada %s", self.converged_round)
+            logger.info("convergence_reached", extra={"convergence_round": self.converged_round})
         return converged
 
     def reset(self):
@@ -94,7 +94,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         runtime = self.config_loader.load(server_round)
 
         if runtime.get("stop", False):
-            logger.info("Round %s: parada antecipada solicitada via config.", server_round)
+            logger.info("round_stopped", extra={"round": server_round, "reason": "config_stop"})
             self.should_stop = True
             return []
 
@@ -102,22 +102,22 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
             new_mu = float(runtime["proximal_mu"])
             if new_mu != self.proximal_mu:
                 logger.info(
-                    "Round %s: proximal_mu %.4f -> %.4f (via config_loader)",
-                    server_round, self.proximal_mu, new_mu,
+                    "proximal_mu_updated",
+                    extra={"round": server_round, "old_mu": self.proximal_mu, "new_mu": new_mu},
                 )
                 self.proximal_mu = new_mu
 
         pause = float(runtime.get("pause_seconds", 0) or 0)
         if pause > 0:
             import time
-            logger.info("Round %s: pausando %.1fs (config_loader)", server_round, pause)
+            logger.info("round_paused", extra={"round": server_round, "pause_seconds": pause})
             time.sleep(pause)
 
         if self.on_round_start is not None:
             try:
                 self.on_round_start(server_round, runtime)
             except Exception as e:
-                logger.warning("on_round_start callback erro: %s", e)
+                logger.warning("round_start_callback_error", extra={"round": server_round, "error": str(e)})
 
         return super().configure_fit(server_round, parameters, client_manager)
 
@@ -145,7 +145,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
             self._load_global_weights(aggregated_parameters)
             checkpoint_path = CHECKPOINT_DIR / f"round_{server_round}.pt"
             torch.save(self.global_model.state_dict(), checkpoint_path)
-            logger.info("Checkpoint salvo: %s", checkpoint_path)
+            logger.info("checkpoint_saved", extra={"round": server_round, "path": str(checkpoint_path)})
 
         return aggregated_parameters, aggregated_metrics
 
@@ -175,10 +175,13 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
                     indent=2,
                 )
         except Exception as e:
-            logger.warning("Erro ao salvar métricas: %s", e)
+            logger.warning("metrics_write_error", extra={"round": server_round, "error": str(e)})
 
         if self.tracker.converged_round is not None:
             self.should_stop = True
-            logger.info("Convergência detectada. Servidor encerrará após esta rodada.")
+            logger.info(
+                "convergence_detected",
+                extra={"round": server_round, "convergence_round": self.tracker.converged_round},
+            )
 
         return aggregated_loss, aggregated_metrics

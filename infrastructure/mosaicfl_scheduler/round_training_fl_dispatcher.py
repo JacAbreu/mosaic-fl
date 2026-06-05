@@ -46,7 +46,8 @@ class RoundDispatcher:
         Retorna: True se métricas foram coletadas com sucesso.
         """
         logger.info(
-            f"Dispatching round {round_num} com {len(active_clients)} clientes: {active_clients}"
+            "round_dispatched",
+            extra={"round": round_num, "client_count": len(active_clients), "clients": active_clients},
         )
 
         # Em produção real, substituir por:
@@ -54,8 +55,6 @@ class RoundDispatcher:
         #   - Ou polling de endpoint REST /metrics
         #   - Ou leitura de fila (Redis, RabbitMQ)
 
-        # Aguarda métricas via polling (não bloqueia com sleep fixo)
-        logger.info("Aguardando métricas da rodada via polling (max 10 min)...")
         metrics = self._poll_round_metrics(round_num)
 
         if metrics:
@@ -64,10 +63,13 @@ class RoundDispatcher:
             self.state.last_run = datetime.now().isoformat()
             self.state.save()
 
-            logger.info(f"Round {round_num} completado: accuracy={metrics.get('accuracy', 'N/A')}")
+            logger.info(
+                "round_completed",
+                extra={"round": round_num, "accuracy": metrics.get("accuracy"), "loss": metrics.get("loss")},
+            )
             return True
         else:
-            logger.warning(f"Round {round_num}: métricas não disponíveis.")
+            logger.warning("round_metrics_unavailable", extra={"round": round_num})
             return False
 
     def _poll_round_metrics(self, round_num: int, max_wait: int = 600) -> Optional[dict]:
@@ -80,7 +82,7 @@ class RoundDispatcher:
                     with open(metrics_file, "r", encoding="utf-8") as f:
                         return json.load(f)
                 except Exception as e:
-                    logger.debug(f"Erro lendo métricas (tentativa {attempt}): {e}")
+                    logger.debug("metrics_read_error", extra={"round": round_num, "attempt": attempt, "error": str(e)})
             time.sleep(10)
 
         return None
@@ -100,7 +102,8 @@ class RoundDispatcher:
             self.state.convergence_round = self.state.total_rounds_completed
             self.state.save()
             logger.info(
-                f"🎯 CONVERGÊNCIA ATINGIDA na rodada {self.state.convergence_round}!"
+                "convergence_reached",
+                extra={"convergence_round": self.state.convergence_round},
             )
 
         return converged
