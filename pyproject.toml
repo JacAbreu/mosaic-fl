@@ -56,4 +56,34 @@ target-version = ["py310"]
 line-length = 100
 select = ["E", "F", "W", "I"]
 
+[tool.coverage.run]
+source = ["src/mosaicfl/v2", "infrastructure"]
+omit = [
+    # legado sem testes
+    "src/mosaicfl/v1/*",
+    "src/mosaicfl/experiments/*",
+    # entrypoints e wrappers — sem lógica própria
+    "*/__main__.py",
+    "*/__init__.py",
+    "*/infrastructure/*/server_daemon.py",
+    "*/infrastructure/*/client_daemon*.py",
+    "*/infrastructure/*/scheduler_cli.py",
+    # runners bloqueantes (fl.server.start_server / APScheduler)
+    "*/infrastructure/mosaicfl_server/runner.py",
+    "*/infrastructure/mosaicfl_client/runner.py",
+    # conectores de banco que exigem infraestrutura real
+    "src/mosaicfl/v2/data_loader.py",
+    "*/infrastructure/mosaicfl_client/datasource.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == .__main__.:",
+    "pragma: no cover",
+    # blocos de debug/desenvolvimento não executados em testes
+    "raise NotImplementedError",
+]
+show_missing = true
+skip_empty = true
+
 

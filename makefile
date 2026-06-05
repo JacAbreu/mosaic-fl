@@ -90,7 +90,7 @@ test:
 
 # Run tests with coverage report
 test-cov:
-	$(PYTHON_VENV) -m pytest tests/ -v --tb=short --cov=src/mosaicfl --cov-report=term-missing
+	$(PYTHON_VENV) -m pytest tests/ -v --tb=short --cov --cov-report=term-missing
 
 # Lint with ruff (check only)
 lint:

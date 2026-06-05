@@ -62,14 +62,6 @@ Dividido em duas partes:
 
   Os testes atuais verificam que os métodos rodam, mas não validam os tipos de retorno de forma rigorosa. Um teste de contrato verifica que `fit()` sempre retorna `(List[np.ndarray], int, {"loss": float})` — se alguém mudar a chave de `"loss"` para `"train_loss"`, o teste quebra imediatamente.
 
-- [ ] **Medir e publicar cobertura de código**
-
-  `make test-cov` já existe e a suite tem 299 testes, mas o percentual não é exibido como badge no README nem há threshold mínimo definido. Adicionar ao CI:
-  ```yaml
-  - run: make test-cov
-  - uses: codecov/codecov-action@v4
-  ```
-  E definir threshold mínimo de 80%. Cobertura sem threshold é decoração.
 
 - [ ] **Teste de integração end-to-end real (sem mocks)**
 
