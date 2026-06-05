@@ -14,9 +14,9 @@ Dividido em duas partes:
 
   A docstring diz "retorna apenas parâmetros treináveis" mas o código usa `state_dict().values()` (34 tensores, incluindo buffers). A linha correta está comentada logo acima. Essa contradição é uma armadilha para quem lê o código depois: ou a docstring está errada, ou a implementação está errada. Decidir qual comportamento é o correto e alinhar os dois.
 
-- [x] **Eliminar `from .config import *` em todos os módulos v2**
+- [x] ~~**Eliminar `from .config import *` em todos os módulos v2**~~
 
-  Wildcard imports poluem o namespace de cada módulo com ~20 constantes, dificultam entender de onde vem cada símbolo, e causam conflitos silenciosos se dois módulos definirem o mesmo nome. Substituir por imports explícitos: `from .config import VOCAB_SIZE, EMBED_DIM, ...`.
+  ~~Wildcard imports poluem o namespace de cada módulo com ~20 constantes, dificultam entender de onde vem cada símbolo, e causam conflitos silenciosos se dois módulos definirem o mesmo nome. Substituir por imports explícitos: `from .config import VOCAB_SIZE, EMBED_DIM, ...`.~~
 
 - [ ] **Unificar os dois `ConvergenceTracker`**
 
@@ -30,40 +30,31 @@ Dividido em duas partes:
 
   O bloco que inicia o Flower de fato está comentado. O módulo retorna a strategy mas nunca sobe o servidor. Para a seção "Rodando Localmente" do README funcionar de ponta a ponta com `server_v2.py`, esse código precisa estar ativo (e o `StopIteration` para convergência antecipada precisa ser testado).
 
-- [x] **Corrigir `fit_metrics_aggregation_fn=weighted_average`**
+- [x] ~~**Corrigir `fit_metrics_aggregation_fn=weighted_average`**~~
+
+  ~~`weighted_average` espera o dicionário `{"accuracy": float}`. Quando usado como `fit_metrics_aggregation_fn`, recebe `{"loss": float}` — a chave `"accuracy"` não existe e retorna `{}`.~~
 
   Implementada opção C: `_weighted_average(metrics, key)` como implementação privada + `weighted_average_accuracy` e `weighted_average_loss` como funções públicas nomeadas. O alias `weighted_average = weighted_average_accuracy` preserva compatibilidade. Call sites em `server_v2.py`, `runner.py` e `strategy.py` atualizados. 8 novos testes em `TestWeightedAverageLoss` incluindo reprodução do bug original.
 
 - [x] ~~**Corrigir `communication_mb` no histórico**~~
 
-  ~~Em `server_v2.py` a estimativa é `round * 2.0` MB — um número arbitrário que cresce linearmente com o número de rounds sem relação com o tamanho real do modelo. O `benchmark.py` já calcula o tamanho real via `state_dict`. Usar essa mesma lógica no servidor.~~
+  ~~Em `server_v2.py` a estimativa é `round * 2.0` MB — um número arbitrário que cresce linearmente com o número de rounds sem relação com o tamanho real do modelo.~~
 
   Implementado: `_MODEL_SIZE_MB = 2.745 MB` calculado uma vez do `state_dict` real. `communication_mb` agora é `len(results) * _MODEL_SIZE_MB * 2` (upload + download por cliente que participou da rodada).
 
 ### Qualidade de código estático
 
-- [x] **Adicionar type hints completos**
+- [x] ~~**Adicionar type hints completos**~~
 
-  Os módulos v2 têm type hints parciais. Completar com anotações em todos os métodos públicos e habilitar `mypy` no CI. Type hints servem como documentação executável e pegam classes inteiras de bugs antes de rodar.
+  ~~Os módulos v2 têm type hints parciais. Completar com anotações em todos os métodos públicos e habilitar `mypy` no CI. Type hints servem como documentação executável e pegam classes inteiras de bugs antes de rodar.~~
 
-  ```bash
-  # Instalar e rodar
-  pip install mypy
-  mypy src/mosaicfl/v2/ --ignore-missing-imports
-  ```
+- [x] ~~**Adicionar linting com ruff ao `make` e ao CI**~~
 
-- [x] **Adicionar linting com ruff ao `make` e ao CI**
+  ~~O `ruff` já está no `setup` do Makefile mas não há target `make lint` funcional nem verificação no CI. Adicionar `make lint` e `make fmt`, e bloquear merge se o lint falhar no GitHub Actions.~~
 
-  O `ruff` já está no `setup` do Makefile mas não há target `make lint` funcional nem verificação no CI. Adicionar:
-  ```bash
-  make lint   # ruff check src/ tests/
-  make fmt    # ruff format src/ tests/
-  ```
-  E bloquear merge se o lint falhar no GitHub Actions.
+- [x] ~~**Configurar pre-commit hooks**~~
 
-- [x] **Configurar pre-commit hooks**
-
-  Sem hooks, é fácil commitar código com imports não usados, formatação inconsistente ou strings de debug. Adicionar `.pre-commit-config.yaml` com `ruff`, `ruff-format` e `mypy --fast-module-lookup`. Isso garante que o CI nunca vê código que o dev poderia ter pego localmente.
+  ~~Sem hooks, é fácil commitar código com imports não usados, formatação inconsistente ou strings de debug. Adicionar `.pre-commit-config.yaml` com `ruff`, `ruff-format` e detecção de debug statements.~~
 
 ### Testes
 
@@ -73,7 +64,7 @@ Dividido em duas partes:
 
 - [ ] **Medir e publicar cobertura de código**
 
-  `make test-cov` já existe e a suite tem 291 testes, mas o percentual não é exibido como badge no README nem há threshold mínimo definido. Adicionar ao CI:
+  `make test-cov` já existe e a suite tem 299 testes, mas o percentual não é exibido como badge no README nem há threshold mínimo definido. Adicionar ao CI:
   ```yaml
   - run: make test-cov
   - uses: codecov/codecov-action@v4
@@ -108,25 +99,19 @@ Dividido em duas partes:
 
   `config.py` mistura hiperparâmetros de modelo (`VOCAB_SIZE`, `EMBED_DIM`) com configurações de ambiente (`DEVICE`, `OMP_NUM_THREADS`, `DATA_PATH`). Os primeiros são fixos para o experimento; os segundos variam por máquina. Separar em `model_config.py` (versionado) e carregar o resto de variáveis de ambiente ou de um `.env` via `python-dotenv`.
 
-- [x] **Arquivo `.env.example`**
+- [x] ~~**Arquivo `.env.example`**~~
 
-  Nenhum colaborador sabe quais variáveis de ambiente o projeto precisa sem ler o código. Criar `.env.example` com todas as variáveis documentadas:
-  ```
-  FL_SERVER_ADDRESS=0.0.0.0:8080
-  FL_MIN_AVAILABLE_CLIENTS=3
-  MOSAICFL_DB_URL=postgresql://user:pass@localhost:5432/mosaicfl
-  ```
-  O `.env` real fica no `.gitignore`.
+  ~~Nenhum colaborador sabe quais variáveis de ambiente o projeto precisa sem ler o código. Criar `.env.example` com todas as variáveis documentadas. O `.env` real fica no `.gitignore`.~~
 
 ### Documentação
 
-- [x] **CHANGELOG.md**
+- [x] ~~**CHANGELOG.md**~~
 
-  Não existe registro de o que mudou entre versões. Qualquer colaborador que volte após semanas não sabe o que foi alterado. Manter um `CHANGELOG.md` no formato [Keep a Changelog](https://keepachangelog.com) com entradas em `## [Unreleased]` a cada mudança relevante.
+  ~~Não existe registro de o que mudou entre versões. Qualquer colaborador que volte após semanas não sabe o que foi alterado. Manter um `CHANGELOG.md` no formato Keep a Changelog com entradas em `## [Unreleased]` a cada mudança relevante.~~
 
-- [ ] **CONTRIBUTING.md**
+- [x] ~~**CONTRIBUTING.md**~~
 
-  Não existe guia de contribuição. Documentar: como configurar o ambiente, padrão de commits (Conventional Commits), como rodar os testes, como abrir um PR. Sem isso, qualquer novo contribuidor improvisa.
+  ~~Não existe guia de contribuição. Documentar: como configurar o ambiente, padrão de commits (Conventional Commits), como rodar os testes, como abrir um PR. Sem isso, qualquer novo contribuidor improvisa.~~
 
 - [ ] **Docstrings completas nos módulos públicos**
 
@@ -158,8 +143,12 @@ Dividido em duas partes:
 
 - [ ] Chamadas gRPC diretas do scheduler para o servidor Flower (hoje o scheduler é apenas supervisor)
 - [ ] Message broker (RabbitMQ ou Redis) para orquestração de rounds
-- [x] Integração com `fl.server.Driver` do Flower SDK para controle programático
+- [x] ~~**Integração com `fl.server.Driver` do Flower SDK para controle programático**~~
+
+  ~~Driver/Grid API para manter controle do loop FL no código Python.~~
+
   Implementado via `configure_fit` override na `ProductionFedProxStrategy`: lê config do ChromaDB (ou arquivo) antes de cada round, permitindo alterar `proximal_mu`, pausar ou parar sem reiniciar o servidor. Backend selecionável por `FL_CONFIG_BACKEND=chroma|file`. 55 testes em `test_config_loader.py`. Migração para PostgreSQL quando disponível.
+
 - [ ] Monitoramento com Prometheus + Grafana para métricas de treino federado
 
 ### Regulatório
