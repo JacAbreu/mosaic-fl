@@ -116,7 +116,8 @@ mosaic-fl/
 ├── infrastructure/                     ← daemons de produção
 │   ├── mosaicfl_server/
 │   │   ├── server_daemon.py            # Servidor Flower 24/7
-│   │   ├── strategy.py                 # FedProx + checkpoint + métricas
+│   │   ├── strategy.py                 # FedProx + checkpoint + métricas + configure_fit
+│   │   ├── config_loader.py            # Config de runtime: ChromaDB | arquivo (FL_CONFIG_BACKEND)
 │   │   ├── runner.py                   # Orquestrador do servidor
 │   │   ├── __init__.py
 │   │   └── __main__.py                 # python -m mosaicfl_server
@@ -138,6 +139,7 @@ mosaic-fl/
 │   ├── test_mosaicfl.py            # Testes unitários core (modelo, RAG, preprocessamento)
 │   ├── test_v2_core.py             # Testes de integração v2 (pipeline EHR → modelo)
 │   ├── test_infrastructure.py      # Testes da infra de produção (scheduler, servidor, cliente)
+│   ├── test_config_loader.py       # Testes do config_loader (ChromaDB, arquivo, strategy)
 │   └── test_fl_cycle_explained.py  # Documentação executável do ciclo FL (ver seção Testes)
 │
 ├── ci_cd/
@@ -271,13 +273,14 @@ make test          # roda todos os testes
 make test-cov      # com relatório de cobertura
 ```
 
-A suite tem **236 testes** distribuídos em 4 arquivos:
+A suite tem **291 testes** distribuídos em 5 arquivos:
 
 | Arquivo | Foco | Testes |
 |---|---|---|
 | `test_mosaicfl.py` | Unidades core: modelo, RAG, preprocessamento, data loader | ~147 |
 | `test_v2_core.py` | Integração v2: pipeline EHR → FedProxClient → modelo | ~36 |
 | `test_infrastructure.py` | Daemons de produção: scheduler, servidor, cliente (com mocks) | 61 |
+| `test_config_loader.py` | Config de runtime: `_cast`, ChromaDB, arquivo, `configure_fit` | 55 |
 | `test_fl_cycle_explained.py` | Documentação executável do ciclo FL completo | 29 |
 
 ### `test_fl_cycle_explained.py` — Documentação executável
@@ -382,7 +385,37 @@ export FL_SCHEDULER_MIN_CLIENTS=1         # quórum mínimo
 export FL_SCHEDULER_MAX_ROUNDS=3          # limite de rounds
 export FL_SCHEDULER_CONV_THRESHOLD=0.005  # Δacurácia para convergência
 export FL_SCHEDULER_CONV_PATIENCE=3       # rounds estáveis para convergir
+export FL_CONFIG_BACKEND=file             # backend de config de runtime (file | chroma)
 ```
+
+### Alterando configuração em tempo de execução
+
+O servidor lê `FL_CONFIG_BACKEND` para decidir como buscar config antes de cada round — sem necessidade de reiniciar.
+
+**Backend `file` (desenvolvimento):**
+```bash
+# Cria ou atualiza logs/runtime_config.json — aplicado no próximo round
+cat > logs/runtime_config.json <<EOF
+{"proximal_mu": 0.005, "pause_seconds": 0, "stop": false}
+EOF
+```
+
+**Backend `chroma` (padrão em produção):**
+```python
+from infrastructure.mosaicfl_server.config_loader import ChromaDBConfigLoader
+loader = ChromaDBConfigLoader()
+
+# Atualiza proximal_mu no próximo round
+loader.write({"proximal_mu": 0.005, "stop": False})
+
+# Para o servidor graciosamente após o round atual
+loader.write({"stop": True})
+
+# Remove config (volta aos defaults do servidor)
+loader.clear()
+```
+
+Chaves suportadas: `proximal_mu` (float), `pause_seconds` (float), `stop` (bool).
 
 ---
 

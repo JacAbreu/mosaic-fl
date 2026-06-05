@@ -71,7 +71,7 @@ Dividido em duas partes:
 
 - [ ] **Medir e publicar cobertura de código**
 
-  `make test-cov` já existe, mas o percentual não é exibido como badge no README nem há threshold mínimo definido. Adicionar ao CI:
+  `make test-cov` já existe e a suite tem 291 testes, mas o percentual não é exibido como badge no README nem há threshold mínimo definido. Adicionar ao CI:
   ```yaml
   - run: make test-cov
   - uses: codecov/codecov-action@v4
@@ -157,7 +157,7 @@ Dividido em duas partes:
 - [ ] Chamadas gRPC diretas do scheduler para o servidor Flower (hoje o scheduler é apenas supervisor)
 - [ ] Message broker (RabbitMQ ou Redis) para orquestração de rounds
 - [x] Integração com `fl.server.Driver` do Flower SDK para controle programático
-  Implementado via `configure_fit` override na `ProductionFedProxStrategy`: lê config do ChromaDB (ou arquivo) antes de cada round, permitindo alterar `proximal_mu`, pausar ou parar sem reiniciar o servidor. Backend selecionável por `FL_CONFIG_BACKEND=chroma|file`. Migração para PostgreSQL quando disponível.
+  Implementado via `configure_fit` override na `ProductionFedProxStrategy`: lê config do ChromaDB (ou arquivo) antes de cada round, permitindo alterar `proximal_mu`, pausar ou parar sem reiniciar o servidor. Backend selecionável por `FL_CONFIG_BACKEND=chroma|file`. 55 testes em `test_config_loader.py`. Migração para PostgreSQL quando disponível.
 - [ ] Monitoramento com Prometheus + Grafana para métricas de treino federado
 
 ### Regulatório
