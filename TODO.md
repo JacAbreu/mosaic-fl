@@ -34,9 +34,11 @@ Dividido em duas partes:
 
   Implementada opção C: `_weighted_average(metrics, key)` como implementação privada + `weighted_average_accuracy` e `weighted_average_loss` como funções públicas nomeadas. O alias `weighted_average = weighted_average_accuracy` preserva compatibilidade. Call sites em `server_v2.py`, `runner.py` e `strategy.py` atualizados. 8 novos testes em `TestWeightedAverageLoss` incluindo reprodução do bug original.
 
-- [ ] **Corrigir `communication_mb` no histórico**
+- [x] ~~**Corrigir `communication_mb` no histórico**~~
 
-  Em `server_v2.py` a estimativa é `round * 2.0` MB — um número arbitrário que cresce linearmente com o número de rounds sem relação com o tamanho real do modelo. O `benchmark.py` já calcula o tamanho real via `state_dict`. Usar essa mesma lógica no servidor.
+  ~~Em `server_v2.py` a estimativa é `round * 2.0` MB — um número arbitrário que cresce linearmente com o número de rounds sem relação com o tamanho real do modelo. O `benchmark.py` já calcula o tamanho real via `state_dict`. Usar essa mesma lógica no servidor.~~
+
+  Implementado: `_MODEL_SIZE_MB = 2.745 MB` calculado uma vez do `state_dict` real. `communication_mb` agora é `len(results) * _MODEL_SIZE_MB * 2` (upload + download por cliente que participou da rodada).
 
 ### Qualidade de código estático
 

@@ -26,6 +26,13 @@ from .config import (
     NUM_CLIENTS, NUM_ROUNDS, PROXIMAL_MU,
 )
 
+# Tamanho real do state_dict (upload + download por cliente = × 2)
+_MODEL_SIZE_MB: float = round(
+    sum(v.numel() * v.element_size() for v in SimplifiedBEHRT(use_cls_token=True).state_dict().values())
+    / (1024 ** 2),
+    3,
+)
+
 
 class ConvergenceTracker:
     def __init__(self, threshold: float = CONVERGENCE_THRESHOLD, patience: int = CONVERGENCE_PATIENCE):
@@ -107,8 +114,8 @@ class CustomFedProxStrategy(FedProx):
             # Popula histórico
             self.history["rounds"].append(server_round)
             self.history["accuracy"].append(accuracy)
-            # Estimativa conservadora de tráfego: ~2MB por rodada (depende do modelo)
-            self.history["communication_mb"].append(server_round * 2.0)
+            # Tráfego real: cada cliente envia e recebe o state_dict completo
+            self.history["communication_mb"].append(round(len(results) * _MODEL_SIZE_MB * 2, 3))
 
             # Verifica convergência
             if self.tracker.check(accuracy):
