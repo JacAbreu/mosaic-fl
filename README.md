@@ -227,6 +227,32 @@ print(df.shape)
 "
 ```
 
+### Benchmark de performance
+
+O `benchmark.py` mede o custo computacional de uma simulação FL completa com dados sintéticos — útil para estimar viabilidade em hardware diferente antes de rodar os experimentos reais.
+
+**O que é medido por rodada:**
+- Tempo de treino + agregação
+- Uso de RAM (antes, depois e pico)
+- Uso de CPU (%)
+- Tráfego de rede estimado (tamanho real do state_dict × número de clientes)
+- Throughput (amostras/segundo)
+- Acurácia global (quando `evaluate_fn` está ativa)
+
+```bash
+source .venv/bin/activate
+
+# Configuração padrão: 1000 amostras, 10 rodadas, 5 clientes
+python benchmark.py
+
+# Configuração customizada
+python benchmark.py --samples 2000 --rounds 5 --clients 3 --output meus_resultados
+```
+
+**Artefatos gerados em `benchmark_results/`:**
+- `benchmark_<timestamp>.json` — métricas por rodada e resumo estatístico
+- `benchmark_<timestamp>.png` — 6 gráficos: tempo, RAM, CPU, tráfego, acurácia, throughput
+
 ### Makefile
 
 ```bash
