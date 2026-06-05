@@ -14,8 +14,9 @@ source .venv/bin/activate
 pip install -e .
 
 # 3. Instala server e client localmente (para desenvolvimento)
-pip install -e infrastructure/server
-pip install -e infrastructure/client
+pip install -e infrastructure/mosaicfl_server
+pip install -e infrastructure/mosaicfl_client
+pip install -e infrastructure/mosaicfl_scheduler
 
 # 4. Verifica instalação
 echo ""

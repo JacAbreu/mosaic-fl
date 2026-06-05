@@ -49,6 +49,9 @@ class EHRPreprocessor:
             self._log_transform("unidade", "Idade normalizada para anos", int(mask_meses.sum() + mask_dias.sum()))
 
         if 'peso_unidade' in df.columns and 'peso' in df.columns:
+            # Garante dtype float antes de atribuir resultado de multiplicação.
+            # Pandas 2.x+ recusa atribuição de float em coluna int64 (LossySetitemError).
+            df['peso'] = df['peso'].astype(float)
             for unit, factor in self.unit_conversions['peso'].items():
                 if isinstance(factor, float):
                     mask = df['peso_unidade'].str.lower() == unit
@@ -118,7 +121,7 @@ class EHRPreprocessor:
         elif strategy == "impute":
             for col in df.select_dtypes(include=[np.number]).columns:
                 df[col] = df[col].fillna(df[col].median())
-            for col in df.select_dtypes(include=['object']).columns:
+            for col in df.select_dtypes(include=['object', 'str']).columns:
                 df[col] = df[col].fillna("<UNK>")
             self._log_transform("missing", "Valores ausentes imputados (mediana/UNK)")
         return df

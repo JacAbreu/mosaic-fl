@@ -40,9 +40,9 @@ logger = logging.getLogger(__name__)
 
 # Imports dos módulos do scheduler usando imports absolutos
 try:
-    from infrastructure.scheduler.schedule_state import SchedulerState
-    from infrastructure.scheduler.client_availability_checker import ClientAvailabilityChecker
-    from infrastructure.scheduler.round_training_fl_dispatcher import RoundDispatcher
+    from .schedule_state import SchedulerState
+    from .client_availability_checker import ClientAvailabilityChecker
+    from .round_training_fl_dispatcher import RoundDispatcher
 except ImportError as e:
     logger.error(f"Erro importando módulos do scheduler: {e}")
     logger.error("Certifique-se de que o pacote mosaicfl está instalado:")
@@ -70,13 +70,15 @@ class FederatedScheduler:
         interval_hours: float = SCHEDULER_INTERVAL_HOURS,
         min_clients: int = MIN_AVAILABLE_CLIENTS,
         max_rounds: int = MAX_ROUNDS,
+        server_address: str = "localhost:8080",
     ):
         self.interval_hours = interval_hours
         self.min_clients = min_clients
         self.max_rounds = max_rounds
+        self.server_address = server_address
 
         self.checker = ClientAvailabilityChecker()
-        self.dispatcher = RoundDispatcher()
+        self.dispatcher = RoundDispatcher(server_address=server_address)
         self.state = SchedulerState.load()
         self.scheduler = None
         self._should_stop = False  # flag para controle de parada

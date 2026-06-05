@@ -65,11 +65,20 @@ def write_heartbeat(status: str = "ready", registry_path: Optional[str] = None):
                 
     except json.JSONDecodeError as e:
         logger.error(f"Erro ao decodificar JSON do registry: {e}")
-        # Backup e recria
+        # Backup e recria com JSON válido contendo este cliente.
         backup = registry_file.with_suffix(".json.bak")
         registry_file.rename(backup)
         logger.info(f"Registry corrompido salvo em {backup}. Criando novo.")
-        registry_file.write_text(f'{{"{CLIENT_ID}": {{")', encoding="utf-8")
+        new_registry = {
+            CLIENT_ID: {
+                "last_seen": datetime.now().timestamp(),
+                "status": status,
+                "client_id": CLIENT_ID,
+            }
+        }
+        registry_file.write_text(
+            json.dumps(new_registry, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
         
     except PermissionError as e:
         logger.error(f"Permissão negada ao acessar registry: {e}")

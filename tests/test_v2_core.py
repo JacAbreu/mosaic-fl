@@ -912,10 +912,11 @@ class TestV2PipelineIntegration:
             for _ in range(3)
         ]
         # Agrega via média simples (float apenas)
+        # Buffers Long/Int (ex: cls_token_id) usam valor aleatório mas clampado ao range válido do vocab
         aggregated = OrderedDict()
         for key in sd.keys():
             if sd[key].dtype in (torch.long, torch.int):
-                aggregated[key] = states[0][key].to(sd[key].dtype)
+                aggregated[key] = states[0][key].to(sd[key].dtype).clamp(0, VOCAB_SIZE - 1)
             else:
                 aggregated[key] = torch.stack([s[key] for s in states]).mean(0).to(sd[key].dtype)
         model.load_state_dict(aggregated, strict=True)

@@ -34,52 +34,51 @@ help:
 	@echo "║           MOSAIC-FL - Comandos Disponíveis                 ║"
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
-	@echo "SETUP:"
+	@echo "📦 SETUP:"
 	@echo "  make venv        - Cria ambiente virtual (.venv)"
 	@echo "  make setup       - Cria venv e instala dependências"
 	@echo "  make install     - Instala o pacote em modo editável"
 	@echo ""
-	@echo "EXECUÇÃO:"
+	@echo "🚀 EXECUÇÃO:"
 	@echo "  make run         - Executa experimentos (runner)"
 	@echo "  make test        - Executa testes unitários"
 	@echo "  make test-cov    - Testes com cobertura"
 	@echo ""
-	@echo "MANUTENÇÃO:"
+	@echo "🧹 MANUTENÇÃO:"
 	@echo "  make clean       - Remove arquivos temporários"
 	@echo ""
-	@echo "DOCKER:"
+	@echo "🐳 DOCKER:"
 	@echo "  make docker-up   - Inicia serviços Docker"
 	@echo "  make docker-down - Para serviços Docker"
 	@echo ""
-	@echo "Status do ambiente: $(IN_VENV)"
+	@echo "💡 Status do ambiente: $(IN_VENV)"
 
 # Create virtual environment (only if not exists)
 venv:
 ifeq ($(wildcard $(VENV_DIR)/bin/python),)
-	@echo "Criando ambiente virtual..."
+	@echo "📦 Criando ambiente virtual..."
 	python3 -m venv $(VENV_DIR)
-	@echo "Ambiente virtual criado em $(VENV_DIR)/"
-	@echo "Execute: source $(VENV_DIR)/bin/activate"
+	@echo "✅ Ambiente virtual criado em $(VENV_DIR)/"
+	@echo "💡 Execute: source $(VENV_DIR)/bin/activate"
 else
-	@echo "Ambiente virtual já existe em $(VENV_DIR)/"
-	@echo "Para ativar: source $(VENV_DIR)/bin/activate"
+	@echo "✅ Ambiente virtual já existe em $(VENV_DIR)/"
+	@echo "💡 Para ativar: source $(VENV_DIR)/bin/activate"
 endif
 
 # Setup: create venv and install dependencies
 setup:
-	@echo "Iniciando setup do MOSAIC-FL..."
+	@echo "🔧 Iniciando setup do MOSAIC-FL..."
 	@$(MAKE) venv
-	@echo "Instalando dependências..."
-	$(VENV_DIR)/bin/pip install --upgrade pip wheel
-	$(VENV_DIR)/bin/pip install --upgrade "setuptools<82"
-	$(VENV_DIR)/bin/pip install -e ".[dev]"
-
+	@echo "📥 Instalando dependências..."
+	$(VENV_DIR)/bin/pip install --upgrade pip setuptools wheel
+	$(VENV_DIR)/bin/pip install -e .
+	$(VENV_DIR)/bin/pip install pytest pytest-cov black ruff
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
-	@echo "║  SETUP COMPLETO!                                       ║"
+	@echo "║  ✅ SETUP COMPLETO!                                       ║"
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
-	@echo " Próximos passos:"
+	@echo "📋 Próximos passos:"
 	@echo "   1. Ative o ambiente: source $(VENV_DIR)/bin/activate"
 	@echo "   2. Execute testes: make test"
 	@echo "   3. Rode experimentos: make run"
@@ -108,7 +107,7 @@ clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	@echo "Limpeza completa!"
+	@echo "✅ Limpeza completa!"
 
 # Docker commands
 docker-build:

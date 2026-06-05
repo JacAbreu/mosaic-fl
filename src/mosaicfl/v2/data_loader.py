@@ -500,7 +500,9 @@ def _validate_schema(df: pd.DataFrame) -> None:
 
 def _convert_desfecho(df: pd.DataFrame) -> pd.DataFrame:
     """Converte desfecho textual → numérico."""
-    if df["desfecho"].dtype != object:
+    # Em pandas 4.x, colunas de string têm dtype `str` (StringDtype), não `object`.
+    # Usar is_numeric_dtype é robusto para qualquer versão do pandas.
+    if pd.api.types.is_numeric_dtype(df["desfecho"]):
         return df
 
     df = df.copy()
