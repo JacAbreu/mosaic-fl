@@ -14,7 +14,7 @@ import flwr as fl
 import torch
 
 from mosaicfl.v2.config import CONVERGENCE_THRESHOLD, CONVERGENCE_PATIENCE
-from mosaicfl.v2.server_v2 import weighted_average
+from mosaicfl.v2.server_v2 import weighted_average_accuracy, weighted_average_loss
 from .config_loader import ConfigLoader, get_config_loader
 
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
@@ -70,8 +70,8 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         *args,
         **kwargs,
     ):
-        kwargs.setdefault("evaluate_metrics_aggregation_fn", weighted_average)
-        kwargs.setdefault("fit_metrics_aggregation_fn", weighted_average)
+        kwargs.setdefault("evaluate_metrics_aggregation_fn", weighted_average_accuracy)
+        kwargs.setdefault("fit_metrics_aggregation_fn", weighted_average_loss)
         super().__init__(*args, **kwargs)
         self.global_model = global_model
         self.config_loader: ConfigLoader = config_loader or get_config_loader()

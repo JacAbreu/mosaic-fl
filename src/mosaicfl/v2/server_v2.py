@@ -54,16 +54,27 @@ class ConvergenceTracker:
         self.converged_round = None
 
 
-def weighted_average(metrics: List[Tuple[int, Dict]]) -> Dict:
-    """Agrega métricas ponderadas pelo número de amostras."""
+def _weighted_average(metrics: List[Tuple[int, Dict]], key: str) -> Dict:
     if not metrics:
         return {}
-    accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
-    examples = [num_examples for num_examples, _ in metrics]
-    total_examples = sum(examples)
-    if total_examples == 0:
-        return {"accuracy": 0.0}
-    return {"accuracy": sum(accuracies) / total_examples}
+    total = sum(n for n, _ in metrics)
+    if total == 0:
+        return {key: 0.0}
+    return {key: sum(n * m.get(key, 0.0) for n, m in metrics) / total}
+
+
+def weighted_average_accuracy(metrics: List[Tuple[int, Dict]]) -> Dict:
+    """Média ponderada de accuracy — para evaluate_metrics_aggregation_fn."""
+    return _weighted_average(metrics, "accuracy")
+
+
+def weighted_average_loss(metrics: List[Tuple[int, Dict]]) -> Dict:
+    """Média ponderada de loss — para fit_metrics_aggregation_fn."""
+    return _weighted_average(metrics, "loss")
+
+
+# Alias para compatibilidade com código existente
+weighted_average = weighted_average_accuracy
 
 
 class CustomFedProxStrategy(FedProx):
@@ -195,8 +206,8 @@ def start_server(
         min_available_clients=MIN_AVAILABLE_CLIENTS,
         proximal_mu=PROXIMAL_MU,
         evaluate_fn=evaluate_fn,
-        evaluate_metrics_aggregation_fn=weighted_average,
-        fit_metrics_aggregation_fn=weighted_average,
+        evaluate_metrics_aggregation_fn=weighted_average_accuracy,
+        fit_metrics_aggregation_fn=weighted_average_loss,
     )
 
     print(f"Iniciando servidor FedProx por até {num_rounds} rodadas...")

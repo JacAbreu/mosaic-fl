@@ -25,7 +25,7 @@ from mosaicfl.v2.config import (
     PROXIMAL_MU,
 )
 from mosaicfl.v2.model_v2 import SimplifiedBEHRT
-from mosaicfl.v2.server_v2 import get_evaluate_fn, weighted_average
+from mosaicfl.v2.server_v2 import get_evaluate_fn, weighted_average_accuracy, weighted_average_loss
 
 from .config_loader import get_config_loader
 from .strategy import ProductionFedProxStrategy
@@ -139,8 +139,8 @@ class FederatedServer:
             min_evaluate_clients=self.min_clients,
             min_available_clients=self.min_clients,
             evaluate_fn=evaluate_fn,
-            evaluate_metrics_aggregation_fn=weighted_average,
-            fit_metrics_aggregation_fn=weighted_average,
+            evaluate_metrics_aggregation_fn=weighted_average_accuracy,
+            fit_metrics_aggregation_fn=weighted_average_loss,
             on_fit_config_fn=lambda rnd: {"proximal_mu": self.proximal_mu, "round": rnd},
         )
 

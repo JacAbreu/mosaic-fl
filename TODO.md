@@ -30,9 +30,9 @@ Dividido em duas partes:
 
   O bloco que inicia o Flower de fato está comentado. O módulo retorna a strategy mas nunca sobe o servidor. Para a seção "Rodando Localmente" do README funcionar de ponta a ponta com `server_v2.py`, esse código precisa estar ativo (e o `StopIteration` para convergência antecipada precisa ser testado).
 
-- [ ] **Corrigir `fit_metrics_aggregation_fn=weighted_average`**
+- [x] **Corrigir `fit_metrics_aggregation_fn=weighted_average`**
 
-  `weighted_average` espera o dicionário `{"accuracy": float}`. Quando usado como `fit_metrics_aggregation_fn`, recebe `{"loss": float}` — a chave `"accuracy"` não existe e retorna `{}`. Criar uma função separada `weighted_average_loss` ou tornar `weighted_average` genérica por chave.
+  Implementada opção C: `_weighted_average(metrics, key)` como implementação privada + `weighted_average_accuracy` e `weighted_average_loss` como funções públicas nomeadas. O alias `weighted_average = weighted_average_accuracy` preserva compatibilidade. Call sites em `server_v2.py`, `runner.py` e `strategy.py` atualizados. 8 novos testes em `TestWeightedAverageLoss` incluindo reprodução do bug original.
 
 - [ ] **Corrigir `communication_mb` no histórico**
 

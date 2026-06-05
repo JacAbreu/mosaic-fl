@@ -273,12 +273,12 @@ make test          # roda todos os testes
 make test-cov      # com relatório de cobertura
 ```
 
-A suite tem **291 testes** distribuídos em 5 arquivos:
+A suite tem **299 testes** distribuídos em 5 arquivos:
 
 | Arquivo | Foco | Testes |
 |---|---|---|
 | `test_mosaicfl.py` | Unidades core: modelo, RAG, preprocessamento, data loader | ~147 |
-| `test_v2_core.py` | Integração v2: pipeline EHR → FedProxClient → modelo | ~36 |
+| `test_v2_core.py` | Integração v2: pipeline EHR → FedProxClient → modelo | ~44 |
 | `test_infrastructure.py` | Daemons de produção: scheduler, servidor, cliente (com mocks) | 61 |
 | `test_config_loader.py` | Config de runtime: `_cast`, ChromaDB, arquivo, `configure_fit` | 55 |
 | `test_fl_cycle_explained.py` | Documentação executável do ciclo FL completo | 29 |
