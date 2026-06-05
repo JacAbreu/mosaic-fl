@@ -33,8 +33,8 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 
 ```
 ┌─────────────────────────────────────────────┐
-│           MÁQUINA LOCAL (Dell i7)            │
-│                                              │
+│      MÁQUINA LOCAL (intel i7/16 GB RAM)     │
+│                                             │
 │  ┌──────────────┐    ┌────────────────────┐ │
 │  │   Servidor   │◄──►│  Hospital A (cid=0)│ │
 │  │  (server.py) │◄──►│  Hospital B (cid=1)│ │
@@ -42,10 +42,10 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 │  │ • Agrega FL  │◄──►│  Hospital D (cid=3)│ │
 │  │ • Avalia     │◄──►│  Hospital E (cid=4)│ │
 │  │ • RAG        │    └────────────────────┘ │
-│  └──────────────┘                            │
-│                                              │
-│  Dados: split_by_institution() divide o      │
-│  dataset FAPESP em 5 partições locais        │
+│  └──────────────┘                           │
+│                                             │
+│  Dados: split_by_institution() divide o     │
+│  dataset FAPESP em 5 partições locais       │
 └─────────────────────────────────────────────┘
 ```
 
@@ -310,6 +310,32 @@ scheduler               server_daemon            client_daemon
     │── atualiza state ───────────────────────────────►│
 ```
 
+### ⚠️ Limitações do Scheduler (Arquitetura Atual)
+
+> **Importante:** O scheduler atual **NÃO dispara rounds ativamente** no servidor Flower. Ele atua como um **supervisor/monitor** que:
+> 
+> 1. Verifica quais clientes estão online (via heartbeat registry)
+> 2. Aguarda o servidor Flower completar rounds naturalmente (quando clientes conectam)
+> 3. Faz polling das métricas em `logs/round_{N}_metrics.json`
+> 4. Detecta convergência e persiste estado
+
+**Pré-requisitos para o funcionamento correto:**
+```bash
+# 1. Servidor Flower DEVE estar rodando
+python infrastructure/server/server_daemon.py --port 8080
+
+# 2. Clientes DEVEM estar conectados ao servidor
+python infrastructure/client/client_daemon.py --server localhost:8080 --client-id hospital_a
+
+# 3. SÓ ENTÃO o scheduler pode monitorar
+python infrastructure/scheduler/scheduler_daemon.py --interval 6
+```
+
+**Para produção:** A arquitetura atual é suficiente para o TCC (simulação local). Para deploy real em hospitais, considere:
+- Implementar chamadas gRPC diretas do scheduler para o servidor
+- Ou usar um message broker (RabbitMQ, Redis) para orquestração
+- Ou integrar com o Flower SDK diretamente via `fl.server.Driver`
+
 ---
 
 ## Docker
@@ -431,11 +457,28 @@ cat logs/client_registry.json   # verifica heartbeats dos clientes
 
 ## Referências
 
-- Linhares et al. (2023). ClinicalPath — base do sistema estendido
-- McMahan et al. (2017). Communication-Efficient Learning of Deep Networks from Decentralized Data (FedAvg)
-- Li et al. (2020). Federated Optimization in Heterogeneous Networks (FedProx)
-- Rasmy et al. (2021). Med-BERT / BEHRT para prontuários eletrônicos
-- Lewis et al. (2020). Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks
+
+### Frameworks e Bibliotecas
+
+- **Flower** — Beutel et al., 2020. *Flower: A Friendly Federated Learning Research Framework*. arXiv:2007.14390.  
+  [https://arxiv.org/abs/2007.14390](https://arxiv.org/abs/2007.14390)
+
+### Algoritmos
+
+- **FedAvg** — McMahan et al., 2017. *Communication-Efficient Learning of Deep Networks from Decentralized Data*. AISTATS.
+- **FedProx** — Li et al., 2020. *Federated Optimization in Heterogeneous Networks*. MLSys.
+
+### Modelos
+
+- **Med-BERT/BEHRT** — Rasmy et al., 2021. *Med-BERT: Pretrained Contextualized Embeddings on Large-scale Structured Electronic Health Records for Disease Prediction*. npj Digital Medicine.
+
+### RAG
+
+- **RAG** — Lewis et al., 2020. *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*. NeurIPS.
+
+### Base do Projeto
+
+- **ClinicalPath** — Linhares et al., 2023. *ClinicalPath: Um Sistema de Apoio à Decisão Clínica Baseado em Evidências*.
 
 ---
 

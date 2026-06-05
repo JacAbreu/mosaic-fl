@@ -38,15 +38,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Imports dos módulos do scheduler (assumem mesmo diretório/pacote)
+# Imports dos módulos do scheduler usando imports absolutos
 try:
-    from schedule_state import SchedulerState
-    from client_availability_checker import ClientAvailabilityChecker
-    from round_training_fl_dispatcher import RoundDispatcher
+    from infrastructure.scheduler.schedule_state import SchedulerState
+    from infrastructure.scheduler.client_availability_checker import ClientAvailabilityChecker
+    from infrastructure.scheduler.round_training_fl_dispatcher import RoundDispatcher
 except ImportError as e:
     logger.error(f"Erro importando módulos do scheduler: {e}")
-    logger.error("Certifique-se de que schedule_state.py, client_availability_checker.py e")
-    logger.error("round_dispatcher.py estão no mesmo diretório ou no PYTHONPATH.")
+    logger.error("Certifique-se de que o pacote mosaicfl está instalado:")
+    logger.error("  pip install -e .")
+    logger.error("Ou configure o PYTHONPATH:")
+    logger.error("  export PYTHONPATH=/home/jacabreu/studies/usp/tcc/mosaic-fl:$PYTHONPATH")
     sys.exit(1)
 
 # Configurações via variáveis de ambiente
@@ -79,11 +81,56 @@ class FederatedScheduler:
         self.scheduler = None
         self._should_stop = False  # flag para controle de parada
 
+    def _check_server_connectivity(self) -> bool:
+        """
+        Verifica se o servidor Flower está acessível.
+        
+        Retorna True se o servidor responde, False caso contrário.
+        """
+        try:
+            import socket
+            host, port = self.server_address.split(":")
+            port = int(port)
+            
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5.0)  # Timeout de 5 segundos
+            result = sock.connect_ex((host, port))
+            sock.close()
+            
+            if result == 0:
+                logger.debug(f"Servidor Flower acessível em {self.server_address}")
+                return True
+            else:
+                logger.warning(f"Servidor Flower NÃO está acessível em {self.server_address}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Erro ao verificar conectividade com servidor: {e}")
+            return False
+
     def _job_round(self):
         """Job executado a cada ciclo do scheduler."""
         logger.info("=" * 60)
         logger.info(f"SCHEDULER — Ciclo iniciado às {datetime.now().isoformat()}")
         logger.info("=" * 60)
+        
+        # ⚠️ VERIFICAÇÃO DE CONECTIVIDADE COM O SERVIDOR
+        if not self._check_server_connectivity():
+            logger.error("🚫 SERVIDOR FLOWER NÃO ESTÁ ACESSÍVEL!")
+            logger.error(f"   Endereço configurado: {self.server_address}")
+            logger.error("")
+            logger.error("Possíveis causas:")
+            logger.error("  1. O servidor Flower não foi iniciado")
+            logger.error("  2. O servidor está em outro host/porta")
+            logger.error("  3. Firewall bloqueando a conexão")
+            logger.error("")
+            logger.error("Ações recomendadas:")
+            logger.error("  • Inicie o servidor: python infrastructure/server/server_daemon.py")
+            logger.error("  • Verifique a variável FL_SERVER_ADDRESS")
+            logger.error("  • Verifique se a porta está aberta: nc -zv localhost 8080")
+            logger.error("")
+            logger.warning("O scheduler continuará tentando no próximo ciclo...")
+            return
 
         # 1. Verifica se já convergiu ou atingiu limite
         if self.state.converged:

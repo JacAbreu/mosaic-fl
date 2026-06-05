@@ -11,15 +11,14 @@ Delega para FederatedScheduler em scheduler_daemon.py.
 Uso:
     python scheduler_cli.py --once
     python scheduler_cli.py --interval 1 --min-clients 2
+
+    # Ou com o pacote instalado:
+    python -m infrastructure.scheduler --once
+
+Nota: Este script requer que o pacote mosaicfl esteja instalado ou que o
+PYTHONPATH inclua o diretório raiz do projeto.
 """
-import sys
-from pathlib import Path
-
-# Garante que o diretório do scheduler está no path (ajuste conforme sua estrutura)
-# Se estiver em src/schedule/:
-# sys.path.insert(0, str(Path(__file__).parent))
-
-from scheduler_daemon import FederatedScheduler, main
+from infrastructure.scheduler.scheduler_daemon import FederatedScheduler, main
 
 if __name__ == "__main__":
     main()

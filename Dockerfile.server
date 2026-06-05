@@ -21,14 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends     gcc     g++
 # Copia o pacote core (src/) — necessário para build
 COPY src/ /app/src/
 
-# Copia o pacote server
-COPY infrastructure/server/ /app/server/
+# Copia o pacote server (nova estrutura mosaicfl_server)
+COPY infrastructure/mosaicfl_server/ /app/mosaicfl_server/
 
 # Instala o pacote core primeiro
 RUN pip install --no-cache-dir -e /app/src
 
 # Instala o pacote server
-RUN pip install --no-cache-dir -e /app/server
+RUN pip install --no-cache-dir -e /app/mosaicfl_server
 
 # Cria diretórios para dados persistentes
 RUN mkdir -p /app/checkpoints /app/logs

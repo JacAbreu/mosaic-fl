@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mosaicfl-scheduler"
+version = "0.2.0"
+description = "Scheduler de rounds federados para MOSAIC-FL"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Jacqueline Abreu", email = "jacque.abreu@usp.br"}
+]
+
+dependencies = [
+    "mosaicfl>=0.2.0",
+    "flwr>=1.5.0",
+    "apscheduler>=3.10.0",
+]
+
+[project.scripts]
+mosaicfl-scheduler = "mosaicfl_scheduler.scheduler_daemon:main"
+
+[project.urls]
+Homepage = "https://github.com/JacAbreu/mosaic-fl"
+Repository = "https://github.com/JacAbreu/mosaic-fl"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mosaicfl_scheduler*"]

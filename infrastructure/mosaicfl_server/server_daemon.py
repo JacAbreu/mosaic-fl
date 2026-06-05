@@ -8,18 +8,13 @@ Mantido para compatibilidade com README e deploy manual:
 
 Equivalente a:
 
-    python -m server.runner   # com infrastructure/ no PYTHONPATH
+    python -m infrastructure.server --port 8080 --min-clients 3
     mosaicfl-server           # após pip install mosaicfl-server
+
+Nota: Este script requer que o pacote mosaicfl esteja instalado ou que o
+PYTHONPATH inclua o diretório raiz do projeto.
 """
-import sys
-from pathlib import Path
-
-# Permite executar como arquivo: python infrastructure/server/server_daemon.py
-_INFRA_ROOT = Path(__file__).resolve().parent.parent
-if str(_INFRA_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INFRA_ROOT))
-
-from server.runner import main  # noqa: E402
+from infrastructure.server.runner import main
 
 if __name__ == "__main__":
     main()

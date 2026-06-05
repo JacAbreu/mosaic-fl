@@ -7,15 +7,17 @@ Toda a lógica v2 (datasource + FedProxClient) está em runner.py.
 Uso:
     FL_DATA_SOURCE=simulated python infrastructure/client/client_daemon_v2.py \\
         --server localhost:8080 --client-id hf1
+
+    # Ou com o pacote instalado:
+    python -m infrastructure.client --server localhost:8080 --client-id hf1
+
+Nota: Este script requer que o pacote mosaicfl esteja instalado ou que o
+PYTHONPATH inclua o diretório raiz do projeto.
+
+TODO: Consolidar com client_daemon.py em versão futura para evitar
+duplicação de entrypoints.
 """
-import sys
-from pathlib import Path
-
-_INFRA_ROOT = Path(__file__).resolve().parent.parent
-if str(_INFRA_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INFRA_ROOT))
-
-from client.runner import main  # noqa: E402
+from infrastructure.client.runner import main
 
 if __name__ == "__main__":
     main()

@@ -29,8 +29,8 @@ class RoundDispatcher:
 
     def __init__(self, server_address: str = "localhost:8080"):
         self.server_address = server_address
-        # Importação local para evitar circular import se usado junto com schedule_state
-        from schedule_state import SchedulerState
+        # Import absoluto do estado do scheduler
+        from infrastructure.scheduler.schedule_state import SchedulerState
         self.state = SchedulerState.load()
 
     def dispatch_round(self, round_num: int, active_clients: List[str]) -> bool:

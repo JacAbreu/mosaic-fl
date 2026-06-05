@@ -21,14 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends     gcc     g++
 # Copia o pacote core (src/)
 COPY src/ /app/src/
 
-# Copia o pacote client
-COPY infrastructure/client/ /app/client/
+# Copia o pacote client (nova estrutura mosaicfl_client)
+COPY infrastructure/mosaicfl_client/ /app/mosaicfl_client/
 
 # Instala o pacote core primeiro
 RUN pip install --no-cache-dir -e /app/src
 
 # Instala o pacote client
-RUN pip install --no-cache-dir -e /app/client
+RUN pip install --no-cache-dir -e /app/mosaicfl_client
 
 # Cria diretórios para dados e logs
 RUN mkdir -p /app/data /app/logs
