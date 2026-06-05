@@ -27,6 +27,7 @@ from mosaicfl.v2.config import (
 from mosaicfl.v2.model_v2 import SimplifiedBEHRT
 from mosaicfl.v2.server_v2 import get_evaluate_fn, weighted_average
 
+from .config_loader import get_config_loader
 from .strategy import ProductionFedProxStrategy
 
 SERVER_ADDRESS = os.getenv("FL_SERVER_ADDRESS", "0.0.0.0:8080")
@@ -106,6 +107,12 @@ class FederatedServer:
         logger.info("Sinal %s recebido. Graceful shutdown...", signum)
         self._shutdown_event.set()
 
+    def _on_round_start(self, round_num: int, runtime_config: dict) -> None:
+        """Callback chamado pela strategy antes de cada round."""
+        write_health_status("running", round_num=round_num)
+        if runtime_config:
+            logger.debug("Round %s config: %s", round_num, runtime_config)
+
     def start(self):
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -119,8 +126,12 @@ class FederatedServer:
             evaluate_fn = get_evaluate_fn(self.test_loader)
             logger.info("Avaliação global ativada.")
 
+        config_loader = get_config_loader()
+
         strategy = ProductionFedProxStrategy(
             global_model=self.global_model,
+            config_loader=config_loader,
+            on_round_start=self._on_round_start,
             proximal_mu=self.proximal_mu,
             fraction_fit=1.0,
             fraction_evaluate=1.0,

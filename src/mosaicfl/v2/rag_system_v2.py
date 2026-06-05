@@ -11,7 +11,7 @@ import numpy as np
 from typing import List, Dict, Tuple
 import json
 
-from .config import *
+from .config import CHROMA_DB_PATH, EMBEDDING_MODEL, LLM_MODEL, MAX_NEW_TOKENS, TOP_K
 
 
 class ClinicalRAG:

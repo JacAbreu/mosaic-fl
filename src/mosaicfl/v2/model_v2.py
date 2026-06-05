@@ -18,7 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from typing import Optional, Tuple, Union
-from .config import *
+from .config import DROPOUT, EMBED_DIM, FF_DIM, MAX_SEQ_LEN, NUM_CLASSES, NUM_HEADS, NUM_LAYERS, VOCAB_SIZE
 
 
 class PositionalEncoding(nn.Module):

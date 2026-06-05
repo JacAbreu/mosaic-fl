@@ -8,13 +8,14 @@ import os
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 import flwr as fl
 import torch
 
 from mosaicfl.v2.config import CONVERGENCE_THRESHOLD, CONVERGENCE_PATIENCE
 from mosaicfl.v2.server_v2 import weighted_average
+from .config_loader import ConfigLoader, get_config_loader
 
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
 LOG_DIR = Path(os.getenv("FL_LOG_DIR", "logs"))
@@ -58,18 +59,67 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
       - Checkpoint do modelo global a cada rodada
       - Exporta métricas para JSON (consumidas pelo scheduler)
       - Rastreia convergência
+      - Lê config de runtime do ChromaDB (ou arquivo) antes de cada round
     """
 
-    def __init__(self, global_model: torch.nn.Module, *args, **kwargs):
+    def __init__(
+        self,
+        global_model: torch.nn.Module,
+        config_loader: Optional[ConfigLoader] = None,
+        on_round_start: Optional[Callable[[int, Dict], None]] = None,
+        *args,
+        **kwargs,
+    ):
         kwargs.setdefault("evaluate_metrics_aggregation_fn", weighted_average)
         kwargs.setdefault("fit_metrics_aggregation_fn", weighted_average)
         super().__init__(*args, **kwargs)
         self.global_model = global_model
+        self.config_loader: ConfigLoader = config_loader or get_config_loader()
+        self.on_round_start = on_round_start
         self.tracker = ConvergenceTracker()
         self.round_counter = 0
         self.should_stop = False
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    def configure_fit(
+        self, server_round: int, parameters, client_manager
+    ) -> List[Tuple]:
+        """
+        Chamado pelo Flower antes de cada round de treino.
+
+        Lê config dinâmica do ChromaDB (ou fallback arquivo) e aplica antes
+        de delegar a seleção de clientes ao FedProx padrão.
+        """
+        runtime = self.config_loader.load(server_round)
+
+        if runtime.get("stop", False):
+            logger.info("Round %s: parada antecipada solicitada via config.", server_round)
+            self.should_stop = True
+            return []
+
+        if "proximal_mu" in runtime and runtime["proximal_mu"] is not None:
+            new_mu = float(runtime["proximal_mu"])
+            if new_mu != self.proximal_mu:
+                logger.info(
+                    "Round %s: proximal_mu %.4f -> %.4f (via config_loader)",
+                    server_round, self.proximal_mu, new_mu,
+                )
+                self.proximal_mu = new_mu
+
+        pause = float(runtime.get("pause_seconds", 0) or 0)
+        if pause > 0:
+            import time
+            logger.info("Round %s: pausando %.1fs (config_loader)", server_round, pause)
+            time.sleep(pause)
+
+        if self.on_round_start is not None:
+            try:
+                self.on_round_start(server_round, runtime)
+            except Exception as e:
+                logger.warning("on_round_start callback erro: %s", e)
+
+        return super().configure_fit(server_round, parameters, client_manager)
 
     def _load_global_weights(self, parameters) -> None:
         """Carrega pesos agregados no modelo global (compatível com client_v2)."""

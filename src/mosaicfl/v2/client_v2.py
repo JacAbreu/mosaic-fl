@@ -16,7 +16,7 @@ from collections import OrderedDict
 from typing import Dict, List, Tuple
 
 from mosaicfl.v2.model_v2 import SimplifiedBEHRT
-from .config import *
+from .config import BATCH_SIZE, DEVICE, LOCAL_EPOCHS, LR, PROXIMAL_MU
 
 
 class FedProxClient(fl.client.NumPyClient):
@@ -29,7 +29,7 @@ class FedProxClient(fl.client.NumPyClient):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=LR)
         self.global_params = None  # para termo proximal
 
-    def set_parameters(self, parameters: List[np.ndarray]):
+    def set_parameters(self, parameters: List[np.ndarray]) -> None:
         """
         Carrega pesos globais no modelo local.
         Usa model.parameters() para garantir que apenas parâmetros treináveis

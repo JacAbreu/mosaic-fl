@@ -19,7 +19,12 @@ import os
 from datetime import datetime
 
 from .model_v2 import SimplifiedBEHRT
-from .config import *
+from .config import (
+    CONVERGENCE_PATIENCE, CONVERGENCE_THRESHOLD, DEVICE,
+    FRACTION_EVALUATE, FRACTION_FIT,
+    MIN_AVAILABLE_CLIENTS, MIN_EVALUATE_CLIENTS, MIN_FIT_CLIENTS,
+    NUM_CLIENTS, NUM_ROUNDS, PROXIMAL_MU,
+)
 
 
 class ConvergenceTracker:
@@ -43,7 +48,7 @@ class ConvergenceTracker:
             self.converged_round = len(self.history)
         return self.stable_count >= self.patience
 
-    def reset(self):
+    def reset(self) -> None:
         self.history.clear()
         self.stable_count = 0
         self.converged_round = None
@@ -113,7 +118,7 @@ class CustomFedProxStrategy(FedProx):
 
         return aggregated
 
-    def _save_checkpoint(self, server_round: int, final: bool = False):
+    def _save_checkpoint(self, server_round: int, final: bool = False) -> None:
         """Salva parâmetros agregados em disco."""
         # Nota: Flower não expõe os parâmetros agregados diretamente na strategy.
         # Para persistência completa, use o callback evaluate_fn ou um loop customizado.
@@ -124,7 +129,7 @@ class CustomFedProxStrategy(FedProx):
         print(f"   💾 Checkpoint registrado: {path}")
 
 
-def get_evaluate_fn(test_loader):
+def get_evaluate_fn(test_loader) -> Callable:
     """
     Retorna a função de avaliação global usada pelo servidor a cada rodada.
     """
@@ -169,7 +174,7 @@ def start_server(
     num_clients: int = NUM_CLIENTS,
     test_loader=None,
     on_converged: Optional[Callable] = None,
-):
+) -> Tuple["CustomFedProxStrategy", ConvergenceTracker, Dict]:
     """
     Monta a estratégia FedProx com convergência integrada.
 

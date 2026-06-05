@@ -1,88 +1,80 @@
 # Makefile for MOSAIC-FL project
-# Federal Learning for Clinical Prediction
+# Federated Learning for Clinical Prediction
 
-.PHONY: help venv setup install run clean test test-cov lint format docker-build docker-up docker-down
+.PHONY: help venv setup install run clean test test-cov lint fmt pre-commit docker-build docker-up docker-down
 
 # Detect Python environment
 VENV_DIR := .venv
 
-# Check if running inside virtual environment
 ifdef VIRTUAL_ENV
-	# Venv is already activated
-	PYTHON := python
-	PIP := pip
+	PYTHON      := python
+	PIP         := pip
 	PYTHON_VENV := python
-	IN_VENV := yes
+	IN_VENV     := yes
 else
-	# Check if .venv exists
 	ifneq ($(wildcard $(VENV_DIR)/bin/python),)
-		PYTHON := $(VENV_DIR)/bin/python
-		PIP := $(VENV_DIR)/bin/pip
+		PYTHON      := $(VENV_DIR)/bin/python
+		PIP         := $(VENV_DIR)/bin/pip
 		PYTHON_VENV := $(VENV_DIR)/bin/python
-		IN_VENV := venv_exists
+		IN_VENV     := venv_exists
 	else
-		PYTHON := python3
-		PIP := pip3
+		PYTHON      := python3
+		PIP         := pip3
 		PYTHON_VENV := python3
-		IN_VENV := no
+		IN_VENV     := no
 	endif
 endif
 
 # Default target
 help:
-	@echo "╔════════════════════════════════════════════════════════════╗"
-	@echo "║           MOSAIC-FL - Comandos Disponíveis                 ║"
-	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo "MOSAIC-FL - Comandos disponiveis"
 	@echo ""
-	@echo "📦 SETUP:"
-	@echo "  make venv        - Cria ambiente virtual (.venv)"
-	@echo "  make setup       - Cria venv e instala dependências"
-	@echo "  make install     - Instala o pacote em modo editável"
+	@echo "  SETUP"
+	@echo "    make venv        - Cria ambiente virtual (.venv)"
+	@echo "    make setup       - Cria venv e instala dependencias"
+	@echo "    make install     - Instala o pacote em modo editavel"
 	@echo ""
-	@echo "🚀 EXECUÇÃO:"
-	@echo "  make run         - Executa experimentos (runner)"
-	@echo "  make test        - Executa testes unitários"
-	@echo "  make test-cov    - Testes com cobertura"
+	@echo "  EXECUCAO"
+	@echo "    make run         - Executa experimentos"
+	@echo "    make test        - Executa testes"
+	@echo "    make test-cov    - Testes com relatorio de cobertura"
 	@echo ""
-	@echo "🧹 MANUTENÇÃO:"
-	@echo "  make clean       - Remove arquivos temporários"
+	@echo "  QUALIDADE"
+	@echo "    make lint        - Verifica estilo com ruff"
+	@echo "    make fmt         - Formata codigo com ruff"
+	@echo "    make pre-commit  - Instala hooks de pre-commit"
 	@echo ""
-	@echo "🐳 DOCKER:"
-	@echo "  make docker-up   - Inicia serviços Docker"
-	@echo "  make docker-down - Para serviços Docker"
+	@echo "  MANUTENCAO"
+	@echo "    make clean       - Remove arquivos temporarios"
 	@echo ""
-	@echo "💡 Status do ambiente: $(IN_VENV)"
+	@echo "  DOCKER"
+	@echo "    make docker-up   - Inicia servicos Docker"
+	@echo "    make docker-down - Para servicos Docker"
+	@echo ""
+	@echo "  Ambiente: $(IN_VENV)"
 
-# Create virtual environment (only if not exists)
+# Create virtual environment
 venv:
 ifeq ($(wildcard $(VENV_DIR)/bin/python),)
-	@echo "📦 Criando ambiente virtual..."
 	python3 -m venv $(VENV_DIR)
-	@echo "✅ Ambiente virtual criado em $(VENV_DIR)/"
-	@echo "💡 Execute: source $(VENV_DIR)/bin/activate"
+	@echo "Ambiente virtual criado em $(VENV_DIR)/"
+	@echo "Para ativar: source $(VENV_DIR)/bin/activate"
 else
-	@echo "✅ Ambiente virtual já existe em $(VENV_DIR)/"
-	@echo "💡 Para ativar: source $(VENV_DIR)/bin/activate"
+	@echo "Ambiente virtual ja existe em $(VENV_DIR)/"
 endif
 
-# Setup: create venv and install dependencies
+# Setup: create venv and install all dependencies
 setup:
-	@echo "🔧 Iniciando setup do MOSAIC-FL..."
 	@$(MAKE) venv
-	@echo "📥 Instalando dependências..."
 	$(VENV_DIR)/bin/pip install --upgrade pip setuptools wheel
 	$(VENV_DIR)/bin/pip install -e .
-	$(VENV_DIR)/bin/pip install pytest pytest-cov black ruff
+	$(VENV_DIR)/bin/pip install pytest pytest-cov ruff pre-commit
+	$(VENV_DIR)/bin/pre-commit install
 	@echo ""
-	@echo "╔════════════════════════════════════════════════════════════╗"
-	@echo "║  ✅ SETUP COMPLETO!                                       ║"
-	@echo "╚════════════════════════════════════════════════════════════╝"
-	@echo ""
-	@echo "📋 Próximos passos:"
-	@echo "   1. Ative o ambiente: source $(VENV_DIR)/bin/activate"
-	@echo "   2. Execute testes: make test"
-	@echo "   3. Rode experimentos: make run"
-	@echo ""
+	@echo "Setup concluido."
+	@echo "  Proximos passos:"
+	@echo "    source $(VENV_DIR)/bin/activate"
+	@echo "    make test"
 
 # Install package in editable mode
 install:
@@ -96,18 +88,30 @@ run:
 test:
 	$(PYTHON_VENV) -m pytest tests/ -v --tb=short
 
-# Run tests with coverage
+# Run tests with coverage report
 test-cov:
 	$(PYTHON_VENV) -m pytest tests/ -v --tb=short --cov=src/mosaicfl --cov-report=term-missing
 
-# Clean build artifacts and cache
+# Lint with ruff (check only)
+lint:
+	$(VENV_DIR)/bin/ruff check src/ tests/ benchmark.py
+
+# Format with ruff
+fmt:
+	$(VENV_DIR)/bin/ruff format src/ tests/ benchmark.py
+
+# Install pre-commit hooks
+pre-commit:
+	$(VENV_DIR)/bin/pre-commit install
+	@echo "Hooks instalados. Serao executados automaticamente em cada commit."
+
+# Clean build artifacts and caches
 clean:
-	@echo "Limpando arquivos temporários..."
 	rm -rf $(VENV_DIR) __pycache__ .pytest_cache .coverage htmlcov dist build
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	@echo "✅ Limpeza completa!"
+	@echo "Limpeza concluida."
 
 # Docker commands
 docker-build:

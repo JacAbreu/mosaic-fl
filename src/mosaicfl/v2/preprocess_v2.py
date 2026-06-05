@@ -31,7 +31,7 @@ class EHRPreprocessor:
         self.rejected_count = 0
         self.total_count = 0
 
-    def _log_transform(self, step: str, detail: str, count: int = 0):
+    def _log_transform(self, step: str, detail: str, count: int = 0) -> None:
         entry = {"step": step, "detail": detail, "count": count}
         self.transform_log.append(entry)
         logger.info(f"[{step}] {detail} (n={count})")
@@ -161,7 +161,7 @@ class EHRPreprocessor:
 
 
 
-    def process(self, df: pd.DataFrame, text_cols: List[str] = None) -> Tuple[pd.DataFrame, Dict]:
+    def process(self, df: pd.DataFrame, text_cols: Optional[List[str]] = None) -> Tuple[pd.DataFrame, Dict]:
         self.total_count = len(df)
         text_cols = text_cols or ['sintoma', 'exame', 'diagnostico']
         df = self.clean_text(df, text_cols)
