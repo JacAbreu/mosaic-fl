@@ -102,6 +102,23 @@ class CustomFedProxStrategy(FedProx):
         os.makedirs(save_dir, exist_ok=True)
         self._round_counter = 0
 
+    def aggregate_fit(self, server_round: int, results, failures):
+        """Salva pesos agregados em disco imediatamente após cada rodada."""
+        aggregated_parameters, aggregated_metrics = super().aggregate_fit(server_round, results, failures)
+
+        if aggregated_parameters is not None:
+            ndarrays = fl.common.parameters_to_ndarrays(aggregated_parameters)
+            model = SimplifiedBEHRT(use_cls_token=True)
+            keys = list(model.state_dict().keys())
+            state_dict = OrderedDict({k: torch.tensor(v) for k, v in zip(keys, ndarrays)})
+            model.load_state_dict(state_dict, strict=False)
+            path = os.path.join(self.save_dir, f"round_{server_round}.pt")
+            torch.save(model.state_dict(), path)
+            self.history["last_checkpoint"] = path
+            print(f"   💾 Checkpoint salvo: {path}")
+
+        return aggregated_parameters, aggregated_metrics
+
     def aggregate_evaluate(self, server_round: int, results, failures):
         """Chamado após avaliação dos clientes — usado para rastrear convergência."""
         aggregated = super().aggregate_evaluate(server_round, results, failures)
@@ -111,40 +128,31 @@ class CustomFedProxStrategy(FedProx):
             accuracy = metrics.get("accuracy", 0.0)
             self._round_counter = server_round
 
-            # Popula histórico
             self.history["rounds"].append(server_round)
             self.history["accuracy"].append(accuracy)
-            # Tráfego real: cada cliente envia e recebe o state_dict completo
             self.history["communication_mb"].append(round(len(results) * _MODEL_SIZE_MB * 2, 3))
 
-            # Verifica convergência
             if self.tracker.check(accuracy):
                 print(f"\n🎯 CONVERGÊNCIA ATINGIDA na rodada {server_round}!")
                 print(f"   Acurácia: {accuracy:.4f} | Δ < {self.tracker.threshold} por {self.tracker.patience} rodadas.")
                 if self.on_converged:
                     self.on_converged(server_round, accuracy, self.history)
-                # Salva modelo final
                 self._save_checkpoint(server_round, final=True)
-                # Sinaliza parada ao Flower (retornando None nas métricas ou via exception)
-                # Nota: Flower não tem API nativa de parada antecipada fácil.
-                # A alternativa é lançar uma exceção customizada ou usar um loop externo.
                 raise StopIteration(f"Convergência atingida na rodada {server_round}")
-
-            # Salva checkpoint a cada 5 rodadas
-            if server_round % 5 == 0:
-                self._save_checkpoint(server_round)
 
         return aggregated
 
     def _save_checkpoint(self, server_round: int, final: bool = False) -> None:
-        """Salva parâmetros agregados em disco."""
-        # Nota: Flower não expõe os parâmetros agregados diretamente na strategy.
-        # Para persistência completa, use o callback evaluate_fn ou um loop customizado.
-        # Aqui registramos que o checkpoint deveria ser salvo.
-        suffix = "final" if final else f"round_{server_round}"
-        path = os.path.join(self.save_dir, f"mosaicfl_{suffix}.json")
-        self.history["last_checkpoint"] = path
-        print(f"   💾 Checkpoint registrado: {path}")
+        """Cria cópia nomeada 'final.pt' do último checkpoint ao convergir."""
+        if not final:
+            return
+        last = self.history.get("last_checkpoint")
+        if last and os.path.exists(last):
+            import shutil
+            final_path = os.path.join(self.save_dir, "final.pt")
+            shutil.copy2(last, final_path)
+            self.history["last_checkpoint"] = final_path
+            print(f"   💾 Checkpoint final: {final_path}")
 
 
 def get_evaluate_fn(test_loader) -> Callable:
@@ -225,15 +233,14 @@ def start_server(
     else:
         print("Avaliação global: INATIVA")
 
-    # Para uso real, descomente e rode via try/except StopIteration:
-    # try:
-    #     fl.server.start_server(
-    #         server_address="0.0.0.0:8080",
-    #         strategy=strategy,
-    #         config=fl.server.ServerConfig(num_rounds=num_rounds),
-    #     )
-    # except StopIteration as e:
-    #     print(f"Treinamento interrompido por convergência: {e}")
+    try:
+        fl.server.start_server(
+            server_address="0.0.0.0:8080",
+            strategy=strategy,
+            config=fl.server.ServerConfig(num_rounds=num_rounds),
+        )
+    except StopIteration as e:
+        print(f"\nTreinamento interrompido por convergência antecipada: {e}")
 
     return strategy, tracker, history
 

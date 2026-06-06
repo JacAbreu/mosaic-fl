@@ -46,7 +46,7 @@ make setup
 
 ```bash
 make test
-# Esperado: 329 passed
+# Esperado: 410 passed
 ```
 
 ---
@@ -62,9 +62,50 @@ infrastructure/     — daemons de produção
   mosaicfl_server/  — servidor Flower + strategy + config_loader
   mosaicfl_client/  — cliente Flower + heartbeat
   mosaicfl_scheduler/ — APScheduler de rounds
+  mosaicfl_api/     — API HTTP de inferência + painel web (FastAPI)
 
-tests/              — suite de testes (299 testes)
+integration/        — conectores para sistemas externos
+  clinical-path/    — exportador e watcher para ClinicalPath v2
+
+wire-production/    — ambiente de simulação completo (Docker Compose)
+  docker-compose.yml — 6 serviços em uma máquina
+  .env.example       — variáveis documentadas
+  seed/              — gerador de exames sintéticos para teste
+
+tests/              — suite de testes (410 testes)
 benchmark.py        — benchmark de performance
+```
+
+### Ambiente wire-production
+
+O `wire-production/` sobe todos os componentes em uma única máquina via Docker Compose:
+
+```bash
+cd wire-production
+cp .env.example .env          # ajuste FL_NUM_ROUNDS, FL_API_KEY, etc.
+docker compose up --build     # build + sobe tudo (pode demorar na 1ª vez)
+```
+
+Acesse em:
+- Painel web: `http://localhost:8000`
+- API docs:   `http://localhost:8000/docs`
+- Logs:       `docker compose logs -f`
+
+Para testar o fluxo completo com exames sintéticos:
+
+```bash
+# Gera JSONs de pacientes
+cd wire-production/seed
+python generate_data.py --output-dir ../incoming
+
+# Copia para o volume monitorado pela API
+docker compose cp incoming/. mosaic-fl-wire-api-1:/app/data/incoming/
+```
+
+Para parar e limpar volumes:
+
+```bash
+docker compose down -v
 ```
 
 **Regra geral:** modificações no comportamento do FL ficam em `src/mosaicfl/v2/`. Modificações nos daemons ficam em `infrastructure/`. Novos comportamentos exigem novos testes.
@@ -240,7 +281,7 @@ git commit -m "feat: minha contribuição"
 
 ### Checklist do PR
 
-- [ ] Todos os 299 testes passam (`make test`)
+- [ ] Todos os 410 testes passam (`make test`)
 - [ ] Nenhum erro de lint (`make lint`)
 - [ ] Novo código tem testes correspondentes
 - [ ] Docstrings nos métodos públicos novos

@@ -1,0 +1,58 @@
+# Dockerfile.wire
+# Imagem unificada para o ambiente wire-production do MOSAIC-FL.
+#
+# Instala todos os componentes em uma única imagem:
+#   - mosaicfl (core: modelo, cliente FL, servidor FL, RAG)
+#   - mosaicfl-server  (daemon Flower gRPC)
+#   - mosaicfl-client  (daemon de hospital)
+#   - mosaicfl-scheduler  (APScheduler de rounds)
+#   - mosaicfl_api  (FastAPI: inferência + painel web)
+#
+# Uso direto:
+#   docker build -f Dockerfile.wire -t mosaicfl-wire .
+#
+# Via docker compose:
+#   docker compose -f wire-production/docker-compose.yml up --build
+
+FROM python:3.11-slim
+
+# Labels
+LABEL maintainer="Jacqueline Abreu <jacque.abreu@usp.br>"
+LABEL description="MOSAIC-FL wire-production — imagem unificada de simulação"
+LABEL version="0.2.0"
+
+WORKDIR /app
+
+# Dependências de sistema: compilação C (torch) + curl (healthcheck da api)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libgomp1 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copia o projeto inteiro
+COPY . .
+
+# 1. Pacote core com extras de serviço (FastAPI, uvicorn, watchdog)
+RUN pip install --no-cache-dir -e ".[service]"
+
+# 2. Módulos de infraestrutura (cada um tem seu próprio pyproject.toml)
+RUN pip install --no-cache-dir \
+    -e infrastructure/mosaicfl_server \
+    -e infrastructure/mosaicfl_client \
+    -e infrastructure/mosaicfl_scheduler
+
+# 3. Dependências extras não cobertas pelos pyprojects individuais
+RUN pip install --no-cache-dir \
+    httpx>=0.24.0 \
+    python-json-logger>=2.0.0
+
+# PYTHONPATH=/app permite "python -m infrastructure.mosaicfl_api"
+# (Python 3 trata infrastructure/ como namespace package)
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV FL_LOG_FORMAT=json
+
+# Diretórios que os daemons criam em tempo de execução
+RUN mkdir -p /app/checkpoints /app/logs /app/data/incoming /app/data/clinicalpath_output
+
+# Sem ENTRYPOINT fixo — cada serviço sobrescreve command: no docker-compose
+CMD ["python", "-c", "print('MOSAIC-FL wire image OK — use via docker compose')"]

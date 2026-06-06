@@ -845,11 +845,23 @@ class TestCustomFedProxStrategyV2:
                 strategy.aggregate_evaluate(4, [], [])
         callback.assert_called_once()
 
-    def test_checkpoint_saved_every_5_rounds(self, tmp_path):
+    def test_aggregate_fit_saves_checkpoint(self, tmp_path):
+        """aggregate_fit deve salvar round_{N}.pt em disco a cada rodada."""
+        import numpy as np
+        import flwr as fl
         strategy, tracker, history = self._make_strategy(tmp_path)
-        with patch.object(type(strategy).__bases__[0], "aggregate_evaluate",
-                          return_value=(0.5, {"accuracy": 0.75})):
-            strategy.aggregate_evaluate(5, [], [])
+
+        # Cria parâmetros falsos com as mesmas shapes do SimplifiedBEHRT
+        from mosaicfl.v2.model_v2 import SimplifiedBEHRT
+        real_model = SimplifiedBEHRT(use_cls_token=True)
+        ndarrays = [v.numpy() for v in real_model.state_dict().values()]
+        params = fl.common.ndarrays_to_parameters(ndarrays)
+
+        with patch.object(type(strategy).__bases__[0], "aggregate_fit",
+                          return_value=(params, {})):
+            strategy.aggregate_fit(3, [], [])
+
+        assert (tmp_path / "round_3.pt").exists()
         assert history["last_checkpoint"] is not None
 
     def test_history_grows_across_rounds(self, tmp_path):
@@ -871,30 +883,35 @@ class TestCustomFedProxStrategyV2:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestStartServerV2:
+    """start_server monta a estratégia e tenta subir o Flower.
+    fl.server.start_server é mockado para não bloquear os testes."""
+
+    @staticmethod
+    def _start(**kwargs):
+        with patch("mosaicfl.v2.server_v2.fl.server.start_server"):
+            return start_server(**kwargs)
 
     def test_returns_three_values(self):
-        strategy, tracker, history = start_server()
+        strategy, tracker, history = self._start()
         assert strategy is not None
         assert isinstance(tracker, ConvergenceTracker)
         assert isinstance(history, dict)
 
     def test_history_has_expected_keys(self):
-        _, _, history = start_server()
+        _, _, history = self._start()
         assert "rounds" in history
         assert "accuracy" in history
         assert "communication_mb" in history
 
     def test_evaluate_fn_none_without_test_loader(self):
-        strategy, _, _ = start_server(test_loader=None)
-        # evaluate_fn deve ser None quando não passado
-        # (não podemos acessar internals do FedProx diretamente, mas não deve crashar)
+        strategy, _, _ = self._start(test_loader=None)
         assert strategy is not None
 
     def test_evaluate_fn_active_with_test_loader(self):
         x = torch.randint(1, VOCAB_SIZE, (4, 16))
         y = torch.randint(0, NUM_CLASSES, (4,))
         loader = DataLoader(TensorDataset(x, y), batch_size=4)
-        strategy, _, _ = start_server(test_loader=loader)
+        strategy, _, _ = self._start(test_loader=loader)
         assert strategy is not None
 
 

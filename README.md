@@ -24,7 +24,8 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 9. [Kubernetes (Helm)](#kubernetes-helm)
 10. [Experimentos](#experimentos)
 11. [Solução de Problemas](#solução-de-problemas)
-12. [Referências](#referências)
+12. [Uso de Inteligência Artificial](#uso-de-inteligência-artificial)
+13. [Referências](#referências)
 
 ---
 
@@ -617,6 +618,29 @@ cat logs/server_health.json  # verifica status do servidor
 cat logs/client_registry.json   # verifica heartbeats dos clientes
 # Clientes precisam ter reportado heartbeat nos últimos 10 minutos
 ```
+
+---
+
+## Uso de Inteligência Artificial
+
+Este projeto foi desenvolvido com auxílio de ferramentas de Inteligência Artificial Generativa — incluindo geração e revisão de código, documentação técnica e decisões de arquitetura.
+
+### Modelos utilizados
+
+| Ferramenta | Modelo | Uso principal |
+|---|---|---|
+| [Claude Code](https://claude.ai/code) (Anthropic) | Claude Sonnet 4.6 | Geração de código, refatoração, testes, documentação |
+
+### Postura ética e acadêmica
+
+O uso de IA neste projeto segue as diretrizes éticas do MBA USP/Esalq e as boas práticas da indústria de software:
+
+- **Supervisão humana:** todo código gerado foi revisado, testado e validado pela autora antes de ser incorporado ao projeto.
+- **Responsabilidade intelectual:** as decisões de arquitetura, os objetivos de pesquisa e a interpretação dos resultados são de autoria da pesquisadora.
+- **Reprodutibilidade:** o projeto é inteiramente reproduzível a partir do código-fonte público, independentemente das ferramentas usadas na sua construção.
+- **Transparência:** esta seção existe porque declarar o uso de IA é um ato de integridade acadêmica, não uma limitação.
+
+A IA funcionou como uma ferramenta de produtividade — equivalente a um compilador ou uma IDE avançada — e não como substituta do raciocínio, julgamento ou criatividade da autora.
 
 ---
 

@@ -117,6 +117,10 @@ Dividido em duas partes:
 
 ### Dados e Integração
 
+- [x] ~~**Exportador ClinicalPath**~~
+
+  ~~Exporta predições do MOSAIC-FL como exame sintético `FL_RISK_SCORE` nos arquivos plain-text do ClinicalPath v2. Implementado em `integration/clinical-path/` com `ClinicalPathExporter`, modelos `ExamRecord`/`RiskPrediction`/`PatientExport`/`ClinicalPhase` e 38 testes de contrato. Referência `ref_high=0.3` faz ClinicalPath exibir dias com score acima de 0.3 na cor de risco.~~
+
 - [ ] Integração HL7 FHIR com EPR dos hospitais
 - [ ] Conector genérico para prontuários eletrônicos brasileiros (MV, Tasy, Soul MV)
 
@@ -134,6 +138,10 @@ Dividido em duas partes:
 - [ ] Avaliação com AUC-ROC, sensibilidade e especificidade em estudo retrospectivo
 
 ### Infraestrutura
+
+- [x] ~~**Ambiente wire-production (Docker Compose)**~~
+
+  ~~Ambiente de simulação completo em uma única máquina: `fl-server`, `fl-client-1/2/3`, `scheduler`, `api`. Implementado em `wire-production/` com `Dockerfile.wire` (imagem unificada), `docker-compose.yml` (6 serviços, 3 volumes nomeados, healthchecks), `.env.example` e `seed/generate_data.py` para geração de exames sintéticos.~~
 
 - [ ] Chamadas gRPC diretas do scheduler para o servidor Flower (hoje o scheduler é apenas supervisor)
 - [ ] Message broker (RabbitMQ ou Redis) para orquestração de rounds

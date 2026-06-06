@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOSAIC-FL — Painel Clínico</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #f8f9fa; }
+    .risk-badge { font-size: .9rem; padding: .3rem .6rem; border-radius: .4rem; }
+    .risk-low    { background: #d1e7dd; color: #0a3622; }
+    .risk-medium { background: #fff3cd; color: #664d03; }
+    .risk-high   { background: #f8d7da; color: #58151c; }
+    .patient-item { cursor: pointer; }
+    .patient-item:hover { background: #e9ecef; }
+    .patient-item.active { background: #cfe2ff; }
+    #fl-badge { font-size: .75rem; }
+    .exam-table th { font-size: .8rem; }
+    .exam-table td { font-size: .82rem; vertical-align: middle; }
+    #chart-container { position: relative; height: 220px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark mb-3 px-3">
+  <span class="navbar-brand fw-bold">MOSAIC-FL</span>
+  <div id="fl-status-nav" class="d-flex align-items-center gap-2 text-white-50" style="font-size:.8rem">
+    Carregando status FL…
+  </div>
+</nav>
+
+<div class="container-fluid">
+  <div class="row g-3">
+
+    <!-- Coluna esquerda: lista de pacientes + formulário de ingestão -->
+    <div class="col-md-3">
+
+      <!-- Lista de pacientes -->
+      <div class="card mb-3 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <strong>Pacientes</strong>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadPatients()">↺</button>
+        </div>
+        <ul id="patient-list" class="list-group list-group-flush">
+          <li class="list-group-item text-muted small">Carregando…</li>
+        </ul>
+      </div>
+
+      <!-- Formulário: novo lote de exames -->
+      <div class="card shadow-sm">
+        <div class="card-header"><strong>Ingerir Exames</strong></div>
+        <div class="card-body">
+          <form id="ingest-form">
+            <div class="mb-2">
+              <label class="form-label form-label-sm">Patient ID</label>
+              <input type="text" class="form-control form-control-sm" id="in-patient-id" placeholder="P001" required>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label form-label-sm">Sexo</label>
+                <select class="form-select form-select-sm" id="in-sex">
+                  <option value="M">M</option>
+                  <option value="F">F</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label form-label-sm">Idade</label>
+                <input type="number" class="form-control form-control-sm" id="in-age" value="0">
+              </div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label form-label-sm">Exames (JSON)</label>
+              <textarea class="form-control form-control-sm font-monospace"
+                id="in-exams" rows="6" placeholder='[
+  {
+    "exam_name": "WBC",
+    "date": "2020-03-01",
+    "value": 8.5,
+    "phase": "IN",
+    "ref_low": 4.0,
+    "ref_high": 11.0
+  }
+]'></textarea>
+            </div>
+            <div class="mb-2">
+              <label class="form-label form-label-sm">Fase padrão</label>
+              <select class="form-select form-select-sm" id="in-phase">
+                <option value="IN">IN — Internado</option>
+                <option value="AB">AB — Ambulatório</option>
+                <option value="EX">EX — Pronto-socorro</option>
+                <option value="P_ALTA">P_ALTA — Pós-alta</option>
+                <option value="OBITO">OBITO — Óbito</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm w-100">Ingerir e Predizer</button>
+          </form>
+          <div id="ingest-result" class="mt-2"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Coluna direita: detalhe do paciente -->
+    <div class="col-md-9">
+      <div id="patient-detail">
+        <div class="card shadow-sm">
+          <div class="card-body text-muted text-center py-5">
+            Selecione um paciente para ver o histórico de risco.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast de feedback -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 999">
+  <div id="toast" class="toast align-items-center border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toast-body"></div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const API = '';
+let _riskChart = null;
+let _selectedPatient = null;
+
+// ── utilidades ──────────────────────────────────────────────────────────────
+
+function riskClass(score) {
+  if (score === null || score === undefined) return '';
+  if (score < 0.3) return 'risk-low';
+  if (score < 0.6) return 'risk-medium';
+  return 'risk-high';
+}
+
+function showToast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  const body = document.getElementById('toast-body');
+  body.textContent = msg;
+  el.className = `toast align-items-center border-0 text-bg-${ok ? 'success' : 'danger'}`;
+  bootstrap.Toast.getOrCreateInstance(el, { delay: 3000 }).show();
+}
+
+// ── FL status ────────────────────────────────────────────────────────────────
+
+async function loadFLStatus() {
+  try {
+    const r = await fetch(`${API}/api/fl/status`);
+    const s = await r.json();
+    const nav = document.getElementById('fl-status-nav');
+    if (s.model_ready) {
+      nav.innerHTML = `<span class="badge bg-success" id="fl-badge">Modelo pronto</span>
+        <span>${s.rounds_completed} rounds</span>
+        <span class="text-white-50">·</span>
+        <span>${s.last_updated ? s.last_updated.slice(0, 16) : ''}</span>`;
+    } else {
+      nav.innerHTML = `<span class="badge bg-warning text-dark" id="fl-badge">Sem checkpoint</span>
+        <span class="text-white-50">modelo com pesos aleatórios</span>`;
+    }
+  } catch { /* silencioso */ }
+}
+
+// ── lista de pacientes ───────────────────────────────────────────────────────
+
+async function loadPatients() {
+  const ul = document.getElementById('patient-list');
+  ul.innerHTML = '<li class="list-group-item text-muted small">Carregando…</li>';
+  try {
+    const r = await fetch(`${API}/api/patients`);
+    const patients = await r.json();
+    if (!patients.length) {
+      ul.innerHTML = '<li class="list-group-item text-muted small">Nenhum paciente ainda.</li>';
+      return;
+    }
+    ul.innerHTML = patients.map(p => {
+      const score = p.latest_risk;
+      const cls = riskClass(score);
+      const scoreStr = score !== null ? score.toFixed(3) : '—';
+      const active = _selectedPatient === p.patient_id ? 'active' : '';
+      return `
+        <li class="list-group-item patient-item d-flex justify-content-between align-items-center ${active}"
+            onclick="selectPatient('${p.patient_id}')">
+          <div>
+            <div class="fw-semibold">${p.patient_id}</div>
+            <small class="text-muted">${p.sex} · ${p.age} anos</small>
+          </div>
+          <span class="risk-badge ${cls}">${scoreStr}</span>
+        </li>`;
+    }).join('');
+  } catch (e) {
+    ul.innerHTML = `<li class="list-group-item text-danger small">Erro: ${e.message}</li>`;
+  }
+}
+
+// ── detalhe do paciente ──────────────────────────────────────────────────────
+
+async function selectPatient(id) {
+  _selectedPatient = id;
+  await loadPatients(); // atualiza seleção visual
+  const detail = document.getElementById('patient-detail');
+  detail.innerHTML = '<div class="card shadow-sm"><div class="card-body text-muted">Carregando…</div></div>';
+
+  try {
+    const r = await fetch(`${API}/api/patients/${id}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const p = await r.json();
+
+    const latestRisk = p.risk_history.length
+      ? p.risk_history[p.risk_history.length - 1].risk_score
+      : null;
+    const riskCls = riskClass(latestRisk);
+
+    detail.innerHTML = `
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <strong>${p.patient_id}</strong>
+            <span class="text-muted ms-2">${p.sex} · ${p.age} anos · ${p.exam_count} exames</span>
+          </div>
+          ${latestRisk !== null
+            ? `<span class="risk-badge ${riskCls} fs-6">Risco: ${latestRisk.toFixed(3)}</span>`
+            : ''}
+        </div>
+        <div class="card-body">
+          <div id="chart-container"><canvas id="risk-chart"></canvas></div>
+          ${p.export_path
+            ? `<p class="mt-2 mb-0 small text-muted">ClinicalPath: <code>${p.export_path}</code></p>`
+            : ''}
+        </div>
+      </div>
+      <div class="card shadow-sm mt-3">
+        <div class="card-header"><strong>Histórico de Risco</strong></div>
+        <div class="card-body p-0">
+          <table class="table table-sm table-hover mb-0 exam-table">
+            <thead class="table-light">
+              <tr><th>Data</th><th>Score</th><th>Nível</th></tr>
+            </thead>
+            <tbody>
+              ${p.risk_history.slice().reverse().map(h => {
+                const cls = riskClass(h.risk_score);
+                const label = h.risk_score < 0.3 ? 'Baixo' : h.risk_score < 0.6 ? 'Médio' : 'Alto';
+                return `<tr>
+                  <td>${h.date}</td>
+                  <td class="font-monospace">${h.risk_score.toFixed(4)}</td>
+                  <td><span class="risk-badge ${cls}">${label}</span></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+
+    renderChart(p.risk_history);
+  } catch (e) {
+    detail.innerHTML = `<div class="alert alert-danger">Erro ao carregar paciente: ${e.message}</div>`;
+  }
+}
+
+function renderChart(history) {
+  if (_riskChart) { _riskChart.destroy(); _riskChart = null; }
+  if (!history.length) return;
+
+  const ctx = document.getElementById('risk-chart').getContext('2d');
+  const labels = history.map(h => h.date);
+  const scores = history.map(h => h.risk_score);
+  const threshold = Array(labels.length).fill(0.3);
+
+  _riskChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'FL Risk Score',
+          data: scores,
+          borderColor: '#dc3545',
+          backgroundColor: 'rgba(220,53,69,.08)',
+          tension: 0.3,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          fill: true,
+        },
+        {
+          label: 'Limiar (0.3)',
+          data: threshold,
+          borderColor: '#fd7e14',
+          borderDash: [6, 4],
+          pointRadius: 0,
+          borderWidth: 1.5,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { min: 0, max: 1, title: { display: true, text: 'Risco' } },
+        x: { title: { display: true, text: 'Data' } },
+      },
+      plugins: { legend: { position: 'top' } },
+    },
+  });
+}
+
+// ── formulário de ingestão ───────────────────────────────────────────────────
+
+document.getElementById('ingest-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  btn.textContent = 'Enviando…';
+
+  const result = document.getElementById('ingest-result');
+  result.innerHTML = '';
+
+  let exams;
+  try {
+    exams = JSON.parse(document.getElementById('in-exams').value);
+    if (!Array.isArray(exams)) throw new Error('exams deve ser um array JSON');
+    const phase = document.getElementById('in-phase').value;
+    exams = exams.map(ex => ({ phase, ...ex }));
+  } catch (err) {
+    result.innerHTML = `<div class="alert alert-danger py-1 small">${err.message}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Ingerir e Predizer';
+    return;
+  }
+
+  const body = {
+    patient_id: document.getElementById('in-patient-id').value.trim(),
+    sex: document.getElementById('in-sex').value,
+    age: parseFloat(document.getElementById('in-age').value) || 0,
+    exams,
+  };
+
+  try {
+    const r = await fetch(`${API}/api/exams/ingest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(JSON.stringify(data.detail ?? data));
+
+    const cls = riskClass(data.risk_score);
+    result.innerHTML = `
+      <div class="mt-1 small">
+        Score: <span class="risk-badge ${cls}">${data.risk_score.toFixed(4)}</span>
+      </div>`;
+    showToast(`Score gerado: ${data.risk_score.toFixed(4)}`);
+    await loadPatients();
+    if (_selectedPatient === body.patient_id) await selectPatient(body.patient_id);
+  } catch (err) {
+    result.innerHTML = `<div class="alert alert-danger py-1 small">${err.message}</div>`;
+    showToast(err.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ingerir e Predizer';
+  }
+});
+
+// ── inicialização ─────────────────────────────────────────────────────────────
+
+(async () => {
+  await Promise.all([loadFLStatus(), loadPatients()]);
+  setInterval(loadFLStatus, 30_000);
+  setInterval(() => { if (_selectedPatient) selectPatient(_selectedPatient); }, 60_000);
+})();
+</script>
+</body>
+</html>
