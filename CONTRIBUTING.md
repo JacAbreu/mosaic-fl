@@ -46,7 +46,7 @@ make setup
 
 ```bash
 make test
-# Esperado: 299 passed
+# Esperado: 329 passed
 ```
 
 ---

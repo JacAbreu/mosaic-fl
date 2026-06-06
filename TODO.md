@@ -58,9 +58,11 @@ Dividido em duas partes:
 
 ### Testes
 
-- [ ] **Adicionar testes de contrato para `fit()` e `evaluate()`**
+- [x] ~~**Adicionar testes de contrato para `fit()` e `evaluate()`**~~
 
-  Os testes atuais verificam que os métodos rodam, mas não validam os tipos de retorno de forma rigorosa. Um teste de contrato verifica que `fit()` sempre retorna `(List[np.ndarray], int, {"loss": float})` — se alguém mudar a chave de `"loss"` para `"train_loss"`, o teste quebra imediatamente.
+  ~~Os testes atuais verificam que os métodos rodam, mas não validam os tipos de retorno de forma rigorosa. Um teste de contrato verifica que `fit()` sempre retorna `(List[np.ndarray], int, {"loss": float})` — se alguém mudar a chave de `"loss"` para `"train_loss"`, o teste quebra imediatamente.~~
+
+  Implementado em `TestFitContract` (15 testes) e `TestEvaluateContract` (15 testes) em `test_v2_core.py`. Verificam: tipos Python exatos (`type(x) is int/float`), shapes invariantes, `n_samples` exato contra o dataset, compatibilidade com `weighted_average_loss`/`weighted_average_accuracy`, e dois testes "negativos" que demonstram o que quebra quando a chave é renomeada. Descobriu incidentalmente que `cls_token_id` (int64) é incluído no state_dict — comportamento correto e agora documentado no teste.
 
 
 - [ ] **Teste de integração end-to-end real (sem mocks)**

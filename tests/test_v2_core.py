@@ -346,6 +346,280 @@ class TestFedProxClientV2:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Contrato de fit() — tipos exatos, shapes, compatibilidade downstream
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestFitContract:
+    """
+    Contrato de FedProxClient.fit():
+        (List[np.ndarray], int, {"loss": float})
+
+    Estes testes são mais restritivos que testes estruturais: verificam tipos
+    Python exatos (não apenas isinstance), shapes invariantes e compatibilidade
+    com weighted_average_loss. Se alguém renomear "loss" para "train_loss" ou
+    retornar um tensor em vez de ndarray, um teste aqui quebra imediatamente.
+    """
+
+    TRAIN_SIZE = 12
+    SEQ_LEN = 16
+
+    @pytest.fixture(scope="class")
+    def contract_client(self):
+        from mosaicfl.v2.client_v2 import FedProxClient
+        x = torch.randint(1, VOCAB_SIZE, (self.TRAIN_SIZE, self.SEQ_LEN))
+        y = torch.randint(0, NUM_CLASSES, (self.TRAIN_SIZE,))
+        loader = DataLoader(TensorDataset(x, y), batch_size=4)
+        return FedProxClient(client_id=7, train_loader=loader, val_loader=loader)
+
+    @pytest.fixture(scope="class")
+    def fit_result(self, contract_client):
+        """Resultado único de fit() compartilhado por todos os testes da classe."""
+        params = contract_client.get_parameters({})
+        return params, contract_client.fit(params, {})
+
+    # --- tipo e cardinalidade do retorno ---
+
+    def test_returns_three_elements(self, fit_result):
+        _, result = fit_result
+        assert len(result) == 3
+
+    def test_params_is_list(self, fit_result):
+        _, (params, _, _) = fit_result
+        assert type(params) is list
+
+    def test_each_param_is_ndarray(self, fit_result):
+        _, (params, _, _) = fit_result
+        for i, arr in enumerate(params):
+            assert isinstance(arr, np.ndarray), (
+                f"tensor {i}: esperado np.ndarray, obtido {type(arr)}"
+            )
+
+    def test_floating_params_are_float32(self, fit_result):
+        """
+        Todos os arrays de pesos (float) devem ser float32.
+        Buffers inteiros (ex: cls_token_id) podem ter dtype int64 — isso é esperado.
+        Flower serializa e reconstrói qualquer dtype; o que não pode mudar é
+        que pesos treináveis sejam float32 (torch padrão).
+        """
+        _, (params, _, _) = fit_result
+        for i, arr in enumerate(params):
+            if np.issubdtype(arr.dtype, np.floating):
+                assert arr.dtype == np.float32, (
+                    f"tensor {i}: peso flutuante esperado float32, obtido {arr.dtype}"
+                )
+
+    # --- n_samples ---
+
+    def test_n_samples_is_python_int(self, fit_result):
+        """np.int64 ou torch.Tensor não é aceito pelo protocolo Flower."""
+        _, (_, n_samples, _) = fit_result
+        assert type(n_samples) is int, f"esperado int, obtido {type(n_samples)}"
+
+    def test_n_samples_is_positive(self, fit_result):
+        _, (_, n_samples, _) = fit_result
+        assert n_samples > 0
+
+    def test_n_samples_equals_dataset_size(self, fit_result):
+        """n_samples deve refletir o dataset inteiro, não só o último batch."""
+        _, (_, n_samples, _) = fit_result
+        assert n_samples == self.TRAIN_SIZE
+
+    # --- metrics dict ---
+
+    def test_metrics_is_dict(self, fit_result):
+        _, (_, _, metrics) = fit_result
+        assert isinstance(metrics, dict)
+
+    def test_metrics_contains_loss_key(self, fit_result):
+        """Chave 'loss' exigida por weighted_average_loss."""
+        _, (_, _, metrics) = fit_result
+        assert "loss" in metrics, (
+            f"metrics não contém 'loss'. Chaves presentes: {list(metrics.keys())}"
+        )
+
+    def test_metrics_loss_is_python_float(self, fit_result):
+        """torch.Tensor e np.float32 não são serializáveis pelo Flower."""
+        _, (_, _, metrics) = fit_result
+        assert type(metrics["loss"]) is float, (
+            f"esperado float, obtido {type(metrics['loss'])}"
+        )
+
+    def test_metrics_loss_is_non_negative(self, fit_result):
+        _, (_, _, metrics) = fit_result
+        assert metrics["loss"] >= 0.0
+
+    # --- invariante de shape ---
+
+    def test_params_length_unchanged(self, contract_client):
+        params_in = contract_client.get_parameters({})
+        params_out, _, _ = contract_client.fit(params_in, {})
+        assert len(params_out) == len(params_in)
+
+    def test_param_shapes_preserved(self, contract_client):
+        """fit() não pode alterar shapes — quebraria load_state_dict no servidor."""
+        params_in = contract_client.get_parameters({})
+        params_out, _, _ = contract_client.fit(params_in, {})
+        for i, (p_in, p_out) in enumerate(zip(params_in, params_out)):
+            assert p_in.shape == p_out.shape, (
+                f"shape do tensor {i} mudou: {p_in.shape} → {p_out.shape}"
+            )
+
+    # --- compatibilidade downstream ---
+
+    def test_metrics_feed_to_weighted_average_loss(self, fit_result):
+        """
+        Alimenta o retorno de fit() diretamente em weighted_average_loss.
+        Se 'loss' for renomeada, este teste quebra antes que o bug chegue ao servidor.
+        """
+        _, (_, n_samples, metrics) = fit_result
+        aggregated = weighted_average_loss([(n_samples, metrics)])
+        assert "loss" in aggregated, (
+            "weighted_average_loss retornou {} — chave 'loss' ausente em metrics."
+        )
+        assert isinstance(aggregated["loss"], float)
+        assert aggregated["loss"] >= 0.0
+
+    def test_renamed_key_silences_aggregation(self):
+        """
+        Demonstra por que o contrato importa: 'train_loss' em vez de 'loss'
+        faz weighted_average_loss retornar 0.0 sem aviso.
+        """
+        broken = [(100, {"train_loss": 0.42})]
+        result = weighted_average_loss(broken)
+        assert result == {"loss": 0.0}, (
+            "Esperado {'loss': 0.0} quando a chave está errada — agregação silenciosa."
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Contrato de evaluate() — tipos exatos, keys, compatibilidade downstream
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestEvaluateContract:
+    """
+    Contrato de FedProxClient.evaluate():
+        (float, int, {"accuracy": float, "client_id": int})
+
+    Se alguém renomear "accuracy" para "acc" ou retornar loss como tensor,
+    um teste aqui quebra imediatamente — antes que o bug chegue à agregação.
+    """
+
+    VAL_SIZE = 8
+    CLIENT_ID = 42
+
+    @pytest.fixture(scope="class")
+    def contract_client(self):
+        from mosaicfl.v2.client_v2 import FedProxClient
+        x = torch.randint(1, VOCAB_SIZE, (self.VAL_SIZE, 16))
+        y = torch.randint(0, NUM_CLASSES, (self.VAL_SIZE,))
+        loader = DataLoader(TensorDataset(x, y), batch_size=4)
+        return FedProxClient(client_id=self.CLIENT_ID, train_loader=loader, val_loader=loader)
+
+    @pytest.fixture(scope="class")
+    def evaluate_result(self, contract_client):
+        """Resultado único de evaluate() compartilhado por todos os testes da classe."""
+        params = contract_client.get_parameters({})
+        return contract_client.evaluate(params, {})
+
+    # --- tipo e cardinalidade do retorno ---
+
+    def test_returns_three_elements(self, evaluate_result):
+        assert len(evaluate_result) == 3
+
+    def test_loss_is_python_float(self, evaluate_result):
+        """Flower espera float puro — tensor ou int quebra o protocolo."""
+        loss, _, _ = evaluate_result
+        assert type(loss) is float, f"esperado float, obtido {type(loss)}"
+
+    def test_loss_is_non_negative(self, evaluate_result):
+        loss, _, _ = evaluate_result
+        assert loss >= 0.0
+
+    # --- n_samples ---
+
+    def test_n_samples_is_python_int(self, evaluate_result):
+        _, n_samples, _ = evaluate_result
+        assert type(n_samples) is int, f"esperado int, obtido {type(n_samples)}"
+
+    def test_n_samples_is_positive(self, evaluate_result):
+        _, n_samples, _ = evaluate_result
+        assert n_samples > 0
+
+    def test_n_samples_equals_dataset_size(self, evaluate_result):
+        _, n_samples, _ = evaluate_result
+        assert n_samples == self.VAL_SIZE
+
+    # --- metrics dict ---
+
+    def test_metrics_is_dict(self, evaluate_result):
+        _, _, metrics = evaluate_result
+        assert isinstance(metrics, dict)
+
+    def test_metrics_contains_accuracy_key(self, evaluate_result):
+        _, _, metrics = evaluate_result
+        assert "accuracy" in metrics, (
+            f"metrics não contém 'accuracy'. Chaves presentes: {list(metrics.keys())}"
+        )
+
+    def test_metrics_contains_client_id_key(self, evaluate_result):
+        _, _, metrics = evaluate_result
+        assert "client_id" in metrics, (
+            f"metrics não contém 'client_id'. Chaves presentes: {list(metrics.keys())}"
+        )
+
+    def test_metrics_accuracy_is_float(self, evaluate_result):
+        """int 0/1 e np.float32 não devem substituir float Python na accuracy."""
+        _, _, metrics = evaluate_result
+        assert isinstance(metrics["accuracy"], float), (
+            f"esperado float, obtido {type(metrics['accuracy'])}"
+        )
+
+    def test_metrics_accuracy_in_range(self, evaluate_result):
+        _, _, metrics = evaluate_result
+        assert 0.0 <= metrics["accuracy"] <= 1.0
+
+    def test_metrics_client_id_matches_constructor(self, evaluate_result):
+        """client_id no dict deve ser o mesmo passado ao FedProxClient."""
+        _, _, metrics = evaluate_result
+        assert metrics["client_id"] == self.CLIENT_ID
+
+    # --- compatibilidade downstream ---
+
+    def test_metrics_feed_to_weighted_average_accuracy(self, evaluate_result):
+        """
+        Alimenta o retorno de evaluate() diretamente em weighted_average_accuracy.
+        Se 'accuracy' for renomeada, este teste quebra antes que o bug chegue ao servidor.
+        """
+        _, n_samples, metrics = evaluate_result
+        aggregated = weighted_average_accuracy([(n_samples, metrics)])
+        assert "accuracy" in aggregated, (
+            "weighted_average_accuracy retornou {} — chave 'accuracy' ausente em metrics."
+        )
+        assert isinstance(aggregated["accuracy"], float)
+        assert 0.0 <= aggregated["accuracy"] <= 1.0
+
+    def test_renamed_key_silences_aggregation(self):
+        """
+        Demonstra por que o contrato importa: 'acc' em vez de 'accuracy'
+        faz weighted_average_accuracy retornar 0.0 sem aviso.
+        """
+        broken = [(100, {"acc": 0.82})]
+        result = weighted_average_accuracy(broken)
+        assert result == {"accuracy": 0.0}, (
+            "Esperado {'accuracy': 0.0} quando a chave está errada — agregação silenciosa."
+        )
+
+    # --- determinismo em eval mode ---
+
+    def test_evaluate_is_deterministic(self, contract_client):
+        """Mesmos pesos devem produzir a mesma loss — dropout desligado em eval mode."""
+        params = contract_client.get_parameters({})
+        loss_a, _, _ = contract_client.evaluate(params, {})
+        loss_b, _, _ = contract_client.evaluate(params, {})
+        assert abs(loss_a - loss_b) < 1e-6
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ConvergenceTracker v2
 # ═══════════════════════════════════════════════════════════════════════════════
 
