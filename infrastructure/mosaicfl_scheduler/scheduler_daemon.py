@@ -154,6 +154,12 @@ class FederatedScheduler:
         logger.info(f"Clientes disponíveis: {num_clients}/{self.min_clients} necessários")
         logger.info(f"Clientes ativos: {active_clients}")
 
+        try:
+            from infrastructure.metrics import fl_clients_active
+            fl_clients_active.set(num_clients)
+        except Exception:
+            pass
+
         if num_clients < self.min_clients:
             logger.warning(
                 f"Clientes insuficientes ({num_clients} < {self.min_clients}). "
@@ -271,9 +277,15 @@ class FederatedScheduler:
                 logger.info("Scheduler finalizado.")
 
     def run_once(self):
-        """Executa UM ciclo do scheduler (útil para cron)."""
+        """Executa UM ciclo do scheduler (útil para cron) e empurra métricas ao Pushgateway."""
         logger.info("Modo run_once: executando um único ciclo.")
         self._job_round()
+
+        try:
+            from infrastructure.metrics import push_metrics
+            push_metrics(job="mosaicfl-scheduler")
+        except Exception:
+            pass
 
 
 def main():
