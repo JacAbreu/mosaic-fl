@@ -18,29 +18,33 @@ import argparse
 import json
 import logging
 import os
+import socket
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-# Configuração de logging (único ponto de configuração)
 LOG_FILE = Path(os.getenv("FL_SCHEDULER_LOG", "logs/scheduler.log"))
-LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_FILE, encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
 logger = logging.getLogger(__name__)
+
+
+def _configure_logging() -> None:
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_FILE, encoding="utf-8"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 
 # Imports dos módulos do scheduler usando imports absolutos
 try:
     from .schedule_state import SchedulerState
+    from .state_store import SchedulerStateStore
     from .client_availability_checker import ClientAvailabilityChecker
     from .round_training_fl_dispatcher import RoundDispatcher
 except ImportError as e:
@@ -79,7 +83,8 @@ class FederatedScheduler:
 
         self.checker = ClientAvailabilityChecker()
         self.dispatcher = RoundDispatcher(server_address=server_address)
-        self.state = SchedulerState.load()
+        self._store = SchedulerStateStore()
+        self.state = self._store.load()
         self.scheduler = None
         self._should_stop = False  # flag para controle de parada
 
@@ -90,7 +95,6 @@ class FederatedScheduler:
         Retorna True se o servidor responde, False caso contrário.
         """
         try:
-            import socket
             host, port = self.server_address.split(":")
             port = int(port)
             
@@ -116,9 +120,9 @@ class FederatedScheduler:
         logger.info(f"SCHEDULER — Ciclo iniciado às {datetime.now().isoformat()}")
         logger.info("=" * 60)
         
-        # ⚠️ VERIFICAÇÃO DE CONECTIVIDADE COM O SERVIDOR
+        # VERIFICACAO DE CONECTIVIDADE COM O SERVIDOR
         if not self._check_server_connectivity():
-            logger.error("🚫 SERVIDOR FLOWER NÃO ESTÁ ACESSÍVEL!")
+            logger.error("SERVIDOR FLOWER NAO ESTA ACESSIVEL!")
             logger.error(f"   Endereço configurado: {self.server_address}")
             logger.error("")
             logger.error("Possíveis causas:")
@@ -157,17 +161,30 @@ class FederatedScheduler:
             )
             return
 
-        # 3. Dispara round
+        # 3. Dispara round — retorna accuracy ou None em caso de falha
         next_round = self.state.total_rounds_completed + 1
-        success = self.dispatcher.dispatch_round(next_round, active_clients)
+        accuracy = self.dispatcher.dispatch_round(next_round, active_clients)
 
-        if success:
-            # 4. Verifica convergência
-            converged = self.dispatcher.check_convergence()
+        if accuracy is not None:
+            self.state.total_rounds_completed += 1
+            self.state.current_round = next_round
+            self.state.last_run = datetime.now().isoformat()
+            self.state.accuracy_history.append(accuracy)
+
+            # 4. Verifica convergência com o histórico atualizado
+            converged = self.dispatcher.check_convergence(self.state.accuracy_history)
+            self.state.converged = converged
+            if converged:
+                self.state.convergence_round = next_round
+
+            self._store.save(self.state)
+            self._store.record_round(next_round, accuracy=accuracy, success=True)
+
             if converged:
                 logger.info("Convergência detectada. Scheduler será parado.")
                 self._stop_scheduler()
         else:
+            self._store.record_round(next_round, accuracy=None, success=False)
             logger.error(f"Falha ao executar round {next_round}.")
 
     def _stop_scheduler(self):
@@ -260,6 +277,7 @@ class FederatedScheduler:
 
 
 def main():
+    _configure_logging()
     parser = argparse.ArgumentParser(description="Scheduler de Rounds Federados MOSAIC-FL")
     parser.add_argument(
         "--once",

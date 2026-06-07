@@ -6,14 +6,14 @@ O sistema suporta **múltiplas fontes de dados** via Strategy Pattern. Você pod
 
 ---
 
-## 🏗️ Arquitetura de Dados
+##  Arquitetura de Dados
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    FONTES DE DADOS SUPORTADAS                 │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  📁 ARQUIVOS LOCAIS              🗄️ SGBD (SQL)               │
+│   ARQUIVOS LOCAIS               SGBD (SQL)               │
 │  ├── CSV (.csv)                  ├── PostgreSQL               │
 │  ├── Excel (.xlsx)              ├── MySQL                   │
 │  ├── JSON (.json)               ├── SQLite                  │
@@ -41,7 +41,7 @@ O sistema suporta **múltiplas fontes de dados** via Strategy Pattern. Você pod
 
 ---
 
-## ⚙️ Opção 1: Variáveis de Ambiente (Recomendado)
+##  Opção 1: Variáveis de Ambiente (Recomendado)
 
 A forma mais limpa de configurar o SGBD é via **variáveis de ambiente** — não precisa editar código.
 
@@ -79,7 +79,7 @@ python run_v2.py
 
 ---
 
-## ⚙️ Opção 2: Editar data_loader.py
+##  Opção 2: Editar data_loader.py
 
 Se preferir configuração em arquivo, edite `src/data_loader.py`:
 
@@ -102,7 +102,7 @@ DEFAULT_QUERY = "SELECT * FROM prontuarios_covid WHERE ano >= 2022"
 
 ---
 
-## ⚙️ Opção 3: Passar diretamente no código
+##  Opção 3: Passar diretamente no código
 
 Para testes rápidos ou notebooks:
 
@@ -133,7 +133,7 @@ df = load_clinical_dataset(
 
 ---
 
-## 🔧 Instalação dos Drivers
+##  Instalação dos Drivers
 
 Cada SGBD precisa de um driver Python. Instale conforme o seu:
 
@@ -153,7 +153,7 @@ pip install sqlalchemy psycopg2-binary pymysql pyodbc
 
 ---
 
-## 🗺️ Mapeamento de Colunas do Schema do SGBD
+##  Mapeamento de Colunas do Schema do SGBD
 
 O `data_loader.py` precisa saber como as **colunas do seu banco** se chamam para mapeá-las aos nomes internos.
 
@@ -214,7 +214,7 @@ DESFECHO_TEXT_TO_NUMERIC = {
 
 ---
 
-## 🔍 Diagnóstico da Conexão
+##  Diagnóstico da Conexão
 
 Antes de rodar o experimento, teste a conexão:
 
@@ -247,19 +247,19 @@ Saída esperada (sucesso):
   Query padrão: SELECT * FROM prontuarios_covid WHERE ano >= 2022
   SQLAlchemy disponível: sim
   Conectável: True
-  ✓ Conexão OK — 15432 registros, 23 colunas
+   Conexão OK — 15432 registros, 23 colunas
   Colunas: ['id_prontuario', 'cod_cnes', 'dt_nascimento', ...]
 
 [Resumo]
   Fonte selecionada: DatabaseDataSource
   Disponível: True
-  ✓ Dataset acessível: 15432 registros, 23 colunas
+   Dataset acessível: 15432 registros, 23 colunas
 ============================================================
 ```
 
 ---
 
-## 🔄 Alternando entre CSV e SGBD
+##  Alternando entre CSV e SGBD
 
 Você pode manter **ambas as configurações** e alternar facilmente:
 
@@ -293,7 +293,7 @@ python run_v2.py
 
 ---
 
-## 🛡️ Segurança: Nunca commite senhas!
+##  Segurança: Nunca commite senhas!
 
 **NUNCA** coloque senhas em arquivos `.py` que vão para o GitHub. Use sempre:
 
@@ -312,7 +312,7 @@ python run_v2.py
 
 ---
 
-## 📋 Checklist de Integração com SGBD
+##  Checklist de Integração com SGBD
 
 - [ ] Instalar driver do SGBD (`pip install psycopg2-binary` etc.)
 - [ ] Obter connection string da orientadora (host, porta, usuário, senha, banco)
@@ -325,7 +325,7 @@ python run_v2.py
 
 ---
 
-## ❓ Troubleshooting
+## [?] Troubleshooting
 
 ### "SQLAlchemy não instalado"
 ```bash
@@ -350,7 +350,7 @@ pip install sqlalchemy psycopg2-binary  # ou pymysql, pyodbc, etc.
 
 ---
 
-## 📚 Exemplos de Connection Strings
+##  Exemplos de Connection Strings
 
 | SGBD | Exemplo de connection string |
 |---|---|

@@ -17,12 +17,15 @@ Uso:
 import sys
 import json
 import time
+from collections import OrderedDict
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
+from torch.utils.data import DataLoader, TensorDataset
 
 # ── adiciona raiz do projeto e src/ ao sys.path ──────────────────────────────
 # infrastructure/ não tem __init__.py (namespace package Python 3),
@@ -30,7 +33,7 @@ import torch
 # 'from infrastructure.mosaicfl_scheduler.* import ...' funcione.
 # NÃO adicionar os subdiretórios diretamente: scheduler_daemon.py usa
 # relative imports que falham fora do contexto de pacote (chamaria sys.exit(1)).
-ROOT = Path(__file__).parent.parent
+ROOT = Path(__file__).parent.parent.parent
 SRC = ROOT / "src"
 for _p in [str(ROOT), str(SRC)]:
     if _p not in sys.path:
@@ -45,6 +48,7 @@ from mosaicfl.v2.config import (
 from mosaicfl.v2.model_v2 import BEHRTEncoderLayer, PositionalEncoding, SimplifiedBEHRT
 from mosaicfl.v2.server_v2 import ConvergenceTracker, get_evaluate_fn, start_server, weighted_average
 from mosaicfl.v2.client_v2 import FedProxClient, create_client_fn
+from mosaicfl.v2.preprocess_v2 import EHRPreprocessor, split_by_institution
 
 # ── infrastructure ───────────────────────────────────────────────────────────
 from infrastructure.mosaicfl_scheduler.schedule_state import SchedulerState, DEFAULT_STATE_PATH
@@ -54,6 +58,27 @@ from infrastructure.mosaicfl_scheduler.round_training_fl_dispatcher import (
 )
 from infrastructure.mosaicfl_scheduler.scheduler_daemon import FederatedScheduler
 import infrastructure.mosaicfl_client.heartbeat as heartbeat_mod
+
+
+# ─────────────────────────────────────────────────────────────
+# FIXTURES COMPARTILHADAS
+# ─────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def sample_df():
+    return pd.DataFrame({
+        "instituicao":   ["HospA", "HospA", "HospB", "HospB", "HospC"],
+        "idade":         [25.0, 6.0, 45.0, 365.0, 70.0],
+        "idade_unidade": ["anos", "meses", "anos", "dias", "anos"],
+        "peso":          [150.0, 70.0, 180.0, 50.0, 80.0],
+        "peso_unidade":  ["lb", "kg", "lb", "kg", "kg"],
+        "sintoma":       ["febre", "tosse", "dispneia", "fadiga", "mialgia"],
+        "exame":         ["rt_pcr_positivo", "tomografia_normal", "rx_consolidacao",
+                          "pcr_negativo", "tomografia_vidro_fosco"],
+        "diagnostico":   ["covid19_leve", "covid19_moderado", "pneumonia_bacteriana",
+                          "covid19_grave", "alta"],
+        "desfecho":      [0, 0, 1, 1, 0],
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -795,6 +820,171 @@ class TestSchedulerIntegration:
             scheduler._job_round()
 
         assert called_rounds == [1, 2, 3]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ConfigLoader + Strategy — integração entre componentes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestConfigLoaderWithStrategy:
+    """
+    Verifica que configure_fit da strategy aplica corretamente o config
+    retornado por um FileConfigLoader real (sem mock de ChromaDB).
+    """
+    from unittest.mock import MagicMock, patch
+
+    @pytest.fixture
+    def strategy_with_file_loader(self, tmp_path):
+        from infrastructure.mosaicfl_server.config_loader import FileConfigLoader
+        from infrastructure.mosaicfl_server.strategy import ProductionFedProxStrategy
+        from infrastructure.mosaicfl_server.strategy import ConvergenceTracker as ProdTracker
+        from mosaicfl.v2.model_v2 import SimplifiedBEHRT
+        from unittest.mock import patch, MagicMock
+
+        config_file = tmp_path / "runtime_config.json"
+        loader = FileConfigLoader(path=config_file)
+        model = SimplifiedBEHRT(use_cls_token=True)
+
+        with patch("flwr.server.strategy.FedProx.__init__", return_value=None):
+            strategy = ProductionFedProxStrategy.__new__(ProductionFedProxStrategy)
+            strategy.global_model = model
+            strategy.config_loader = loader
+            strategy.on_round_start = None
+            strategy.proximal_mu = 0.01
+            strategy.should_stop = False
+            strategy.tracker = ProdTracker()
+            strategy.round_counter = 0
+            (tmp_path / "checkpoints").mkdir()
+            (tmp_path / "logs").mkdir()
+
+        import infrastructure.mosaicfl_server.strategy as strat_mod
+        strat_mod.CHECKPOINT_DIR = tmp_path / "checkpoints"
+        strat_mod.LOG_DIR = tmp_path / "logs"
+
+        return strategy, loader
+
+    def test_configure_fit_returns_empty_when_stop_true(self, strategy_with_file_loader):
+        strategy, loader = strategy_with_file_loader
+        from unittest.mock import MagicMock
+        loader.write({"stop": True})
+        result = strategy.configure_fit(1, MagicMock(), MagicMock())
+        assert result == []
+        assert strategy.should_stop is True
+
+    def test_configure_fit_updates_proximal_mu(self, strategy_with_file_loader):
+        strategy, loader = strategy_with_file_loader
+        from unittest.mock import patch, MagicMock
+        import pytest
+        loader.write({"proximal_mu": 0.05, "stop": False})
+        with patch("flwr.server.strategy.FedProx.configure_fit", return_value=[]):
+            strategy.configure_fit(1, MagicMock(), MagicMock())
+        assert strategy.proximal_mu == pytest.approx(0.05)
+
+    def test_configure_fit_no_config_delegates_to_super(self, strategy_with_file_loader):
+        strategy, loader = strategy_with_file_loader
+        from unittest.mock import patch, MagicMock
+        with patch("flwr.server.strategy.FedProx.configure_fit", return_value=[]) as mock_super:
+            strategy.configure_fit(1, MagicMock(), MagicMock())
+        mock_super.assert_called_once()
+
+    def test_configure_fit_calls_on_round_start_callback(self, strategy_with_file_loader):
+        strategy, loader = strategy_with_file_loader
+        from unittest.mock import patch, MagicMock
+        import pytest
+        callback = MagicMock()
+        strategy.on_round_start = callback
+        loader.write({"proximal_mu": 0.01, "stop": False})
+        with patch("flwr.server.strategy.FedProx.configure_fit", return_value=[]):
+            strategy.configure_fit(3, MagicMock(), MagicMock())
+        callback.assert_called_once_with(3, {"proximal_mu": pytest.approx(0.01), "stop": False})
+
+    def test_configure_fit_callback_exception_does_not_propagate(self, strategy_with_file_loader):
+        strategy, loader = strategy_with_file_loader
+        from unittest.mock import patch, MagicMock, Mock
+        strategy.on_round_start = Mock(side_effect=RuntimeError("callback falhou"))
+        with patch("flwr.server.strategy.FedProx.configure_fit", return_value=[]):
+            strategy.configure_fit(1, MagicMock(), MagicMock())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pipeline v2 — integração multi-componente
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestV2PipelineIntegration:
+    """Pipeline completo sem RAG (sem LLM), cobrindo preprocess → model → FL."""
+
+    def test_preprocess_to_model_forward(self, sample_df):
+        pre = EHRPreprocessor()
+        df_proc, _ = pre.process(sample_df, text_cols=["sintoma", "exame", "diagnostico"])
+        encoded_cols = [c for c in df_proc.columns if c.endswith("_encoded")]
+        x = torch.tensor(df_proc[encoded_cols].values[:, :16], dtype=torch.long)
+        if x.shape[1] < 16:
+            pad = torch.zeros(x.shape[0], 16 - x.shape[1], dtype=torch.long)
+            x = torch.cat([x, pad], dim=1)
+        model = SimplifiedBEHRT(use_cls_token=True)
+        logits = model(x)
+        assert logits.shape == (len(sample_df), NUM_CLASSES)
+
+    def test_client_server_parameter_compatibility(self):
+        x = torch.randint(1, VOCAB_SIZE, (8, 16))
+        y = torch.randint(0, NUM_CLASSES, (8,))
+        loader = DataLoader(TensorDataset(x, y), batch_size=4)
+        client = FedProxClient(0, loader, loader)
+        params = client.get_parameters({})
+        server_model = SimplifiedBEHRT(use_cls_token=True)
+        params_dict = zip(server_model.state_dict().keys(), params)
+        state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
+        missing, unexpected = server_model.load_state_dict(state_dict, strict=False)
+        assert len(unexpected) == 0
+
+    def test_fedavg_aggregation_preserves_shape(self):
+        model = SimplifiedBEHRT(use_cls_token=True)
+        sd = model.state_dict()
+        states = [
+            OrderedDict({k: torch.randn_like(v.float()) for k, v in sd.items()})
+            for _ in range(3)
+        ]
+        aggregated = OrderedDict()
+        for key in sd.keys():
+            if sd[key].dtype in (torch.long, torch.int):
+                aggregated[key] = states[0][key].to(sd[key].dtype).clamp(0, VOCAB_SIZE - 1)
+            else:
+                aggregated[key] = torch.stack([s[key] for s in states]).mean(0).to(sd[key].dtype)
+        model.load_state_dict(aggregated, strict=True)
+        x = torch.randint(1, VOCAB_SIZE, (2, 16))
+        assert model(x).shape == (2, NUM_CLASSES)
+
+    def test_convergence_tracker_in_evaluate_loop(self):
+        tracker = ConvergenceTracker(threshold=0.005, patience=3)
+        accuracies = [0.70, 0.72, 0.750, 0.752, 0.751, 0.750]
+        converged_at = None
+        for i, acc in enumerate(accuracies):
+            if tracker.check(acc):
+                converged_at = i + 1
+                break
+        assert converged_at is not None
+        assert converged_at >= 4
+
+    def test_split_then_client_then_evaluate(self, sample_df):
+        pre = EHRPreprocessor()
+        df_proc, _ = pre.process(sample_df, text_cols=["sintoma"])
+        clients = split_by_institution(df_proc, num_clients=5)
+        subset = clients[0]
+        encoded_cols = [c for c in subset.columns if c.endswith("_encoded")]
+        if not encoded_cols:
+            pytest.skip("Sem colunas encoded para este subset")
+        x = torch.tensor(subset[encoded_cols].values[:, :16], dtype=torch.long)
+        if x.shape[1] < 16:
+            pad = torch.zeros(x.shape[0], 16 - x.shape[1], dtype=torch.long)
+            x = torch.cat([x, pad], dim=1)
+        y = torch.tensor(subset["desfecho"].values, dtype=torch.long)
+        loader = DataLoader(TensorDataset(x, y), batch_size=4)
+        client = FedProxClient(0, loader, loader)
+        params = client.get_parameters({})
+        loss, n, metrics = client.evaluate(params, {})
+        assert isinstance(loss, float)
+        assert n > 0
+        assert "accuracy" in metrics
 
 
 if __name__ == "__main__":

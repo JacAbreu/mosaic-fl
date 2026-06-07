@@ -1,0 +1,221 @@
+name: mosaic-fl-wire
+
+# wire-production: ambiente de simulação completo do MOSAIC-FL.
+#
+# Sobe todos os componentes em uma única máquina via Docker Compose:
+#   fl-server    — servidor Flower gRPC (porta 8080)
+#   fl-client-1  — hospital simulado 1
+#   fl-client-2  — hospital simulado 2
+#   fl-client-3  — hospital simulado 3
+#   scheduler    — APScheduler de rounds federados
+#   api          — FastAPI: inferência + painel web (porta 8000)
+#
+# Uso:
+#   cd wire-production
+#   docker compose up --build          # build + sobe tudo
+#   docker compose up                  # sobe sem rebuild
+#   docker compose down -v             # para e remove volumes
+#
+# Painel web: http://localhost:8000
+# API docs:   http://localhost:8000/docs
+#
+# Variáveis configuráveis: ver .env.example
+# Carregar .env:  cp .env.example .env && docker compose up --build
+
+services:
+
+  # ─── Servidor Flower (gRPC) ───────────────────────────────────────────────
+  fl-server:
+    build:
+      context: ..
+      dockerfile: Dockerfile.wire
+    image: mosaicfl-wire:latest
+    command: >
+      mosaicfl-server
+      --min-clients ${FL_MIN_CLIENTS:-3}
+      --rounds ${FL_NUM_ROUNDS:-5}
+      --mu ${FL_PROXIMAL_MU:-0.01}
+    ports:
+      - "${FL_SERVER_PORT:-8080}:8080"
+    volumes:
+      - app-checkpoints:/app/checkpoints
+      - app-logs:/app/logs
+    environment:
+      FL_SERVER_ADDRESS: "0.0.0.0:8080"
+      FL_CHECKPOINT_DIR: /app/checkpoints
+      FL_LOG_DIR: /app/logs
+      FL_LOG_FORMAT: ${FL_LOG_FORMAT:-json}
+    healthcheck:
+      # TCP probe — o servidor gRPC não tem endpoint HTTP
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost',8080)); s.close()"
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    networks:
+      - mosaic-net
+    restart: on-failure
+
+  # ─── Hospital 1 ───────────────────────────────────────────────────────────
+  fl-client-1:
+    build:
+      context: ..
+      dockerfile: Dockerfile.wire
+    image: mosaicfl-wire:latest
+    command: >
+      mosaicfl-client
+      --server fl-server:8080
+      --client-id hospital_1
+      --data-source simulated
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    volumes:
+      - app-logs:/app/logs
+    environment:
+      FL_SERVER_ADDRESS: "fl-server:8080"
+      FL_CLIENT_ID: hospital_1
+      FL_DATA_SOURCE: simulated
+      FL_LOG_DIR: /app/logs
+      FL_HEARTBEAT_INTERVAL: "30"
+      FL_RECONNECT_DELAY: "15"
+    networks:
+      - mosaic-net
+    restart: on-failure
+
+  # ─── Hospital 2 ───────────────────────────────────────────────────────────
+  fl-client-2:
+    build:
+      context: ..
+      dockerfile: Dockerfile.wire
+    image: mosaicfl-wire:latest
+    command: >
+      mosaicfl-client
+      --server fl-server:8080
+      --client-id hospital_2
+      --data-source simulated
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    volumes:
+      - app-logs:/app/logs
+    environment:
+      FL_SERVER_ADDRESS: "fl-server:8080"
+      FL_CLIENT_ID: hospital_2
+      FL_DATA_SOURCE: simulated
+      FL_LOG_DIR: /app/logs
+      FL_HEARTBEAT_INTERVAL: "30"
+      FL_RECONNECT_DELAY: "15"
+    networks:
+      - mosaic-net
+    restart: on-failure
+
+  # ─── Hospital 3 ───────────────────────────────────────────────────────────
+  fl-client-3:
+    build:
+      context: ..
+      dockerfile: Dockerfile.wire
+    image: mosaicfl-wire:latest
+    command: >
+      mosaicfl-client
+      --server fl-server:8080
+      --client-id hospital_3
+      --data-source simulated
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    volumes:
+      - app-logs:/app/logs
+    environment:
+      FL_SERVER_ADDRESS: "fl-server:8080"
+      FL_CLIENT_ID: hospital_3
+      FL_DATA_SOURCE: simulated
+      FL_LOG_DIR: /app/logs
+      FL_HEARTBEAT_INTERVAL: "30"
+      FL_RECONNECT_DELAY: "15"
+    networks:
+      - mosaic-net
+    restart: on-failure
+
+  # ─── Scheduler de rounds ─────────────────────────────────────────────────
+  scheduler:
+    build:
+      context: ..
+      dockerfile: Dockerfile.wire
+    image: mosaicfl-wire:latest
+    # 0.017h ≈ 1 minuto — adequado para wire-production; em produção real, 6h
+    command: >
+      mosaicfl-scheduler
+      --interval ${FL_SCHEDULER_INTERVAL:-0.017}
+      --min-clients ${FL_MIN_CLIENTS:-3}
+      --max-rounds ${FL_NUM_ROUNDS:-5}
+    depends_on:
+      fl-server:
+        condition: service_healthy
+    volumes:
+      - app-logs:/app/logs
+      - app-data:/app/data
+    environment:
+      FL_SERVER_ADDRESS: "fl-server:8080"
+      FL_LOG_DIR: /app/logs
+      FL_SCHEDULER_LOG: /app/logs/scheduler.log
+    networks:
+      - mosaic-net
+    restart: on-failure
+
+  # ─── API de inferência + painel web ──────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.wire
+    image: mosaicfl-wire:latest
+    # "python -m infrastructure.mosaicfl_api" funciona via PYTHONPATH=/app
+    # (Python 3 trata infrastructure/ como namespace package)
+    command: >
+      python -m infrastructure.mosaicfl_api
+      --port 8000
+      --watch-dir /app/data/incoming
+    ports:
+      - "${FL_API_PORT:-8000}:8000"
+    volumes:
+      - app-checkpoints:/app/checkpoints
+      - app-logs:/app/logs
+      - app-data:/app/data
+    environment:
+      FL_API_HOST: "0.0.0.0"
+      FL_API_PORT: "8000"
+      FL_CHECKPOINT_DIR: /app/checkpoints
+      FL_DB_PATH: /app/data/mosaicfl_api.db
+      FL_CLINICALPATH_OUTPUT: /app/data/clinicalpath_output
+      FL_WATCH_DIR: /app/data/incoming
+      FL_LOG_DIR: /app/logs
+      FL_API_KEY: ${FL_API_KEY:-}
+      FL_CORS_ORIGINS: ${FL_CORS_ORIGINS:-*}
+      FL_LOG_FORMAT: ${FL_LOG_FORMAT:-json}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/fl/status"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    networks:
+      - mosaic-net
+    restart: on-failure
+
+# ─── Volumes nomeados ────────────────────────────────────────────────────────
+# app-checkpoints: fl-server escreve round_N.pt, api lê para inferência
+# app-logs:        todos os serviços escrevem; registry de heartbeat compartilhado
+# app-data:        db SQLite da api, saída ClinicalPath, fila incoming
+volumes:
+  app-checkpoints:
+  app-logs:
+  app-data:
+
+# ─── Rede interna ────────────────────────────────────────────────────────────
+networks:
+  mosaic-net:
+    driver: bridge

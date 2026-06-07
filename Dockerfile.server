@@ -25,19 +25,23 @@ COPY src/ /app/src/
 COPY infrastructure/mosaicfl_server/ /app/mosaicfl_server/
 
 # Instala o pacote core primeiro
-RUN pip install --no-cache-dir -e /app/src
+RUN pip install --no-cache-dir /app/src
 
 # Instala o pacote server
-RUN pip install --no-cache-dir -e /app/mosaicfl_server
+RUN pip install --no-cache-dir /app/mosaicfl_server
 
 # Cria diretórios para dados persistentes
 RUN mkdir -p /app/checkpoints /app/logs
+RUN useradd --uid 1000 --no-create-home --shell /bin/false mosaicfl && \
+    chown -R mosaicfl:mosaicfl /app/checkpoints /app/logs
 
-# Porta exposta
+# Portas expostas: gRPC (8080) e healthz HTTP (8081)
 EXPOSE 8080
+EXPOSE 8081
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3     CMD python -c "import requests; requests.get('http://localhost:8080/health', timeout=5)" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8081/healthz', timeout=5)"
 
 # Variáveis de ambiente padrão
 ENV FL_SERVER_ADDRESS=0.0.0.0:8080
@@ -48,6 +52,8 @@ ENV FL_CHECKPOINT_DIR=/app/checkpoints
 ENV FL_LOG_DIR=/app/logs
 ENV FL_DEVICE=cpu
 ENV PYTHONUNBUFFERED=1
+
+USER mosaicfl
 
 # Entrypoint
 ENTRYPOINT ["mosaicfl-server"]

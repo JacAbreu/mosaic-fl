@@ -1,28 +1,25 @@
 """
-Modelo BEHRT simplificado para sequências clínicas — VERSÃO CORRIGIDA.
+Modelo BEHRT simplificado para sequencias clinicas (SimplifiedBEHRT).
 
-Mudanças principais:
-  1. Masked Mean Pooling: média apenas sobre tokens reais, excluindo <PAD>.
-  2. Token <CLS> opcional: índice especial para classificação de sequência.
-  3. Embedding scaling ajustável via config.
-  4. LayerNorm pré-classificador para estabilidade.
+Arquitetura: embedding de tokens clinicos + PositionalEncoding sinusoidal +
+N camadas BEHRTEncoderLayer (Transformer com atencao multi-cabeca) + classificador linear.
 
-Correção (item 3): TransformerEncoderLayer interno usa nn.MultiheadAttention mas
-descarta os pesos de atenção por padrão. A solução é substituir nn.TransformerEncoderLayer
-por uma camada própria (BEHRTEncoderLayer) que chama MHA com need_weights=True e
-expõe os pesos. O forward aceita return_attention=True para não quebrar o uso normal
-(treinamento via Flower), retornando os pesos apenas quando solicitado.
+BEHRTEncoderLayer substitui nn.TransformerEncoderLayer para expor os pesos de
+atencao por cabeca (need_weights=True, average_attn_weights=False), permitindo
+analise de interpretabilidade via BEHRTPatternExtractor sem impacto no treino normal.
+
+Pooling: CLS token (use_cls_token=True) ou masked mean sobre tokens nao-PAD.
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
 from typing import Optional, Tuple, Union
-from .config import DROPOUT, EMBED_DIM, FF_DIM, MAX_SEQ_LEN, NUM_CLASSES, NUM_HEADS, NUM_LAYERS, VOCAB_SIZE
+from .config import MODEL_CFG
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, max_len: int = MAX_SEQ_LEN):
+    def __init__(self, d_model: int, max_len: int = MODEL_CFG.max_seq_len):
         super().__init__()
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
@@ -96,42 +93,41 @@ class SimplifiedBEHRT(nn.Module):
     def __init__(self, use_cls_token: bool = True):
         super().__init__()
         self.use_cls_token = use_cls_token
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, EMBED_DIM)) 
-        self.embedding = nn.Embedding(VOCAB_SIZE, EMBED_DIM, padding_idx=0)
-        # +1 no vocab para o token <CLS> se habilitado
-        #vocab_size = VOCAB_SIZE + 1 if use_cls_token else VOCAB_SIZE
-        #self.embedding  = nn.Embedding(vocab_size, EMBED_DIM, padding_idx=0)
-        #self.pos_encoder = PositionalEncoding(EMBED_DIM, MAX_SEQ_LEN)
-        self.pos_encoder = PositionalEncoding(EMBED_DIM, MAX_SEQ_LEN + 1)
-        self.dropout    = nn.Dropout(DROPOUT)
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, MODEL_CFG.embed_dim))
+        self.embedding = nn.Embedding(MODEL_CFG.vocab_size, MODEL_CFG.embed_dim, padding_idx=0)
+        #vocab_size = MODEL_CFG.vocab_size + 1 if use_cls_token else MODEL_CFG.vocab_size
+        #self.embedding  = nn.Embedding(vocab_size, MODEL_CFG.embed_dim, padding_idx=0)
+        #self.pos_encoder = PositionalEncoding(MODEL_CFG.embed_dim, MODEL_CFG.max_seq_len)
+        self.pos_encoder = PositionalEncoding(MODEL_CFG.embed_dim, MODEL_CFG.max_seq_len + 1)
+        self.dropout    = nn.Dropout(MODEL_CFG.dropout)
 
         # Lista de camadas próprias no lugar de nn.TransformerEncoder
         self.layers = nn.ModuleList([
             BEHRTEncoderLayer(
-                d_model=EMBED_DIM,
-                nhead=NUM_HEADS,
-                dim_feedforward=FF_DIM,
-                dropout=DROPOUT,
+                d_model=MODEL_CFG.embed_dim,
+                nhead=MODEL_CFG.num_heads,
+                dim_feedforward=MODEL_CFG.ff_dim,
+                dropout=MODEL_CFG.dropout,
             )
-            for _ in range(NUM_LAYERS)
+            for _ in range(MODEL_CFG.num_layers)
         ])
 
         # Pré-classificador: LayerNorm + Dropout para estabilidade
         self.pre_classifier = nn.Sequential(
-            nn.LayerNorm(EMBED_DIM),
-            nn.Dropout(DROPOUT),
+            nn.LayerNorm(MODEL_CFG.embed_dim),
+            nn.Dropout(MODEL_CFG.dropout),
         )
 
         self.classifier = nn.Sequential(
-            nn.Linear(EMBED_DIM, 64),
+            nn.Linear(MODEL_CFG.embed_dim, 64),
             nn.ReLU(),
-            nn.Dropout(DROPOUT),
-            nn.Linear(64, NUM_CLASSES),
+            nn.Dropout(MODEL_CFG.dropout),
+            nn.Linear(64, MODEL_CFG.num_classes),
         )
 
         # Registra índice do token <CLS> no final do vocab
         if use_cls_token:
-            self.register_buffer('cls_token_id', torch.tensor(VOCAB_SIZE - 1))
+            self.register_buffer('cls_token_id', torch.tensor(MODEL_CFG.vocab_size - 1))
 
     def _masked_mean_pool(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
@@ -180,7 +176,7 @@ class SimplifiedBEHRT(nn.Module):
         # x: (batch, seq_len)
         emb = self.embedding(x)
         # Scaling opcional (configurável via SCALE_EMBEDDINGS se desejado)
-        emb = emb * math.sqrt(EMBED_DIM)
+        emb = emb * math.sqrt(MODEL_CFG.embed_dim)
         emb = self.pos_encoder(emb)
         emb = self.dropout(emb)
 

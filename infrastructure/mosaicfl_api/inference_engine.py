@@ -19,27 +19,31 @@ import torch.nn.functional as F
 
 logger = logging.getLogger(__name__)
 
-# Importados aqui para evitar impacto no módulo inteiro quando torch não está disponível
+# Defaults para o caso de mosaicfl não estar instalado
+_MOSAICFL_AVAILABLE = False
+_VOCAB_SIZE = 10000
+_MAX_SEQ_LEN = 128
+
 try:
-    from mosaicfl.v2.config import MAX_SEQ_LEN, VOCAB_SIZE, EMBED_DIM  # noqa: F401
+    from mosaicfl.v2.config import MODEL_CFG
     from mosaicfl.v2.model_v2 import SimplifiedBEHRT
     _MOSAICFL_AVAILABLE = True
-except ImportError:
-    _MOSAICFL_AVAILABLE = False
-    MAX_SEQ_LEN = 128
-    VOCAB_SIZE = 10000
+    _VOCAB_SIZE = MODEL_CFG.vocab_size
+    _MAX_SEQ_LEN = MODEL_CFG.max_seq_len
+except Exception:
+    pass
 
 
 def exam_name_to_token(name: str) -> int:
-    """MD5 do nome do exame → índice em [1, VOCAB_SIZE-2].
+    """MD5 do nome do exame → índice em [1, _VOCAB_SIZE-2].
 
-    0 é PAD, VOCAB_SIZE-1 é CLS — ambos reservados.
+    0 é PAD, _VOCAB_SIZE-1 é CLS — ambos reservados.
     """
     digest = int(hashlib.md5(name.upper().encode()).hexdigest(), 16)
-    return (digest % (VOCAB_SIZE - 2)) + 1
+    return (digest % (_VOCAB_SIZE - 2)) + 1
 
 
-def records_to_tokens(records: list, seq_len: int = MAX_SEQ_LEN) -> list[int]:
+def records_to_tokens(records: list, seq_len: int = _MAX_SEQ_LEN) -> list[int]:
     """Converte lista de ExamRecord em sequência de tokens padded.
 
     Ordena por data para preservar ordem temporal na atenção do BEHRT.

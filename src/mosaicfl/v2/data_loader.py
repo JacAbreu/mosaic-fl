@@ -57,7 +57,7 @@ from urllib.parse import urlparse
 import pandas as pd
 import numpy as np
 
-from .config import DATA_PATH, RANDOM_SEED
+from .config import FED_CFG, RUNTIME_CFG
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ DATASET_FILENAMES = [
     "dados.xlsx",
     "dados.parquet",
 ]
-DATASET_BASE_DIR = Path(DATA_PATH)
+DATASET_BASE_DIR = RUNTIME_CFG.data_path
 
 # ─── Configuração de SGBD (modo database) ───
 # Pode ser passada diretamente ou via variável de ambiente MOSAICFL_DB_URL
@@ -305,8 +305,9 @@ class DatabaseDataSource(DataSourceStrategy):
         try:
             self._get_engine()
             # Tenta conectar
+            from sqlalchemy import text
             with self._engine.connect() as conn:
-                conn.execute("SELECT 1")
+                conn.execute(text("SELECT 1"))
             return True
         except Exception as e:
             logger.debug(f"Database não disponível: {e}")
@@ -369,10 +370,10 @@ class DatabaseDataSource(DataSourceStrategy):
         if self.is_available():
             try:
                 df = self.load()
-                print(f"  ✓ Conexão OK — {len(df)} registros, {len(df.columns)} colunas")
+                print(f"  Conexao OK — {len(df)} registros, {len(df.columns)} colunas")
                 print(f"  Colunas: {list(df.columns)}")
             except Exception as e:
-                print(f"  ✗ Erro na query: {e}")
+                print(f"  [ERRO] Erro na query: {e}")
 
     def _has_sqlalchemy(self) -> bool:
         try:
@@ -547,8 +548,8 @@ def _compute_idade_from_nascimento(df: pd.DataFrame) -> pd.DataFrame:
 
 def _generate_synthetic_fallback(n_samples: int = 1000) -> pd.DataFrame:
     """Gera dados sintéticos para testes. NUNCA use em produção."""
-    random.seed(RANDOM_SEED)
-    np.random.seed(RANDOM_SEED)
+    random.seed(FED_CFG.random_seed)
+    np.random.seed(FED_CFG.random_seed)
 
     institutions = ["HC_usp", "HCFMUSP", "Hospital_Clinicas_SP", "Incor", "Hospital_Sirio"]
     sintomas = ["febre", "tosse", "dispneia", "fadiga", "mialgia", "cefaleia", "anosmia", "diarreia"]
@@ -765,10 +766,10 @@ def load_with_fallback(
                 return _post_process(df, "sgbd")
             else:
                 msg = "SGBD configurado mas conexão recusada"
-                logger.warning(f"  ✗ {msg}")
+                logger.warning(f"  [FALHOU] {msg}")
                 attempts.append({"fonte": "SGBD", "erro": msg})
         except Exception as e:
-            logger.warning(f"  ✗ SGBD falhou: {e}")
+            logger.warning(f"  [FALHOU] SGBD falhou: {e}")
             attempts.append({"fonte": "SGBD", "erro": str(e)})
     else:
         logger.info("[Fallback 1/4] SGBD pulado (connection_string não configurada)")
@@ -790,7 +791,7 @@ def load_with_fallback(
             df = source.load()
             return _post_process(df, "csv_explicito")
         except Exception as e:
-            logger.warning(f"  ✗ CSV explícito falhou: {e}")
+            logger.warning(f"  [FALHOU] CSV explicito falhou: {e}")
             attempts.append({"fonte": f"CSV explícito ({csv_path})", "erro": str(e)})
     else:
         logger.info("[Fallback 2/4] CSV explícito pulado (csv_path não informado)")
@@ -804,11 +805,11 @@ def load_with_fallback(
             df = file_src.load()
             return _post_process(df, "csv_padrao")
         except Exception as e:
-            logger.warning(f"  ✗ CSV padrão falhou: {e}")
+            logger.warning(f"  [FALHOU] CSV padrao falhou: {e}")
             attempts.append({"fonte": "CSV padrão", "erro": str(e)})
     else:
         msg = f"Nenhum dos arquivos {DATASET_FILENAMES} encontrado em '{DATASET_BASE_DIR}'"
-        logger.warning(f"  ✗ {msg}")
+        logger.warning(f"  [FALHOU] {msg}")
         attempts.append({"fonte": "CSV padrão", "erro": msg})
 
     # ─── TENTATIVA 4: SINTÉTICO ───────────────────────────────────────────────
@@ -891,9 +892,9 @@ def diagnose_connection(
         print(f"  Disponível: {source.is_available()}")
         if source.is_available():
             df = source.load()
-            print(f"  ✓ Dataset acessível: {len(df)} registros, {len(df.columns)} colunas")
+            print(f"  Dataset acessivel: {len(df)} registros, {len(df.columns)} colunas")
     except Exception as e:
-        print(f"  ✗ Erro: {e}")
+        print(f"  [ERRO] {e}")
 
     print("=" * 60 + "\n")
 
@@ -916,14 +917,14 @@ def diagnose_dataset(df: pd.DataFrame = None) -> None:
     mapped = [c for c in df.columns if c in COLUMN_MAPPING.keys()]
     unmapped = [c for c in df.columns if c not in COLUMN_MAPPING.keys() and not c.startswith("Unnamed")]
 
-    print(f"\n✅ Colunas reconhecidas ({len(mapped)}): {mapped}")
-    print(f"❓ Colunas não mapeadas ({len(unmapped)}): {unmapped}")
+    print(f"\nColunas reconhecidas ({len(mapped)}): {mapped}")
+    print(f"Colunas nao mapeadas ({len(unmapped)}): {unmapped}")
 
     required = ["instituicao", "desfecho"]
     missing = [c for c in required if c not in df.columns]
     if missing:
-        print(f"\n❌ Colunas obrigatórias ausentes: {missing}")
+        print(f"\n[ERRO] Colunas obrigatorias ausentes: {missing}")
     else:
-        print(f"\n✅ Todas as colunas obrigatórias presentes")
+        print(f"\nTodas as colunas obrigatorias presentes")
 
     print("=" * 60 + "\n")

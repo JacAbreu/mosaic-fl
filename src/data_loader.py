@@ -342,10 +342,10 @@ class DatabaseDataSource(DataSourceStrategy):
         if self.is_available():
             try:
                 df = self.load()
-                print(f"  ✓ Conexão OK — {len(df)} registros, {len(df.columns)} colunas")
+                print(f"  Conexao OK — {len(df)} registros, {len(df.columns)} colunas")
                 print(f"  Colunas: {list(df.columns)}")
             except Exception as e:
-                print(f"  ✗ Erro na query: {e}")
+                print(f"  [ERRO] Erro na query: {e}")
 
     def _has_sqlalchemy(self) -> bool:
         try:
@@ -713,9 +713,9 @@ def diagnose_connection(
         print(f"  Disponível: {source.is_available()}")
         if source.is_available():
             df = source.load()
-            print(f"  ✓ Dataset acessível: {len(df)} registros, {len(df.columns)} colunas")
+            print(f"  Dataset acessivel: {len(df)} registros, {len(df.columns)} colunas")
     except Exception as e:
-        print(f"  ✗ Erro: {e}")
+        print(f"  [ERRO] {e}")
 
     print("=" * 60 + "\n")
 
@@ -738,14 +738,14 @@ def diagnose_dataset(df: pd.DataFrame = None) -> None:
     mapped = [c for c in df.columns if c in COLUMN_MAPPING.keys()]
     unmapped = [c for c in df.columns if c not in COLUMN_MAPPING.keys() and not c.startswith("Unnamed")]
 
-    print(f"\n✅ Colunas reconhecidas ({len(mapped)}): {mapped}")
-    print(f"❓ Colunas não mapeadas ({len(unmapped)}): {unmapped}")
+    print(f"\nColunas reconhecidas ({len(mapped)}): {mapped}")
+    print(f"Colunas nao mapeadas ({len(unmapped)}): {unmapped}")
 
     required = ["instituicao", "desfecho"]
     missing = [c for c in required if c not in df.columns]
     if missing:
-        print(f"\n❌ Colunas obrigatórias ausentes: {missing}")
+        print(f"\n[ERRO] Colunas obrigatorias ausentes: {missing}")
     else:
-        print(f"\n✅ Todas as colunas obrigatórias presentes")
+        print(f"\nTodas as colunas obrigatorias presentes")
 
     print("=" * 60 + "\n")

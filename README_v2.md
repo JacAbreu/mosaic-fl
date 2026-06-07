@@ -11,7 +11,7 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 
 ---
 
-## 🏛️ Arquitetura do Sistema
+##  Arquitetura do Sistema
 
 ### Simulação Local (este repositório)
 
@@ -40,7 +40,7 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 ### Arquitetura de Produção (visão futura)
 
 ```
-┌─────────────────┐         🔒 TLS         ┌─────────────────┐
+┌─────────────────┐          TLS         ┌─────────────────┐
 │   SERVIDOR      │◄──────────────────────►│   HOSPITAL A    │
 │  (nuvem/USP)    │    pesos criptografados │  (client.py)    │
 │                 │                        │                 │
@@ -54,7 +54,7 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 │                 │                        │   ...           │
 └─────────────────┘                        └─────────────────┘
 
-⚠️ PRONTUÁRIOS NUNCA SAEM DOS HOSPITAIS — apenas os pesos do modelo.
+[AVISO] PRONTUÁRIOS NUNCA SAEM DOS HOSPITAIS — apenas os pesos do modelo.
 ```
 
 ### Como funciona o Federated Learning
@@ -67,7 +67,7 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 
 ---
 
-## 📁 Estrutura do Projeto
+##  Estrutura do Projeto
 
 ```
 mosaic-fl/
@@ -111,19 +111,19 @@ mosaic-fl/
 
 ---
 
-## 🗺️ Diagramas de Arquitetura (Mermaid)
+##  Diagramas de Arquitetura (Mermaid)
 
 ### Arquitetura Geral do Sistema
 
 ```mermaid
 flowchart TB
-    subgraph Dados["📂 Camada de Dados"]
+    subgraph Dados[" Camada de Dados"]
         CSV["FAPESP COVID-19 CSV"]
         PRE["EHRPreprocessor<br/>(preprocess.py)"]
         SPLIT["split_by_institution()<br/>5 partições virtuais"]
     end
 
-    subgraph FL["🌐 Camada Federada (Flower)"]
+    subgraph FL[" Camada Federada (Flower)"]
         SRV["Servidor FedProx<br/>(server.py)"]
         C1["Cliente 0<br/>(Hospital A)"]
         C2["Cliente 1<br/>(Hospital B)"]
@@ -132,14 +132,14 @@ flowchart TB
         C5["Cliente 4<br/>(Hospital E)"]
     end
 
-    subgraph Modelo["🧠 Camada do Modelo"]
+    subgraph Modelo[" Camada do Modelo"]
         BEHRT["SimplifiedBEHRT<br/>(model.py)"]
         ENC["BEHRTEncoderLayer<br/>+ Atenção exposta"]
         POOL["Masked Mean Pooling<br/>(ignora <PAD>)"]
         CLS["Token <CLS><br/>(classificação)"]
     end
 
-    subgraph RAG["💬 Camada de Explicabilidade"]
+    subgraph RAG[" Camada de Explicabilidade"]
         EXT["BEHRTPatternExtractor<br/>(extract_patterns.py)"]
         CHROMA["ChromaDB<br/>(perfis prototípicos)"]
         LLM["DistilGPT-2<br/>(justificativa textual)"]
@@ -199,8 +199,8 @@ flowchart LR
     CHROMA --> PROMPT["Prompt montado<br/>+ truncamento de contexto<br/>+ nucleus sampling"]
     PROMPT --> LLM["DistilGPT-2<br/>Gera justificativa"]
     LLM --> CHECK{"Alucinação?<br/>prob < 0.6 + 'certeza'"}
-    CHECK -->|Sim| FLAG["⚠️ FLAG=True<br/>confiavel=False"]
-    CHECK -->|Não| OK["✅ FLAG=False<br/>confiavel=True"]
+    CHECK -->|Sim| FLAG["[AVISO] FLAG=True<br/>confiavel=False"]
+    CHECK -->|Não| OK["[OK] FLAG=False<br/>confiavel=True"]
     FLAG --> OUT["Saída:<br/>• Predição<br/>• Justificativa<br/>• Fontes<br/>• Confiabilidade"]
     OK --> OUT
 ```
@@ -228,7 +228,7 @@ stateDiagram-v2
     Inferencia --> [*]
 ```
 
-## ⚙️ Configuração e Hardware
+##  Configuração e Hardware
 
 Este projeto foi calibrado para rodar de forma estável em um **Dell Inspiron 5402**:
 - CPU: Intel i7-1165G7 (4 núcleos / 8 threads)
@@ -253,7 +253,7 @@ Para máquinas com GPU dedicada, reverta `DEVICE` para `cuda` e aumente `BATCH_S
 
 ---
 
-## 🚀 Instalação
+##  Instalação
 
 ### Linux / macOS
 
@@ -283,7 +283,7 @@ O setup cria um ambiente virtual `.venv` na raiz do projeto e instala o pacote `
 
 ---
 
-## ▶️ Execução
+##  Execução
 
 ### Linux / macOS
 
@@ -315,7 +315,7 @@ make clean   # remove o ambiente virtual e caches
 
 ---
 
-## 🔒 Privacidade e Segurança
+##  Privacidade e Segurança
 
 ### O que protege este código (simulação)
 - **Dados nunca são centralizados:** `split_by_institution()` mantém partições isoladas em memória
@@ -331,7 +331,7 @@ make clean   # remove o ambiente virtual e caches
 
 ---
 
-## 🧪 Experimentos
+##  Experimentos
 
 O `runner.py` orquestra 5 experimentos previstos para o TCC:
 
@@ -347,7 +347,7 @@ O `runner.py` orquestra 5 experimentos previstos para o TCC:
 
 ---
 
-## 🧪 O que este código faz (Experimento / TCC)
+##  O que este código faz (Experimento / TCC)
 
 Este repositório implementa uma **simulação controlada** do Aprendizado Federado (FL) para validação do algoritmo em ambiente acadêmico. Abaixo, o que cada componente faz **neste contexto de experimento**:
 
@@ -392,7 +392,7 @@ Este repositório implementa uma **simulação controlada** do Aprendizado Feder
 
 ---
 
-## 🌍 O que falta para o mundo real (Roadmap de Produção)
+##  O que falta para o mundo real (Roadmap de Produção)
 
 Para transformar esta prova de conceito em um **sistema de apoio à decisão clínica (CDSS) implantado em hospitais**, os seguintes itens são necessários:
 
@@ -400,66 +400,66 @@ Para transformar esta prova de conceito em um **sistema de apoio à decisão cl�
 
 | Tarefa | Descrição | Complexidade |
 |---|---|---|
-| **Integração HL7 FHIR** | Conectar a prontuários eletrônicos (EPR/EMR) dos hospitais via padrão FHIR R4 | 🔴 Alta |
-| **ETL em tempo real** | Pipeline de extração, transformação e carga dos dados clínicos (Airflow, Spark) | 🔴 Alta |
-| **Data Quality** | Validação de schema, detecção de outliers, consistência temporal (Great Expectations) | 🟡 Média |
-| **Vocabulário clínico padronizado** | Mapear termos locais para SNOMED CT, ICD-10, LOINC — não apenas tokens genéricos | 🔴 Alta |
+| **Integração HL7 FHIR** | Conectar a prontuários eletrônicos (EPR/EMR) dos hospitais via padrão FHIR R4 | [ALTA] Alta |
+| **ETL em tempo real** | Pipeline de extração, transformação e carga dos dados clínicos (Airflow, Spark) | [ALTA] Alta |
+| **Data Quality** | Validação de schema, detecção de outliers, consistência temporal (Great Expectations) | [MEDIA] Média |
+| **Vocabulário clínico padronizado** | Mapear termos locais para SNOMED CT, ICD-10, LOINC — não apenas tokens genéricos | [ALTA] Alta |
 
 ### 2. Aprendizado Federado em Produção
 
 | Tarefa | Descrição | Complexidade |
 |---|---|---|
-| **TLS mútuo** | Certificados X.509 entre servidor e cada hospital; autenticação de clientes | 🟡 Média |
-| **Differential Privacy** | Adicionar ruído (Laplace/Gaussiano) nos pesos antes de enviar ao servidor (ε-differential privacy) | 🔴 Alta |
-| **Secure Aggregation** | Agregar pesos via criptografia homomórfica ou secret sharing (ex: PySyft, SEAL) | 🔴 Alta |
-| **Tolerância a falhas** | Clientes offline (hospitais sem internet), reconexão automática, checkpoint de rodadas | 🟡 Média |
-| **Escalabilidade** | Suportar 50+ hospitais com Flower SuperLink/SuperNode em cluster Kubernetes | 🔴 Alta |
+| **TLS mútuo** | Certificados X.509 entre servidor e cada hospital; autenticação de clientes | [MEDIA] Média |
+| **Differential Privacy** | Adicionar ruído (Laplace/Gaussiano) nos pesos antes de enviar ao servidor (ε-differential privacy) | [ALTA] Alta |
+| **Secure Aggregation** | Agregar pesos via criptografia homomórfica ou secret sharing (ex: PySyft, SEAL) | [ALTA] Alta |
+| **Tolerância a falhas** | Clientes offline (hospitais sem internet), reconexão automática, checkpoint de rodadas | [MEDIA] Média |
+| **Escalabilidade** | Suportar 50+ hospitais com Flower SuperLink/SuperNode em cluster Kubernetes | [ALTA] Alta |
 
 ### 3. Modelo e Validação Clínica
 
 | Tarefa | Descrição | Complexidade |
 |---|---|---|
-| **Modelo maior e fine-tuned** | BEHRT/Med-BERT com 512 posições, fine-tuning em dados clínicos brasileiros | 🔴 Alta |
-| **Validação externa** | Testar em hospitais que NÃO participaram do treinamento (generalização) | 🔴 Alta |
-| **Métricas clínicas** | AUC-ROC, sensibilidade, especificidade, PPV, NPV, calibration curve, Brier score | 🟡 Média |
-| **Estudo retrospectivo** | Análise de eficácia em coorte histórica (ex: predição de evolução COVID-19 em 2020) | 🔴 Alta |
-| **Estudo prospectivo** | Validação em tempo real com acompanhamento de pacientes atuais | 🔴 Alta |
-| **Regulatório** | Submissão à ANVISA (Brasil) ou FDA (EUA) como Software Médico (SaMD) Classe II/III | 🔴 Alta |
+| **Modelo maior e fine-tuned** | BEHRT/Med-BERT com 512 posições, fine-tuning em dados clínicos brasileiros | [ALTA] Alta |
+| **Validação externa** | Testar em hospitais que NÃO participaram do treinamento (generalização) | [ALTA] Alta |
+| **Métricas clínicas** | AUC-ROC, sensibilidade, especificidade, PPV, NPV, calibration curve, Brier score | [MEDIA] Média |
+| **Estudo retrospectivo** | Análise de eficácia em coorte histórica (ex: predição de evolução COVID-19 em 2020) | [ALTA] Alta |
+| **Estudo prospectivo** | Validação em tempo real com acompanhamento de pacientes atuais | [ALTA] Alta |
+| **Regulatório** | Submissão à ANVISA (Brasil) ou FDA (EUA) como Software Médico (SaMD) Classe II/III | [ALTA] Alta |
 
 ### 4. RAG e Explicabilidade
 
 | Tarefa | Descrição | Complexidade |
 |---|---|---|
-| **Modelo médico especializado** | Substituir DistilGPT-2 por BioGPT, GatorTron, ou modelo fine-tuned em português médico | 🟡 Média |
-| **Base de evidências** | Indexar artigos do PubMed, diretrizes SBPT/SBC, protocols SUS no ChromaDB | 🟡 Média |
-| **Citação estruturada** | RAG deve citar fontes com PMID, DOI, ou protocolo SUS — não apenas "casos similares" | 🟡 Média |
-| **Nível de evidência** | Classificar justificativa por GRADE (A: RCT, B: coorte, C: opinião de especialista) | 🔴 Alta |
-| **Detecção de alucinação avançada** | Usar modelo de verificação de fatos (ex: FActScore, SelfCheckGPT) em vez de heurística simples | 🔴 Alta |
+| **Modelo médico especializado** | Substituir DistilGPT-2 por BioGPT, GatorTron, ou modelo fine-tuned em português médico | [MEDIA] Média |
+| **Base de evidências** | Indexar artigos do PubMed, diretrizes SBPT/SBC, protocols SUS no ChromaDB | [MEDIA] Média |
+| **Citação estruturada** | RAG deve citar fontes com PMID, DOI, ou protocolo SUS — não apenas "casos similares" | [MEDIA] Média |
+| **Nível de evidência** | Classificar justificativa por GRADE (A: RCT, B: coorte, C: opinião de especialista) | [ALTA] Alta |
+| **Detecção de alucinação avançada** | Usar modelo de verificação de fatos (ex: FActScore, SelfCheckGPT) em vez de heurística simples | [ALTA] Alta |
 
 ### 5. Privacidade, LGPD e Governança
 
 | Tarefa | Descrição | Complexidade |
 |---|---|---|
-| **Consentimento informado** | Pacientes devem consentir uso de dados para pesquisa/IA (LGPD art. 7º, inc. I) | 🟡 Média |
-| **DPO designado** | Data Protection Officer em cada hospital participante | 🟡 Média |
-| **Termo de responsabilidade** | Contrato entre hospitais e operador do servidor definindo fluxo de dados, retenção, exclusão | 🟡 Média |
-| **Auditoria** | Logs imutáveis de acesso (quem viu o quê, quando), com hash criptográfico | 🟡 Média |
-| **Anonimização diferenciada** | k-anonimato, l-diversity, t-closenase nos dados antes de indexar no RAG | 🔴 Alta |
-| **Direito ao esquecimento** | Mecanismo para remover contribuição de um paciente do modelo global (machine unlearning) | 🔴 Alta |
+| **Consentimento informado** | Pacientes devem consentir uso de dados para pesquisa/IA (LGPD art. 7º, inc. I) | [MEDIA] Média |
+| **DPO designado** | Data Protection Officer em cada hospital participante | [MEDIA] Média |
+| **Termo de responsabilidade** | Contrato entre hospitais e operador do servidor definindo fluxo de dados, retenção, exclusão | [MEDIA] Média |
+| **Auditoria** | Logs imutáveis de acesso (quem viu o quê, quando), com hash criptográfico | [MEDIA] Média |
+| **Anonimização diferenciada** | k-anonimato, l-diversity, t-closenase nos dados antes de indexar no RAG | [ALTA] Alta |
+| **Direito ao esquecimento** | Mecanismo para remover contribuição de um paciente do modelo global (machine unlearning) | [ALTA] Alta |
 
 ### 6. Interface e Integração Clínica
 
 | Tarefa | Descrição | Complexidade |
 |---|---|---|
-| **API REST/GraphQL** | Endpoint para o sistema de prontuário eletrônico consultar predições em tempo real | 🟡 Média |
-| **Interface médica** | Dashboard com alertas de risco (ex: "Probabilidade de pneumonia: 78% — justificativa:"), integrado ao fluxo de trabalho do médico | 🟡 Média |
-| **Alerta de baixa confiança** | Quando probabilidade < 60% ou alucinação detectada, exibir "Predição incerta — avaliação humana necessária" | 🟢 Baixa |
-| **Feedback do médico** | Médico pode marcar predição como correta/incorreta — dados de feedback alimentam re-treinamento | 🟡 Média |
-| **Mobile/Tablet** | Acesso em leitos via app leve (React Native/Flutter) para médicos em rounds | 🟡 Média |
+| **API REST/GraphQL** | Endpoint para o sistema de prontuário eletrônico consultar predições em tempo real | [MEDIA] Média |
+| **Interface médica** | Dashboard com alertas de risco (ex: "Probabilidade de pneumonia: 78% — justificativa:"), integrado ao fluxo de trabalho do médico | [MEDIA] Média |
+| **Alerta de baixa confiança** | Quando probabilidade < 60% ou alucinação detectada, exibir "Predição incerta — avaliação humana necessária" | [BAIXA] Baixa |
+| **Feedback do médico** | Médico pode marcar predição como correta/incorreta — dados de feedback alimentam re-treinamento | [MEDIA] Média |
+| **Mobile/Tablet** | Acesso em leitos via app leve (React Native/Flutter) para médicos em rounds | [MEDIA] Média |
 
 ---
 
-## 📊 Resumo: Experimento vs. Produção
+##  Resumo: Experimento vs. Produção
 
 | Aspecto | Experimento (TCC) | Produção (Mundo Real) |
 |---|---|---|
@@ -474,7 +474,7 @@ Para transformar esta prova de conceito em um **sistema de apoio à decisão cl�
 | **Responsabilidade** | Acadêmica | Civil, criminal, ética (CFM, CREMESP) |
 | **Tempo de resposta** | 15-25 min (treinamento) | < 2 segundos (predição em tempo real) |
 
-## 🛠️ Solução de Problemas
+##  Solução de Problemas
 
 **`externally-managed-environment` ao rodar `pip install`**
 
@@ -505,7 +505,7 @@ sudo apt install python-is-python3
 
 ---
 
-## 📚 Referências
+##  Referências
 
 - Linhares et al., 2023. *ClinicalPath* (base do projeto)
 - McMahan et al., 2017. *Communication-Efficient Learning of Deep Networks from Decentralized Data* (FedAvg)
@@ -515,7 +515,7 @@ sudo apt install python-is-python3
 
 ---
 
-## 📄 Licença
+##  Licença
 
 MIT License — veja `pyproject.toml` para detalhes.
 

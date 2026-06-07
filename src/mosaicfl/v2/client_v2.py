@@ -1,13 +1,11 @@
 """
-Cliente Flower com FedProx para treinamento local em cada hospital — VERSÃO CORRIGIDA.
+Cliente Flower com FedProx para treinamento local federado (FedProxClient).
 
-Mudanças principais:
-  1. get_parameters agora usa model.parameters() em vez de state_dict().items(),
-     evitando envio de buffers não-treináveis (ex: running_mean de BatchNorm).
-  2. Loss normalizado pelo número real de amostras (não por batch).
-  3. Tratamento de exceção por batch para evitar crash de cliente.
-  4. get_parameters/set_parameters agora usam strict=False com verificação de shapes.
+Recebe pesos globais do servidor, treina localmente com dados EHR do hospital,
+e devolve apenas os pesos atualizados — nunca os dados brutos.
+Usa state_dict() para sincronizar todos os tensores (treinaveis + buffers).
 """
+import logging
 import numpy as np
 import torch
 import flwr as fl
@@ -15,8 +13,10 @@ from torch.utils.data import DataLoader, TensorDataset
 from collections import OrderedDict
 from typing import Dict, List, Tuple
 
+logger = logging.getLogger(__name__)
+
 from mosaicfl.v2.model_v2 import SimplifiedBEHRT
-from .config import BATCH_SIZE, DEVICE, LOCAL_EPOCHS, LR, PROXIMAL_MU
+from .config import FED_CFG, RUNTIME_CFG
 
 
 class FedProxClient(fl.client.NumPyClient):
@@ -24,9 +24,9 @@ class FedProxClient(fl.client.NumPyClient):
         self.client_id = client_id
         self.train_loader = train_loader
         self.val_loader = val_loader
-        self.model = SimplifiedBEHRT(use_cls_token=True).to(DEVICE)
+        self.model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
         self.criterion = torch.nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=LR)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=FED_CFG.lr)
         self.global_params = None  # para termo proximal
 
     def set_parameters(self, parameters: List[np.ndarray]) -> None:
@@ -41,12 +41,12 @@ class FedProxClient(fl.client.NumPyClient):
         # ignorando buffers que não estão na lista de parâmetros treináveis.
         missing, unexpected = self.model.load_state_dict(state_dict, strict=False)
         if missing:
-            print(f"[Cliente {self.client_id}] Aviso: parâmetros não carregados: {missing}")
+            logger.warning("params_missing", extra={"client_id": self.client_id, "keys": missing})
         if unexpected:
-            print(f"[Cliente {self.client_id}] Aviso: chaves inesperadas: {unexpected}")
+            logger.warning("params_unexpected", extra={"client_id": self.client_id, "keys": unexpected})
 
         # Armazena cópia dos parâmetros globais para o termo proximal
-        self.global_params = [p.clone().detach().to(DEVICE) for p in self.model.parameters()]
+        self.global_params = [p.clone().detach().to(RUNTIME_CFG.device) for p in self.model.parameters()]
 
     def get_parameters(self, config: Dict) -> List[np.ndarray]:
         """
@@ -63,19 +63,19 @@ class FedProxClient(fl.client.NumPyClient):
         proximal_term = 0.0
         for local_w, global_w in zip(self.model.parameters(), self.global_params):
             proximal_term += torch.norm(local_w - global_w, p=2) ** 2
-        return loss + (PROXIMAL_MU / 2) * proximal_term
+        return loss + (FED_CFG.proximal_mu / 2) * proximal_term
 
     def fit(self, parameters: List[np.ndarray], config: Dict) -> Tuple[List[np.ndarray], int, Dict]:
         self.set_parameters(parameters)
         self.model.train()
         epoch_losses = []
 
-        for epoch in range(LOCAL_EPOCHS):
+        for epoch in range(FED_CFG.local_epochs):
             running_loss = 0.0
             total_samples = 0
             for batch_x, batch_y in self.train_loader:
                 try:
-                    batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
+                    batch_x, batch_y = batch_x.to(RUNTIME_CFG.device), batch_y.to(RUNTIME_CFG.device)
                     self.optimizer.zero_grad()
                     outputs = self.model(batch_x)
                     loss = self.criterion(outputs, batch_y)
@@ -100,7 +100,7 @@ class FedProxClient(fl.client.NumPyClient):
         correct, total, loss_sum = 0, 0, 0.0
         with torch.no_grad():
             for batch_x, batch_y in self.val_loader:
-                batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
+                batch_x, batch_y = batch_x.to(RUNTIME_CFG.device), batch_y.to(RUNTIME_CFG.device)
                 outputs = self.model(batch_x)
                 loss = self.criterion(outputs, batch_y)
                 loss_sum += loss.item() * batch_y.size(0)
@@ -118,6 +118,6 @@ def create_client_fn(client_id: int, train_data: torch.Tensor, train_labels: tor
     """Factory para criar clientes com seus respectivos DataLoaders."""
     train_dataset = TensorDataset(train_data, train_labels)
     val_dataset = TensorDataset(val_data, val_labels)
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
+    train_loader = DataLoader(train_dataset, batch_size=FED_CFG.batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=FED_CFG.batch_size)
     return FedProxClient(client_id, train_loader, val_loader)

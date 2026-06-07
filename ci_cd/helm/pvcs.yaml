@@ -36,6 +36,25 @@ spec:
 ---
 {{- end }}
 
+{{- if and .Values.scheduler.enabled .Values.scheduler.persistence.data.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mosaicfl.fullname" . }}-scheduler-data
+  labels:
+    {{- include "mosaicfl.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.scheduler.persistence.data.size }}
+  {{- if .Values.scheduler.persistence.data.storageClass }}
+  storageClassName: {{ .Values.scheduler.persistence.data.storageClass }}
+  {{- end }}
+---
+{{- end }}
+
 {{- range .Values.client.hospitals }}
 {{- $hospitalName := .name }}
 {{- if .persistence.data.enabled }}

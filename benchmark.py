@@ -48,13 +48,7 @@ import matplotlib.pyplot as plt
 
 import flwr as fl
 
-from mosaicfl.v2.config import (
-    BATCH_SIZE, LOCAL_EPOCHS, PROXIMAL_MU,
-    FRACTION_FIT, FRACTION_EVALUATE,
-    MIN_FIT_CLIENTS, MIN_EVALUATE_CLIENTS, MIN_AVAILABLE_CLIENTS,
-    EMBED_DIM, NUM_LAYERS, NUM_HEADS, NUM_CLASSES, VOCAB_SIZE,
-    MAX_SEQ_LEN, RANDOM_SEED, NUM_CLIENTS,
-)
+from mosaicfl.v2.config import FED_CFG, MODEL_CFG
 from mosaicfl.v2.model_v2 import SimplifiedBEHRT
 from mosaicfl.v2.client_v2 import FedProxClient
 from mosaicfl.v2.server_v2 import weighted_average, get_evaluate_fn
@@ -148,7 +142,7 @@ class ResourceMonitor:
 
 def generate_benchmark_data(n_samples: int = 1000, n_institutions: int = 5) -> pd.DataFrame:
     """Gera dataset sintético com schema compatível com EHRPreprocessor v2."""
-    rng = np.random.default_rng(RANDOM_SEED)
+    rng = np.random.default_rng(FED_CFG.random_seed)
     institutions = [f"Hospital_{i}" for i in range(n_institutions)]
     sintomas     = ["febre", "tosse", "dispneia", "fadiga", "mialgia", "cefaleia", "anosmia"]
     exames       = ["rt_pcr_positivo", "tomografia_normal", "tomografia_vidro_fosco", "rx_consolidacao"]
@@ -174,8 +168,8 @@ def generate_benchmark_data(n_samples: int = 1000, n_institutions: int = 5) -> p
 
 def prepare_benchmark_loaders(
     df: pd.DataFrame,
-    batch_size: int = BATCH_SIZE,
-    max_seq_len: int = MAX_SEQ_LEN,
+    batch_size: int = FED_CFG.batch_size,
+    max_seq_len: int = MODEL_CFG.max_seq_len,
 ) -> Tuple[Dict[int, Tuple[DataLoader, DataLoader]], DataLoader, int, int]:
     """
     Pré-processa o DataFrame e cria DataLoaders por cliente.
@@ -194,9 +188,9 @@ def prepare_benchmark_loaders(
     client_dfs = split_by_institution(
         df_proc,
         institution_col="instituicao",
-        num_clients=NUM_CLIENTS,
+        num_clients=FED_CFG.num_clients,
         stratify_col="desfecho",
-        random_state=RANDOM_SEED,
+        random_state=FED_CFG.random_seed,
     )
 
     seq_cols = [c for c in df_proc.columns if c.endswith("_encoded")]
@@ -229,7 +223,7 @@ def prepare_benchmark_loaders(
         total_train_samples += len(train_x)
 
     # DataLoader de teste global (20% aleatórios)
-    test_df = df_proc.sample(frac=0.2, random_state=RANDOM_SEED)
+    test_df = df_proc.sample(frac=0.2, random_state=FED_CFG.random_seed)
     test_x, test_y = to_tensors(test_df)
     test_loader = DataLoader(TensorDataset(test_x, test_y), batch_size=batch_size)
 
@@ -331,7 +325,7 @@ def run_benchmark(
         psutil.cpu_count(),
         psutil.virtual_memory().total / (1024 ** 3),
     )
-    logger.info("Modelo: SimplifiedBEHRT (%dd, %d camadas, %d heads, CLS token)", EMBED_DIM, NUM_LAYERS, NUM_HEADS)
+    logger.info("Modelo: SimplifiedBEHRT (%dd, %d camadas, %d heads, CLS token)", MODEL_CFG.embed_dim, MODEL_CFG.num_layers, MODEL_CFG.num_heads)
     logger.info("=" * 70)
 
     # 1. Dados sintéticos
@@ -344,7 +338,7 @@ def run_benchmark(
     logger.info("[2/5] Pré-processando e criando DataLoaders...")
     t0 = time.time()
     client_loaders, test_loader, vocab_size, total_train_samples = prepare_benchmark_loaders(
-        df, batch_size=BATCH_SIZE,
+        df, batch_size=FED_CFG.batch_size,
     )
     logger.info(
         "      OK — vocab=%d | clientes=%d | amostras_treino=%d | %.2fs",
@@ -367,12 +361,12 @@ def run_benchmark(
         metrics_history=metrics_history,
         model_size_mb=size_mb,
         total_train_samples=total_train_samples,
-        fraction_fit=FRACTION_FIT,
-        fraction_evaluate=FRACTION_EVALUATE,
-        min_fit_clients=min(len(client_loaders), MIN_FIT_CLIENTS),
-        min_evaluate_clients=min(len(client_loaders), MIN_EVALUATE_CLIENTS),
-        min_available_clients=min(len(client_loaders), MIN_AVAILABLE_CLIENTS),
-        proximal_mu=PROXIMAL_MU,
+        fraction_fit=FED_CFG.fraction_fit,
+        fraction_evaluate=FED_CFG.fraction_evaluate,
+        min_fit_clients=min(len(client_loaders), FED_CFG.min_fit_clients),
+        min_evaluate_clients=min(len(client_loaders), FED_CFG.min_evaluate_clients),
+        min_available_clients=min(len(client_loaders), FED_CFG.min_available_clients),
+        proximal_mu=FED_CFG.proximal_mu,
         evaluate_fn=evaluate_fn,
         evaluate_metrics_aggregation_fn=weighted_average,
         fit_metrics_aggregation_fn=weighted_average,
@@ -418,8 +412,8 @@ def run_benchmark(
             "n_samples":       n_samples,
             "num_rounds":      num_rounds,
             "num_clients":     num_clients,
-            "batch_size":      BATCH_SIZE,
-            "local_epochs":    LOCAL_EPOCHS,
+            "batch_size":      FED_CFG.batch_size,
+            "local_epochs":    FED_CFG.local_epochs,
             "model_params":    num_params,
             "model_size_mb":   round(size_mb, 4),
             "vocab_size":      vocab_size,
@@ -597,7 +591,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark do MOSAIC-FL v2")
     parser.add_argument("--samples", type=int, default=1000,              help="Amostras sinteticas")
     parser.add_argument("--rounds",  type=int, default=10,                help="Rodadas federadas")
-    parser.add_argument("--clients", type=int, default=NUM_CLIENTS,       help="Clientes virtuais")
+    parser.add_argument("--clients", type=int, default=FED_CFG.num_clients, help="Clientes virtuais")
     parser.add_argument("--output",  type=str, default="benchmark_results",help="Diretorio de saida")
     args = parser.parse_args()
 

@@ -11,6 +11,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
+from time import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -147,6 +148,5 @@ def is_client_alive(client_id: str, timeout_seconds: float = 600.0, registry_pat
     if not last_seen:
         return False
     
-    from time import time
     elapsed = time() - last_seen
     return elapsed < timeout_seconds

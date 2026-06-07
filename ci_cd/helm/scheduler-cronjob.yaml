@@ -20,10 +20,14 @@ spec:
             app.kubernetes.io/component: scheduler
         spec:
           restartPolicy: OnFailure
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
           containers:
             - name: scheduler
               image: "{{ .Values.scheduler.image.repository }}:{{ .Values.scheduler.image.tag }}"
               imagePullPolicy: {{ .Values.scheduler.image.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
               command:
                 - python
                 - -m
@@ -35,9 +39,18 @@ spec:
                   value: {{ $value | quote }}
                 {{- end }}
               volumeMounts:
+                - name: scheduler-data
+                  mountPath: /app/data
                 - name: logs
                   mountPath: /app/logs
           volumes:
+            - name: scheduler-data
+              {{- if .Values.scheduler.persistence.data.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "mosaicfl.fullname" . }}-scheduler-data
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
             - name: logs
               emptyDir: {}
 {{- end }}

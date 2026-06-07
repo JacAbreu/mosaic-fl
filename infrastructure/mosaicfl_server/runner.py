@@ -18,24 +18,23 @@ from typing import Optional
 import flwr as fl
 import torch
 
-from mosaicfl.v2.config import (
-    DEVICE,
-    MIN_AVAILABLE_CLIENTS,
-    NUM_ROUNDS,
-    PROXIMAL_MU,
-)
+from mosaicfl.v2.config import FED_CFG, RUNTIME_CFG
 from mosaicfl.v2.model_v2 import SimplifiedBEHRT
 from mosaicfl.v2.server_v2 import get_evaluate_fn, weighted_average_accuracy, weighted_average_loss
 
 from .config_loader import get_config_loader
 from .strategy import ProductionFedProxStrategy
 from infrastructure.logging_setup import setup_logging as _setup_logging
+from infrastructure.health_server import HealthServer
 
 SERVER_ADDRESS = os.getenv("FL_SERVER_ADDRESS", "0.0.0.0:8080")
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
 LOG_DIR = Path(os.getenv("FL_LOG_DIR", "logs"))
+HEALTH_PORT = int(os.getenv("FL_HEALTH_PORT", "8081"))
 
 logger = logging.getLogger(__name__)
+
+_health = HealthServer(port=HEALTH_PORT)
 
 
 def setup_logging() -> None:
@@ -45,22 +44,19 @@ def setup_logging() -> None:
 
 
 def write_health_status(status: str, round_num: int = 0, clients: int = 0):
-    """Escreve status do servidor para arquivo."""
+    """Atualiza o endpoint /healthz e persiste status em arquivo."""
+    state = {
+        "status": status,
+        "timestamp": datetime.now().isoformat(),
+        "round": round_num,
+        "connected_clients": clients,
+        "address": SERVER_ADDRESS,
+    }
+    _health.set_status(**state)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    health_file = LOG_DIR / "server_health.json"
     try:
-        with open(health_file, "w", encoding="utf-8") as f:
-            json.dump(
-                {
-                    "status": status,
-                    "timestamp": datetime.now().isoformat(),
-                    "round": round_num,
-                    "connected_clients": clients,
-                    "address": SERVER_ADDRESS,
-                },
-                f,
-                indent=2,
-            )
+        with open(LOG_DIR / "server_health.json", "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
     except Exception as e:
         logger.debug("Erro health check: %s", e)
 
@@ -71,9 +67,9 @@ class FederatedServer:
     def __init__(
         self,
         address: str = SERVER_ADDRESS,
-        num_rounds: int = NUM_ROUNDS,
-        min_clients: int = MIN_AVAILABLE_CLIENTS,
-        proximal_mu: float = PROXIMAL_MU,
+        num_rounds: int = FED_CFG.num_rounds,
+        min_clients: int = FED_CFG.min_available_clients,
+        proximal_mu: float = FED_CFG.proximal_mu,
     ):
         self.address = address
         self.num_rounds = num_rounds
@@ -84,10 +80,10 @@ class FederatedServer:
         self._shutdown_event = threading.Event()
 
     def _init_model(self) -> torch.nn.Module:
-        model = SimplifiedBEHRT(use_cls_token=True).to(DEVICE)
+        model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
         logger.info(
             "model_initialized",
-            extra={"param_count": sum(p.numel() for p in model.parameters()), "device": str(DEVICE)},
+            extra={"param_count": sum(p.numel() for p in model.parameters()), "device": str(RUNTIME_CFG.device)},
         )
         return model
 
@@ -111,6 +107,7 @@ class FederatedServer:
 
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
+        _health.start()
 
         evaluate_fn = None
         self.test_loader = self._load_test_data()
@@ -143,7 +140,7 @@ class FederatedServer:
                 "rounds": self.num_rounds,
                 "min_clients": self.min_clients,
                 "proximal_mu": self.proximal_mu,
-                "device": str(DEVICE),
+                "device": str(RUNTIME_CFG.device),
                 "checkpoint_dir": str(CHECKPOINT_DIR),
             },
         )
@@ -177,11 +174,11 @@ def main() -> None:
     parser.add_argument(
         "--min-clients",
         type=int,
-        default=MIN_AVAILABLE_CLIENTS,
+        default=FED_CFG.min_available_clients,
         help="Mínimo de clientes",
     )
-    parser.add_argument("--rounds", type=int, default=NUM_ROUNDS, help="Máximo de rounds")
-    parser.add_argument("--mu", type=float, default=PROXIMAL_MU, help="Proximal mu")
+    parser.add_argument("--rounds", type=int, default=FED_CFG.num_rounds, help="Máximo de rounds")
+    parser.add_argument("--mu", type=float, default=FED_CFG.proximal_mu, help="Proximal mu")
     parser.add_argument(
         "--checkpoint-dir",
         default=str(CHECKPOINT_DIR),

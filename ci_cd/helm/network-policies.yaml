@@ -1,0 +1,133 @@
+{{- if .Values.networkPolicy.enabled }}
+# ─────────────────────────────────────────────────────────────────────────────
+# NetworkPolicies — MOSAIC-FL
+#
+# Princípio: mínimo privilégio de rede. Em um sistema de FL hospitalar,
+# clientes nunca devem comunicar-se entre si nem com a internet — apenas
+# com o servidor FL na porta gRPC.
+#
+# Estrutura:
+#   mosaicfl-server   — aceita gRPC de clientes e scheduler; nega o restante
+#   mosaicfl-client   — saída apenas para o servidor FL + DNS
+#   mosaicfl-scheduler — saída apenas para o servidor FL + DNS; nega toda entrada
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Servidor ─────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mosaicfl.fullname" . }}-server
+  labels:
+    {{- include "mosaicfl.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mosaicfl.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # gRPC dos clientes FL
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "mosaicfl.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: client
+      ports:
+        - port: 8080
+          protocol: TCP
+    # gRPC do scheduler
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "mosaicfl.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: scheduler
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Probes de saúde do kubelet (originam do host network, não de pods)
+    - ports:
+        - port: 8081
+          protocol: TCP
+  egress:
+    # Resolução DNS — obrigatório para discovery de serviços K8s
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+---
+# ── Clientes ─────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mosaicfl.fullname" . }}-client
+  labels:
+    {{- include "mosaicfl.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mosaicfl.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: client
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Probes de saúde do kubelet
+    - ports:
+        - port: 8081
+          protocol: TCP
+  egress:
+    # Saída exclusiva para o servidor FL na porta gRPC
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "mosaicfl.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: server
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Resolução DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+---
+# ── Scheduler ────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mosaicfl.fullname" . }}-scheduler
+  labels:
+    {{- include "mosaicfl.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mosaicfl.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: scheduler
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []  # nenhuma entrada permitida — scheduler não serve tráfego
+  egress:
+    # Saída exclusiva para o servidor FL
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "mosaicfl.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: server
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Resolução DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+{{- end }}

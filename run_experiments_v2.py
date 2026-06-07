@@ -599,7 +599,7 @@ def run_federated_learning_manual(
             client_weights.append(num_samples)
             client_metrics.append(metrics)
 
-            logger.info(f"  [Cliente {cid}] ✓ Loss: {metrics['loss']:.4f} | Amostras: {num_samples}")
+            logger.info(f"  [Cliente {cid}] Loss: {metrics['loss']:.4f} | Amostras: {num_samples}")
 
         logger.info(f"  [Servidor] Agregando pesos de {len(client_states)} clientes...")
         global_state = aggregate_fedavg(client_states, client_weights)
@@ -630,7 +630,7 @@ def run_federated_learning_manual(
 
             if stable_count >= CONVERGENCE_PATIENCE and converged_round is None:
                 converged_round = round_num
-                logger.info(f"\n🎯 CONVERGÊNCIA ATINGIDA na rodada {round_num}!")
+                logger.info(f"\nCONVERGENCIA ATINGIDA na rodada {round_num}!")
                 break
 
         prev_accuracy = acc_global
@@ -880,13 +880,13 @@ def main():
         logger.error("Edite mosaicfl/v2/data_loader.py → COLUMN_MAPPING")
         sys.exit(1)
 
-    logger.info(f"      ✓ {len(df_raw)} registros | {df_raw['instituicao'].nunique()} instituições")
+    logger.info(f"      {len(df_raw)} registros | {df_raw['instituicao'].nunique()} instituicoes")
 
     # 2. Pré-processamento
     logger.info("[2/4] Pré-processando...")
     preprocessor = EHRPreprocessor()
     client_loaders, test_loader, vocab_map, total = prepare_dataloaders(df_raw, preprocessor)
-    logger.info(f"      ✓ {len(client_loaders)} clientes | {total} amostras de treino")
+    logger.info(f"      {len(client_loaders)} clientes | {total} amostras de treino")
 
     # 3. Aprendizado Federado
     logger.info("[3/4] Aprendizado Federado...")

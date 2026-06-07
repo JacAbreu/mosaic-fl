@@ -25,16 +25,22 @@ COPY src/ /app/src/
 COPY infrastructure/mosaicfl_client/ /app/mosaicfl_client/
 
 # Instala o pacote core primeiro
-RUN pip install --no-cache-dir -e /app/src
+RUN pip install --no-cache-dir /app/src
 
 # Instala o pacote client
-RUN pip install --no-cache-dir -e /app/mosaicfl_client
+RUN pip install --no-cache-dir /app/mosaicfl_client
 
 # Cria diretórios para dados e logs
 RUN mkdir -p /app/data /app/logs
+RUN useradd --uid 1000 --no-create-home --shell /bin/false mosaicfl && \
+    chown -R mosaicfl:mosaicfl /app/data /app/logs
 
-# Health check (verifica se consegue escrever heartbeat)
-HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3     CMD python -c "from mosaicfl_client.heartbeat import write_heartbeat; write_heartbeat('healthy')" || exit 1
+# Porta do endpoint de saúde
+EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8081/healthz', timeout=5)"
 
 # Variáveis de ambiente padrão
 ENV FL_SERVER_ADDRESS=localhost:8080
@@ -44,6 +50,8 @@ ENV FL_RECONNECT_DELAY=30
 ENV FL_LOG_DIR=/app/logs
 ENV FL_DEVICE=cpu
 ENV PYTHONUNBUFFERED=1
+
+USER mosaicfl
 
 # Entrypoint
 ENTRYPOINT ["mosaicfl-client"]

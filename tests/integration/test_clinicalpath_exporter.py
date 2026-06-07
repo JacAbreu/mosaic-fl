@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "integration" / "clinical-path"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "integration" / "clinical-path"))
 
 from exporter import ClinicalPathExporter
 from models import (

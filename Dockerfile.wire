@@ -32,13 +32,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY . .
 
 # 1. Pacote core com extras de serviço (FastAPI, uvicorn, watchdog)
-RUN pip install --no-cache-dir -e ".[service]"
+RUN pip install --no-cache-dir ".[service]"
 
 # 2. Módulos de infraestrutura (cada um tem seu próprio pyproject.toml)
 RUN pip install --no-cache-dir \
-    -e infrastructure/mosaicfl_server \
-    -e infrastructure/mosaicfl_client \
-    -e infrastructure/mosaicfl_scheduler
+    infrastructure/mosaicfl_server \
+    infrastructure/mosaicfl_client \
+    infrastructure/mosaicfl_scheduler
 
 # 3. Dependências extras não cobertas pelos pyprojects individuais
 RUN pip install --no-cache-dir \
@@ -53,6 +53,9 @@ ENV FL_LOG_FORMAT=json
 
 # Diretórios que os daemons criam em tempo de execução
 RUN mkdir -p /app/checkpoints /app/logs /app/data/incoming /app/data/clinicalpath_output
+RUN useradd --uid 1000 --no-create-home --shell /bin/false mosaicfl && \
+    chown -R mosaicfl:mosaicfl /app/checkpoints /app/logs /app/data
 
 # Sem ENTRYPOINT fixo — cada serviço sobrescreve command: no docker-compose
+USER mosaicfl
 CMD ["python", "-c", "print('MOSAIC-FL wire image OK — use via docker compose')"]

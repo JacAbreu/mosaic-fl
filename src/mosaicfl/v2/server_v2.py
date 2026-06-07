@@ -1,14 +1,14 @@
 """
-Servidor Flower com estratégia FedProx e critério de parada antecipada — VERSÃO CORRIGIDA.
+Servidor Flower com estratégia FedProx e criterio de parada antecipada (CustomFedProxStrategy).
 
-Mudanças principais:
-  1. CustomFedProxStrategy herda de FedProx e conecta ConvergenceTracker,
-     permitindo parada antecipada quando a acurácia global estabiliza.
-  2. Histórico de treinamento é populado a cada rodada (rounds, accuracy, loss).
-  3. Persistência automática do modelo global ao final (ou a cada rodada).
-  4. Callback opcional on_converged para ações pós-convergência (ex: salvar RAG).
+Agrega pesos dos clientes via FedAvg ponderado, rastreia convergencia da acuracia
+global e para automaticamente quando delta < threshold por patience rodadas consecutivas.
+Salva checkpoint a cada round e checkpoint final ao convergir.
 """
+import logging
 import flwr as fl
+
+logger = logging.getLogger(__name__)
 from flwr.server.strategy import FedProx
 from typing import List, Tuple, Dict, Optional, Callable
 from collections import OrderedDict
@@ -19,12 +19,7 @@ import os
 from datetime import datetime
 
 from .model_v2 import SimplifiedBEHRT
-from .config import (
-    CONVERGENCE_PATIENCE, CONVERGENCE_THRESHOLD, DEVICE,
-    FRACTION_EVALUATE, FRACTION_FIT,
-    MIN_AVAILABLE_CLIENTS, MIN_EVALUATE_CLIENTS, MIN_FIT_CLIENTS,
-    NUM_CLIENTS, NUM_ROUNDS, PROXIMAL_MU,
-)
+from .config import FED_CFG, RUNTIME_CFG
 
 # Tamanho real do state_dict (upload + download por cliente = × 2)
 _MODEL_SIZE_MB: float = round(
@@ -35,7 +30,7 @@ _MODEL_SIZE_MB: float = round(
 
 
 class ConvergenceTracker:
-    def __init__(self, threshold: float = CONVERGENCE_THRESHOLD, patience: int = CONVERGENCE_PATIENCE):
+    def __init__(self, threshold: float = FED_CFG.convergence_threshold, patience: int = FED_CFG.convergence_patience):
         self.threshold = threshold
         self.patience = patience
         self.history = []
@@ -115,7 +110,7 @@ class CustomFedProxStrategy(FedProx):
             path = os.path.join(self.save_dir, f"round_{server_round}.pt")
             torch.save(model.state_dict(), path)
             self.history["last_checkpoint"] = path
-            print(f"   💾 Checkpoint salvo: {path}")
+            logger.info("checkpoint_saved", extra={"round": server_round, "path": path})
 
         return aggregated_parameters, aggregated_metrics
 
@@ -133,8 +128,11 @@ class CustomFedProxStrategy(FedProx):
             self.history["communication_mb"].append(round(len(results) * _MODEL_SIZE_MB * 2, 3))
 
             if self.tracker.check(accuracy):
-                print(f"\n🎯 CONVERGÊNCIA ATINGIDA na rodada {server_round}!")
-                print(f"   Acurácia: {accuracy:.4f} | Δ < {self.tracker.threshold} por {self.tracker.patience} rodadas.")
+                logger.info(
+                    "convergence_reached",
+                    extra={"round": server_round, "accuracy": accuracy,
+                           "threshold": self.tracker.threshold, "patience": self.tracker.patience},
+                )
                 if self.on_converged:
                     self.on_converged(server_round, accuracy, self.history)
                 self._save_checkpoint(server_round, final=True)
@@ -152,7 +150,7 @@ class CustomFedProxStrategy(FedProx):
             final_path = os.path.join(self.save_dir, "final.pt")
             shutil.copy2(last, final_path)
             self.history["last_checkpoint"] = final_path
-            print(f"   💾 Checkpoint final: {final_path}")
+            logger.info("checkpoint_final_saved", extra={"path": final_path})
 
 
 def get_evaluate_fn(test_loader) -> Callable:
@@ -164,7 +162,7 @@ def get_evaluate_fn(test_loader) -> Callable:
         parameters: fl.common.NDArrays,
         config: Dict,
     ) -> Tuple[float, Dict]:
-        model = SimplifiedBEHRT(use_cls_token=True).to(DEVICE)
+        model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
         params_dict = zip(model.state_dict().keys(), parameters)
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
         model.load_state_dict(state_dict, strict=False)
@@ -175,7 +173,7 @@ def get_evaluate_fn(test_loader) -> Callable:
 
         with torch.no_grad():
             for batch_x, batch_y in test_loader:
-                batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
+                batch_x, batch_y = batch_x.to(RUNTIME_CFG.device), batch_y.to(RUNTIME_CFG.device)
                 logits = model(batch_x)
                 loss = criterion(logits, batch_y)
                 loss_sum += loss.item() * batch_y.size(0)
@@ -196,8 +194,8 @@ def get_evaluate_fn(test_loader) -> Callable:
 
 
 def start_server(
-    num_rounds: int = NUM_ROUNDS,
-    num_clients: int = NUM_CLIENTS,
+    num_rounds: int = FED_CFG.num_rounds,
+    num_clients: int = FED_CFG.num_clients,
     test_loader=None,
     on_converged: Optional[Callable] = None,
 ) -> Tuple["CustomFedProxStrategy", ConvergenceTracker, Dict]:
@@ -214,20 +212,20 @@ def start_server(
         tracker=tracker,
         history=history,
         on_converged=on_converged,
-        fraction_fit=FRACTION_FIT,
-        fraction_evaluate=FRACTION_EVALUATE,
-        min_fit_clients=MIN_FIT_CLIENTS,
-        min_evaluate_clients=MIN_EVALUATE_CLIENTS,
-        min_available_clients=MIN_AVAILABLE_CLIENTS,
-        proximal_mu=PROXIMAL_MU,
+        fraction_fit=FED_CFG.fraction_fit,
+        fraction_evaluate=FED_CFG.fraction_evaluate,
+        min_fit_clients=FED_CFG.min_fit_clients,
+        min_evaluate_clients=FED_CFG.min_evaluate_clients,
+        min_available_clients=FED_CFG.min_available_clients,
+        proximal_mu=FED_CFG.proximal_mu,
         evaluate_fn=evaluate_fn,
         evaluate_metrics_aggregation_fn=weighted_average_accuracy,
         fit_metrics_aggregation_fn=weighted_average_loss,
     )
 
     print(f"Iniciando servidor FedProx por até {num_rounds} rodadas...")
-    print(f"Mu proximal: {PROXIMAL_MU} | Clientes mínimos: {MIN_FIT_CLIENTS}")
-    print(f"Convergência: Δ < {CONVERGENCE_THRESHOLD} por {CONVERGENCE_PATIENCE} rodadas.")
+    print(f"Mu proximal: {FED_CFG.proximal_mu} | Clientes mínimos: {FED_CFG.min_fit_clients}")
+    print(f"Convergência: Δ < {FED_CFG.convergence_threshold} por {FED_CFG.convergence_patience} rodadas.")
     if evaluate_fn:
         print("Avaliação global: ATIVA (test_loader fornecido)")
     else:

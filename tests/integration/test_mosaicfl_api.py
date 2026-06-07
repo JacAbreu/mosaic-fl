@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-_ROOT = Path(__file__).parent.parent
+_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "integration" / "clinical-path"))
 

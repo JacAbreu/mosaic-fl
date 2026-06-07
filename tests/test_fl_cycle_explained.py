@@ -251,7 +251,7 @@ class TestServerSendsModelToClient:
                 assert torch.allclose(vs, vc), f"Divergência em '{k}' após transfer"
 
         print("\n[SERVER→CLIENT — FASE 2b] Transferência de checkpoint (constante=0.42)")
-        print("  Todos os tensores float replicados no cliente ✓")
+        print("  Todos os tensores float replicados no cliente [OK]")
 
     def test_set_parameters_stores_global_reference_for_proximal(self, fl_client, global_model):
         """
@@ -307,7 +307,7 @@ class TestClientLocalTraining:
         print(f"  Loss média:            {metrics['loss']:.4f}")
         n_float = sum(1 for dt in dtypes if dt == torch.float32)
         print(f"  Tensores alterados:    {changed} de {n_float} (float32)")
-        print(f"  Gradiente aplicado:    {'✓' if changed > 0 else '✗ PROBLEMA'}")
+        print(f"  Gradiente aplicado:    {'[OK]' if changed > 0 else '[FAIL] PROBLEMA'}")
 
         assert changed > 0, "Nenhum peso foi alterado — gradiente não aplicado"
 
@@ -352,7 +352,7 @@ class TestClientLocalTraining:
         print(f"  model.state_dict():   {n_state_dict} (treináveis + buffers)")
         print(f"  model.parameters():   {n_trainable} (só treináveis)")
         print(f"  fit() retornou:       {len(updated_params)}")
-        print(f"  Consistente com state_dict: {'✓' if len(updated_params) == n_state_dict else '✗'}")
+        print(f"  Consistente com state_dict: {'[OK]' if len(updated_params) == n_state_dict else '[FAIL]'}")
 
         assert len(updated_params) == n_state_dict
 
@@ -426,7 +426,7 @@ class TestClientReturnsWeightsToServer:
                 f"Tensor [{i}] deveria ser numpy.ndarray, é {type(p)}"
 
         print("\n[CLIENT→SERVER — FASE 4a] Formato dos pesos")
-        print(f"  {len(params)} tensores em numpy.ndarray ✓")
+        print(f"  {len(params)} tensores em numpy.ndarray [OK]")
         print(f"  (Flower serializa para bytes gRPC antes de enviar)")
 
     def test_get_parameters_shapes_match_server_model(self, fl_client, global_model):
@@ -446,10 +446,10 @@ class TestClientReturnsWeightsToServer:
         for i, (k, cs, ss) in enumerate(
             zip(server_keys, client_shapes, server_shapes)
         ):
-            print(f"  [{i:2d}] {k:45s} {cs} {'✓' if cs == ss else '✗'}")
+            print(f"  [{i:2d}] {k:45s} {cs} {'[OK]' if cs == ss else '[FAIL]'}")
 
         assert not mismatches, f"Shape mismatch: {mismatches}"
-        print(f"  Todos os {len(client_params)} tensores compatíveis ✓")
+        print(f"  Todos os {len(client_params)} tensores compatíveis [OK]")
 
     def test_get_parameters_count_state_dict_vs_parameters(self, fl_client):
         """
@@ -505,7 +505,7 @@ class TestServerAggregatesWeights:
         result = weighted_average(metrics)
         assert abs(result["accuracy"] - 0.75) < 1e-5
         print("\n[SERVER — FASE 5b] weighted_average: 2 clientes iguais")
-        print(f"  (0.75×50 + 0.75×50) / 100 = {result['accuracy']:.4f} ✓")
+        print(f"  (0.75×50 + 0.75×50) / 100 = {result['accuracy']:.4f} [OK]")
 
     def test_weighted_average_metrics_unequal_samples(self):
         """
@@ -525,7 +525,7 @@ class TestServerAggregatesWeights:
         print("\n[SERVER — FASE 5c] weighted_average ponderado")
         print(f"  hosp_A: 300 amostras, acc=0.80  (peso 0.75)")
         print(f"  hosp_B: 100 amostras, acc=0.60  (peso 0.25)")
-        print(f"  Resultado: {result['accuracy']:.4f}  (esperado {expected:.4f}) ✓")
+        print(f"  Resultado: {result['accuracy']:.4f}  (esperado {expected:.4f}) [OK]")
 
     def test_fedavg_params_single_client_is_identity(self):
         """FASE 5d — Parâmetros: 1 cliente → resultado = seus pesos."""
@@ -540,7 +540,7 @@ class TestServerAggregatesWeights:
             assert np.allclose(agg, orig.astype(np.float32), atol=1e-5)
 
         print("\n[SERVER — FASE 5d] FedAvg parâmetros (1 cliente = identidade)")
-        print(f"  {len(aggregated)} tensores agregados = pesos do único cliente ✓")
+        print(f"  {len(aggregated)} tensores agregados = pesos do único cliente [OK]")
 
     def test_fedavg_params_zero_and_ones_equal_weight(self):
         """
@@ -566,7 +566,7 @@ class TestServerAggregatesWeights:
             if dt == torch.float32:
                 assert np.allclose(agg, 0.5, atol=1e-5), \
                     f"Tensor '{k}': esperado 0.5, obteve {agg.mean():.4f}"
-        print("  (0×0.5 + 1×0.5) = 0.5 para todos os tensores float ✓")
+        print("  (0×0.5 + 1×0.5) = 0.5 para todos os tensores float [OK]")
 
     def test_fedavg_params_weighted_by_sample_count(self):
         """
@@ -596,7 +596,7 @@ class TestServerAggregatesWeights:
             if dt == torch.float32:
                 assert np.allclose(agg, expected, atol=1e-5), \
                     f"Esperado {expected}, obteve {agg.mean():.4f}"
-        print(f"  (0×0.75 + 1×0.25) = {expected} ✓")
+        print(f"  (0×0.75 + 1×0.25) = {expected} [OK]")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -619,7 +619,7 @@ class TestServerConvergenceTracking:
         """FASE 6a — Apenas 1 valor: não há Δ para calcular → False."""
         tracker = ConvergenceTracker(threshold=0.005, patience=3)
         assert not tracker.check(0.80)
-        print("\n[SERVER — FASE 6a] 1 valor: sem Δ → sem convergência ✓")
+        print("\n[SERVER — FASE 6a] 1 valor: sem Δ → sem convergência [OK]")
 
     def test_three_small_deltas_trigger_convergence(self):
         """
@@ -645,7 +645,7 @@ class TestServerConvergenceTracking:
 
         assert results[-1] is True
         assert tracker.converged_round is not None
-        print(f"  → converged_round = {tracker.converged_round} ✓")
+        print(f"  → converged_round = {tracker.converged_round} [OK]")
 
     def test_unstable_delta_resets_stable_count(self):
         """
@@ -657,7 +657,7 @@ class TestServerConvergenceTracking:
             tracker.check(acc)
         assert tracker.converged_round is None
         assert tracker.stable_count == 0
-        print("\n[SERVER — FASE 6c] Accuracy instável → stable_count reseta ✓")
+        print("\n[SERVER — FASE 6c] Accuracy instável → stable_count reseta [OK]")
 
     def test_mixed_stable_then_unstable_resets(self):
         """FASE 6d — stable_count acumulava mas um Δ grande reseta tudo."""
@@ -668,7 +668,7 @@ class TestServerConvergenceTracking:
         tracker.check(0.85)    # Δ=0.05 → stable RESET=0
         assert tracker.stable_count == 0
         assert tracker.converged_round is None
-        print("\n[SERVER — FASE 6d] Salto no acc reseta stable_count ✓")
+        print("\n[SERVER — FASE 6d] Salto no acc reseta stable_count [OK]")
 
     def test_reset_clears_all_state(self):
         """FASE 6e — reset() permite reiniciar rastreamento do zero."""
@@ -679,7 +679,7 @@ class TestServerConvergenceTracking:
         assert tracker.history == []
         assert tracker.stable_count == 0
         assert tracker.converged_round is None
-        print("\n[SERVER — FASE 6e] tracker.reset(): histórico zerado ✓")
+        print("\n[SERVER — FASE 6e] tracker.reset(): histórico zerado [OK]")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -725,7 +725,7 @@ class TestFullFLCycle:
         )
         global_model.load_state_dict(state_dict, strict=False)
 
-        print(f"\n[SERVER] FedAvg aplicado → modelo global atualizado ✓")
+        print(f"\n[SERVER] FedAvg aplicado → modelo global atualizado [OK]")
         print("=" * 62)
 
         assert len(updated_params) == len(global_params)
@@ -767,7 +767,7 @@ class TestFullFLCycle:
         )
         global_model.load_state_dict(state_dict, strict=False)
 
-        print(f"\n[SERVER] FedAvg concluído ({len(aggregated)} tensores) ✓")
+        print(f"\n[SERVER] FedAvg concluído ({len(aggregated)} tensores) [OK]")
         print("=" * 62)
 
         assert len(aggregated) == len(global_params)

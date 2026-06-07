@@ -8,7 +8,7 @@ server:
   image:
     repository: ghcr.io/jacabreu/mosaic-fl-server
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: "v0.2.0"
 
   service:
     type: LoadBalancer
@@ -56,7 +56,7 @@ client:
   image:
     repository: ghcr.io/jacabreu/mosaic-fl-client
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: "v0.2.0"
 
   # Lista de hospitais (cada um é um Deployment separado)
   hospitals:
@@ -107,11 +107,18 @@ scheduler:
   image:
     repository: ghcr.io/jacabreu/mosaic-fl-server
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: "v0.2.0"
   env:
     FL_SCHEDULER_INTERVAL_HOURS: "6"
     FL_SCHEDULER_MIN_CLIENTS: "3"
     FL_SCHEDULER_MAX_ROUNDS: "20"
+    FL_SCHEDULER_DB: "/app/data/scheduler.db"
+
+  persistence:
+    data:
+      enabled: true
+      size: 1Gi
+      storageClass: ""
 
 # ── Configurações globais ─────────────────────────────────
 imagePullSecrets: []
@@ -124,5 +131,18 @@ serviceAccount:
   name: ""
 
 podAnnotations: {}
-podSecurityContext: {}
-securityContext: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# ── NetworkPolicies ──────────────────────────────────────────
+networkPolicy:
+  enabled: true  # isola clientes, servidor e scheduler — obrigatório em produção hospitalar

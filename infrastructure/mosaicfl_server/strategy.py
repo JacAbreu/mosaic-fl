@@ -5,6 +5,7 @@ Estratégia FedProx de produção (mosaicfl.v2) com checkpoint e convergência.
 import json
 import logging
 import os
+import time
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 import flwr as fl
 import torch
 
-from mosaicfl.v2.config import CONVERGENCE_THRESHOLD, CONVERGENCE_PATIENCE
+from mosaicfl.v2.config import FED_CFG
 from mosaicfl.v2.server_v2 import weighted_average_accuracy, weighted_average_loss
 from .config_loader import ConfigLoader, get_config_loader
 
@@ -28,8 +29,8 @@ class ConvergenceTracker:
 
     def __init__(
         self,
-        threshold: float = CONVERGENCE_THRESHOLD,
-        patience: int = CONVERGENCE_PATIENCE,
+        threshold: float = FED_CFG.convergence_threshold,
+        patience: int = FED_CFG.convergence_patience,
     ):
         self.threshold = threshold
         self.patience = patience
@@ -109,7 +110,6 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
 
         pause = float(runtime.get("pause_seconds", 0) or 0)
         if pause > 0:
-            import time
             logger.info("round_paused", extra={"round": server_round, "pause_seconds": pause})
             time.sleep(pause)
 

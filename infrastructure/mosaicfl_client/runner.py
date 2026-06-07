@@ -20,19 +20,23 @@ import torch
 from torch.utils.data import DataLoader, random_split
 
 from mosaicfl.v2.client_v2 import FedProxClient
-from mosaicfl.v2.config import DEVICE, RANDOM_SEED
+from mosaicfl.v2.config import FED_CFG, RUNTIME_CFG
 
 from .datasource import DataSourceFactory
 from .heartbeat import write_heartbeat
+from infrastructure.health_server import HealthServer
 
 SERVER_ADDRESS = os.getenv("FL_SERVER_ADDRESS", "localhost:8080")
 CLIENT_ID = os.getenv("FL_CLIENT_ID", "client_0")
 LOG_DIR = Path(os.getenv("FL_LOG_DIR", "logs"))
+HEALTH_PORT = int(os.getenv("FL_HEALTH_PORT", "8081"))
 
 HEARTBEAT_INTERVAL = int(os.getenv("FL_HEARTBEAT_INTERVAL", "60"))
 RECONNECT_DELAY = int(os.getenv("FL_RECONNECT_DELAY", "30"))
 
 logger = logging.getLogger(__name__)
+
+_health = HealthServer(port=HEALTH_PORT)
 
 
 def setup_logging(client_id: str) -> None:
@@ -71,7 +75,7 @@ def _split_loader(loader: DataLoader, val_ratio: float = 0.2) -> Tuple[DataLoade
     train_ds, val_ds = random_split(
         dataset,
         [n_train, n_val],
-        generator=torch.Generator().manual_seed(RANDOM_SEED),
+        generator=torch.Generator().manual_seed(FED_CFG.random_seed),
     )
     return (
         DataLoader(train_ds, batch_size=loader.batch_size, shuffle=True),
@@ -93,7 +97,7 @@ class ProductionClient:
         self.data_source = data_source
         self.client_id_int = parse_client_id(client_id)
         os.environ["FL_CLIENT_ID"] = client_id
-        self.device = DEVICE
+        self.device = RUNTIME_CFG.device
 
     def _load_data_loaders(self) -> Tuple[DataLoader, DataLoader]:
         """Carrega treino/validação conforme FL_DATA_SOURCE ou --data-source."""
@@ -128,6 +132,9 @@ class ProductionClient:
             time.sleep(HEARTBEAT_INTERVAL)
 
     def run(self) -> None:
+        _health.start()
+        _health.set_status("starting", client_id=self.client_id, server=self.server_address)
+
         stop_event = threading.Event()
         heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop,
@@ -150,10 +157,12 @@ class ProductionClient:
             try:
                 flower_client = self._build_flower_client()
                 logger.info("Conectando ao servidor %s...", self.server_address)
+                _health.set_status("connecting", client_id=self.client_id, server=self.server_address)
                 fl.client.start_client(
                     server_address=self.server_address,
                     client=flower_client,
                 )
+                _health.set_status("reconnecting", client_id=self.client_id, server=self.server_address)
                 logger.info("Sessão concluída. Reconectando em %ss...", RECONNECT_DELAY)
                 time.sleep(RECONNECT_DELAY)
             except KeyboardInterrupt:
@@ -161,6 +170,7 @@ class ProductionClient:
                 stop_event.set()
                 break
             except Exception as e:
+                _health.set_status("error", client_id=self.client_id, error=str(e))
                 logger.error("Erro na conexão: %s", e)
                 logger.info("Reconectando em %ss...", RECONNECT_DELAY)
                 time.sleep(RECONNECT_DELAY)
@@ -183,7 +193,7 @@ def main() -> None:
         choices=["simulated", "sgbd", "csv"],
         help="Fonte de dados (default: FL_DATA_SOURCE ou simulated)",
     )
-    parser.add_argument("--device", default=str(DEVICE), help="Device PyTorch (informativo)")
+    parser.add_argument("--device", default=str(RUNTIME_CFG.device), help="Device PyTorch (informativo)")
     args = parser.parse_args()
 
     setup_logging(args.client_id)

@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$SCRIPT_DIR/infrastructure/server"
 
-echo "📦 Publicando mosaicfl-server..."
+echo "Publicando mosaicfl-server..."
 cd "$SERVER_DIR"
 
 # Limpa builds antigos
@@ -25,7 +25,7 @@ python -m build
 # Ou instala localmente para teste
 pip install -e .
 
-echo "✅ mosaicfl-server publicado/instalado!"
+echo "mosaicfl-server publicado/instalado!"
 echo ""
 echo "Uso:"
 echo "  mosaicfl-server --port 8080 --min-clients 3"

@@ -55,7 +55,7 @@ jobs:
       - name: Lint
         run: |
           ruff check src/ infrastructure/
-          black --check src/ infrastructure/
+          ruff format --check src/ infrastructure/
 
   # ── Build Pacotes Python ─────────────────────────────────
   build-packages:

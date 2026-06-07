@@ -4,7 +4,7 @@
 
 set -e
 
-echo "🚀 Instalando MOSAIC-FL (ambiente de desenvolvimento)..."
+echo "Instalando MOSAIC-FL (ambiente de desenvolvimento)..."
 
 # 1. Cria venv
 python3 -m venv .venv

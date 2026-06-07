@@ -24,9 +24,14 @@ spec:
         - name: server
           image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
           imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
             - name: grpc
               containerPort: 8080
+              protocol: TCP
+            - name: healthz
+              containerPort: 8081
               protocol: TCP
           env:
             {{- range $key, $value := .Values.server.env }}
@@ -41,21 +46,21 @@ spec:
             - name: logs
               mountPath: /app/logs
           livenessProbe:
-            exec:
-              command:
-                - python
-                - -c
-                - "import socket; s=socket.socket(); s.connect(('localhost', 8080)); s.close()"
+            httpGet:
+              path: /livez
+              port: 8081
             initialDelaySeconds: 60
             periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
-            exec:
-              command:
-                - python
-                - -c
-                - "import socket; s=socket.socket(); s.connect(('localhost', 8080)); s.close()"
+            httpGet:
+              path: /readyz
+              port: 8081
             initialDelaySeconds: 10
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
       volumes:
         - name: checkpoints
           {{- if .Values.server.persistence.checkpoints.enabled }}

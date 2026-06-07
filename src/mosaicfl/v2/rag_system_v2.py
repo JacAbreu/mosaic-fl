@@ -11,21 +11,21 @@ import numpy as np
 from typing import List, Dict, Tuple
 import json
 
-from .config import CHROMA_DB_PATH, EMBEDDING_MODEL, LLM_MODEL, MAX_NEW_TOKENS, TOP_K
+from .config import FED_CFG, RUNTIME_CFG
 
 
 class ClinicalRAG:
     def __init__(self):
-        self.embedder = SentenceTransformer(EMBEDDING_MODEL)
-        #self.chroma_client = chromadb.Client(Settings(chroma_db_impl="duckdb+parquet", persist_directory=CHROMA_DB_PATH))
-        self.chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+        self.embedder = SentenceTransformer(RUNTIME_CFG.embedding_model)
+        #self.chroma_client = chromadb.Client(Settings(chroma_db_impl="duckdb+parquet", persist_directory=str(RUNTIME_CFG.chroma_path)))
+        self.chroma_client = chromadb.PersistentClient(path=str(RUNTIME_CFG.chroma_path))
         self.collection = self.chroma_client.get_or_create_collection(name="clinical_profiles")
-        
+
         # LLM leve: DistilGPT-2
-        self.tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL)
-        self.llm = AutoModelForCausalLM.from_pretrained(LLM_MODEL)
+        self.tokenizer = AutoTokenizer.from_pretrained(RUNTIME_CFG.llm_model)
+        self.llm = AutoModelForCausalLM.from_pretrained(RUNTIME_CFG.llm_model)
         self.generator = pipeline("text-generation", model=self.llm, tokenizer=self.tokenizer,
-                                  max_new_tokens=MAX_NEW_TOKENS, device=0 if torch.cuda.is_available() else -1,
+                                  max_new_tokens=FED_CFG.max_new_tokens, device=0 if torch.cuda.is_available() else -1,
                                   truncation=True)          # evita IndexError por prompt > 1024 tokens
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -54,7 +54,7 @@ class ClinicalRAG:
         self.collection.add(embeddings=embeddings, documents=texts, metadatas=metadatas, ids=ids)
         print(f"Base de conhecimento: {len(texts)} perfis inseridos.")
 
-    def retrieve(self, query_text: str, top_k: int = TOP_K) -> List[Dict]:
+    def retrieve(self, query_text: str, top_k: int = FED_CFG.top_k) -> List[Dict]:
         """Recupera top-k documentos mais similares via distância de cosseno."""
         query_emb = self.embedder.encode([query_text]).tolist()
         results = self.collection.query(query_embeddings=query_emb, n_results=top_k)
@@ -93,7 +93,7 @@ O modelo previu {prediction} (probabilidade {probability:.2f}) para o paciente c
 Justifique brevemente a predição:"""
 
         # Garante que o prompt inteiro caiba no contexto (1024 - MAX_NEW_TOKENS)
-        max_prompt_tokens = 1024 - MAX_NEW_TOKENS - 10
+        max_prompt_tokens = 1024 - FED_CFG.max_new_tokens - 10
         prompt_ids = self.tokenizer.encode(prompt, max_length=max_prompt_tokens, truncation=True)
         prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=True)
 

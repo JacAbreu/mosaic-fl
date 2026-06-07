@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLIENT_DIR="$SCRIPT_DIR/infrastructure/client"
 
-echo "📦 Publicando mosaicfl-client..."
+echo "Publicando mosaicfl-client..."
 cd "$CLIENT_DIR"
 
 # Limpa builds antigos
@@ -25,7 +25,7 @@ python -m build
 # Ou instala localmente para teste
 pip install -e .
 
-echo "✅ mosaicfl-client publicado/instalado!"
+echo "mosaicfl-client publicado/instalado!"
 echo ""
 echo "Uso:"
 echo "  mosaicfl-client --server 192.168.1.100:8080 --client-id hospital_a"

@@ -22,60 +22,99 @@ Tabela de parâmetros ajustados em relação aos valores originais:
 └──────────────────────────┴─────────┴─────────┴────────────────────────────────────────────────┘
   * cuda if available — tentativa inútil sem GPU dedicada
 
-Para restaurar os valores originais (máquinas com GPU), reverta os parâmetros
-marcados acima e substitua DEVICE por:
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+Para restaurar os valores originais (máquinas com GPU), substitua RuntimeConfig.device por:
+    device: object = field(default_factory=lambda: torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 """
 import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
 import torch
 
-# Limita threads de álgebra linear para evitar sobrecarga da CPU
-# O i7-1165G7 tem 4 núcleos / 8 threads — reservamos 4 para o SO
-os.environ["OMP_NUM_THREADS"]        = "4"
-os.environ["MKL_NUM_THREADS"]        = "4"
-os.environ["TOKENIZERS_PARALLELISM"] = "false"  # evita warning do HuggingFace
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("MKL_NUM_THREADS", "4")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-# Dados
-DATA_PATH   = "data/fapesp_covid19"
-RANDOM_SEED = 42
 
-# Modelo BEHRT Simplificado
-VOCAB_SIZE  = 10000
-EMBED_DIM   = 64
-MAX_SEQ_LEN = 128
-NUM_LAYERS  = 2
-NUM_HEADS   = 4
-FF_DIM      = 128
-NUM_CLASSES = 2
-DROPOUT     = 0.1
+@dataclass(frozen=True)
+class ModelConfig:
+    """Arquitetura BEHRT — imutável por experimento. frozen=True impede mutação acidental em runtime."""
+    vocab_size:  int   = 10_000
+    embed_dim:   int   = 64
+    max_seq_len: int   = 128
+    num_layers:  int   = 2
+    num_heads:   int   = 4
+    ff_dim:      int   = 128
+    num_classes: int   = 2
+    dropout:     float = 0.1
 
-# Treinamento
-# BATCH_SIZE 16 usa ~2GB RAM por cliente — seguro com 16GB
-BATCH_SIZE   = 16   # era 32 → reduzido para poupar RAM
-LOCAL_EPOCHS = 2    # era 3  → reduzido para rodar mais rápido
-LR           = 0.001
-DEVICE       = torch.device("cpu")  # i7-1165G7 não tem GPU compatível com CUDA
 
-# Federado (Flower + FedProx)
-# NUM_ROUNDS 20 já é suficiente para demonstrar convergência no TCC
-NUM_ROUNDS            = 20   # era 50 → principal responsável pelo barulho do cooler
-FRACTION_FIT          = 1.0
-FRACTION_EVALUATE     = 1.0
-PROXIMAL_MU           = 0.01
-MIN_FIT_CLIENTS       = 3
-MIN_EVALUATE_CLIENTS  = 3
-MIN_AVAILABLE_CLIENTS = 3
-CONVERGENCE_THRESHOLD = 0.005
-CONVERGENCE_PATIENCE  = 3
+@dataclass(frozen=True)
+class FedConfig:
+    """Protocolo federado e hiperparâmetros de treinamento — imutável por experimento."""
+    num_rounds:            int   = 20
+    fraction_fit:          float = 1.0
+    fraction_evaluate:     float = 1.0
+    proximal_mu:           float = 0.01
+    min_fit_clients:       int   = 3
+    min_evaluate_clients:  int   = 3
+    min_available_clients: int   = 3
+    convergence_threshold: float = 0.005
+    convergence_patience:  int   = 3
+    batch_size:            int   = 16
+    local_epochs:          int   = 2
+    lr:                    float = 0.001
+    num_clients:           int   = 5
+    random_seed:           int   = 42
+    top_k:                 int   = 3
+    max_new_tokens:        int   = 64
 
-# RAG
-CHROMA_DB_PATH  = "chroma_db"
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-LLM_MODEL       = "distilgpt2"
-TOP_K           = 3
-MAX_NEW_TOKENS  = 64   # era 100 → reduzido para geração mais rápida
 
-# Experimentos
-NUM_CLIENTS = 5
+@dataclass
+class RuntimeConfig:
+    """Parâmetros que dependem do ambiente de execução — variam por máquina/deployment."""
+    data_path:       Path   = field(default_factory=lambda: Path(os.getenv("FL_DATA_PATH", "data/fapesp_covid19")))
+    device:          object = field(default_factory=lambda: torch.device(os.getenv("FL_DEVICE", "cpu")))
+    chroma_path:     Path   = field(default_factory=lambda: Path(os.getenv("FL_CHROMA_PATH", "chroma_db")))
+    embedding_model: str    = field(default_factory=lambda: os.getenv("FL_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"))
+    llm_model:       str    = field(default_factory=lambda: os.getenv("FL_LLM_MODEL", "distilgpt2"))
+    use_ray:         bool   = field(default_factory=lambda: os.getenv("FL_USE_RAY", "false").lower() == "true")
 
-USE_RAY = False
+
+MODEL_CFG   = ModelConfig()
+FED_CFG     = FedConfig()
+RUNTIME_CFG = RuntimeConfig()
+
+# Aliases de compatibilidade para testes e scripts legados — não usar em código novo
+VOCAB_SIZE            = MODEL_CFG.vocab_size
+EMBED_DIM             = MODEL_CFG.embed_dim
+MAX_SEQ_LEN           = MODEL_CFG.max_seq_len
+NUM_LAYERS            = MODEL_CFG.num_layers
+NUM_HEADS             = MODEL_CFG.num_heads
+FF_DIM                = MODEL_CFG.ff_dim
+NUM_CLASSES           = MODEL_CFG.num_classes
+DROPOUT               = MODEL_CFG.dropout
+
+NUM_ROUNDS            = FED_CFG.num_rounds
+FRACTION_FIT          = FED_CFG.fraction_fit
+FRACTION_EVALUATE     = FED_CFG.fraction_evaluate
+PROXIMAL_MU           = FED_CFG.proximal_mu
+MIN_FIT_CLIENTS       = FED_CFG.min_fit_clients
+MIN_EVALUATE_CLIENTS  = FED_CFG.min_evaluate_clients
+MIN_AVAILABLE_CLIENTS = FED_CFG.min_available_clients
+CONVERGENCE_THRESHOLD = FED_CFG.convergence_threshold
+CONVERGENCE_PATIENCE  = FED_CFG.convergence_patience
+BATCH_SIZE            = FED_CFG.batch_size
+LOCAL_EPOCHS          = FED_CFG.local_epochs
+LR                    = FED_CFG.lr
+NUM_CLIENTS           = FED_CFG.num_clients
+RANDOM_SEED           = FED_CFG.random_seed
+TOP_K                 = FED_CFG.top_k
+MAX_NEW_TOKENS        = FED_CFG.max_new_tokens
+
+DATA_PATH             = RUNTIME_CFG.data_path
+DEVICE                = RUNTIME_CFG.device
+CHROMA_DB_PATH        = str(RUNTIME_CFG.chroma_path)
+EMBEDDING_MODEL       = RUNTIME_CFG.embedding_model
+LLM_MODEL             = RUNTIME_CFG.llm_model
+USE_RAY               = RUNTIME_CFG.use_ray

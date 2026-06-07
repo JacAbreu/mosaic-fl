@@ -73,7 +73,7 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 │ • 2h-4h manhã │   (ex: madrugada)
 └───────────────┘
 
-⚠️  PRONTUÁRIOS NUNCA SAEM DOS HOSPITAIS — apenas os pesos do modelo trafegam.
+[AVISO]  PRONTUÁRIOS NUNCA SAEM DOS HOSPITAIS — apenas os pesos do modelo trafegam.
 ```
 
 ### Como funciona o Federated Learning
@@ -494,7 +494,7 @@ scheduler               server_daemon            client_daemon
     │── atualiza state ───────────────────────────────►│
 ```
 
-### ⚠️ Limitações do Scheduler (Arquitetura Atual)
+### [AVISO] Limitações do Scheduler (Arquitetura Atual)
 
 > **Importante:** O scheduler atual **NÃO dispara rounds ativamente** no servidor Flower. Ele atua como um **supervisor/monitor** que:
 > 
@@ -580,11 +580,11 @@ O CronJob do scheduler (`scheduler-cronjob.yaml`) executa por padrão às **2h d
 
 | # | Experimento | Componente | Status |
 |---|---|---|---|
-| 1 | Padronização e pré-processamento | `EHRPreprocessor` | ✅ Real |
-| 2 | Efeito equalizador do FL | FedProx + AUC por cliente | ⚠️ Seed fixo |
-| 3 | Impacto heterogeneidade não-IID | Curvas por subgrupo demográfico | ⚠️ Curva aproximada |
-| 4 | RAG e detecção de alucinação | ChromaDB + DistilGPT-2 | ✅ Real |
-| 5 | Eficiência operacional | Convergência vs. comunicação | ✅ Real |
+| 1 | Padronização e pré-processamento | `EHRPreprocessor` | [OK] Real |
+| 2 | Efeito equalizador do FL | FedProx + AUC por cliente | [AVISO] Seed fixo |
+| 3 | Impacto heterogeneidade não-IID | Curvas por subgrupo demográfico | [AVISO] Curva aproximada |
+| 4 | RAG e detecção de alucinação | ChromaDB + DistilGPT-2 | [OK] Real |
+| 5 | Eficiência operacional | Convergência vs. comunicação | [OK] Real |
 
 Resultados salvos em `experiment_results.json` após cada execução.
 

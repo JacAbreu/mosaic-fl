@@ -30,6 +30,12 @@ spec:
         - name: client
           image: "{{ $.Values.client.image.repository }}:{{ $.Values.client.image.tag }}"
           imagePullPolicy: {{ $.Values.client.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          ports:
+            - name: healthz
+              containerPort: 8081
+              protocol: TCP
           env:
             - name: FL_SERVER_ADDRESS
               value: {{ $hospital.serverAddress | quote }}
@@ -41,6 +47,22 @@ spec:
               value: "cpu"
           resources:
             {{- toYaml $hospital.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: data
               mountPath: /app/data
