@@ -2,13 +2,21 @@
 service.py
 FastAPI — endpoint de inferência, ingestão de exames e painel web.
 
-Autenticação: header X-API-Key (configurado via FL_API_KEY).
-              Se FL_API_KEY não estiver definido, todos os requests são aceitos
-              (modo desenvolvimento). Em produção, sempre defina FL_API_KEY.
+Autenticação: aceita qualquer token presente no header X-API-Key ou
+              Authorization: Bearer <token>. A validação de identidade
+              é responsabilidade do IAM hospitalar upstream; este módulo
+              apenas exige presença de token (FL_AUTH_REQUIRED=true, padrão)
+              e registra um fingerprint SHA-256 truncado para rastreabilidade
+              LGPD Art. 37.
+
+              FL_AUTH_REQUIRED=false desativa a exigência (dev/testes).
 
 CORS: configurado via FL_CORS_ORIGINS (padrão: * para desenvolvimento).
 
 Persistência: SQLite via db.PatientDB — histórico de pacientes sobrevive a reinicios.
+
+Auditoria: todo acesso a dado de paciente é registrado em logs/audit.log
+           com patient_id pseudonimizado e fingerprint do token.
 
 Endpoints:
   POST /api/predict             — score de risco (sem persistir estado)
@@ -30,9 +38,12 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from . import audit
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +66,7 @@ from .inference_engine import InferenceEngine  # noqa: E402
 _CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
 _OUTPUT_DIR = Path(os.getenv("FL_CLINICALPATH_OUTPUT", "data/clinicalpath_output"))
 _CORS_ORIGINS = os.getenv("FL_CORS_ORIGINS", "*").split(",")
-_API_KEY = os.getenv("FL_API_KEY", "")  # vazio = sem autenticação (dev)
+_AUTH_REQUIRED = os.getenv("FL_AUTH_REQUIRED", "true").lower() not in ("false", "0", "no")
 
 # ---------------------------------------------------------------------------
 # Estado global
@@ -81,16 +92,29 @@ def _get_engine() -> InferenceEngine:
 
 
 # ---------------------------------------------------------------------------
-# Autenticação
+# Autenticação + fingerprinting (LGPD Art. 37)
 # ---------------------------------------------------------------------------
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+_bearer_header = HTTPBearer(auto_error=False)
 
 
-async def _require_auth(api_key: str = Security(_api_key_header)) -> None:
-    if not _API_KEY:
-        return  # FL_API_KEY não configurado → modo desenvolvimento, sem auth
-    if api_key != _API_KEY:
-        raise HTTPException(status_code=403, detail="X-API-Key inválida ou ausente")
+async def _get_token_fingerprint(
+    api_key: Optional[str] = Security(_api_key_header),
+    bearer: Optional[HTTPAuthorizationCredentials] = Security(_bearer_header),
+) -> str:
+    """
+    Extrai e valida presença de token; retorna fingerprint SHA-256 (12 hex chars).
+
+    Aceita X-API-Key ou Authorization: Bearer <token>.
+    Não valida o conteúdo do token — isso é responsabilidade do IAM upstream.
+    FL_AUTH_REQUIRED=false desativa a exigência (modo dev/testes).
+    """
+    token = api_key or (bearer.credentials if bearer else None)
+    if _AUTH_REQUIRED and not token:
+        raise HTTPException(status_code=403, detail="Token de autorização ausente")
+    if not token:
+        return "dev-mode"
+    return audit.token_fingerprint(token)
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +229,7 @@ def _to_record(e: ExamInput) -> ExamRecord:
     )
 
 
-async def _run_ingest(request: IngestRequest) -> IngestResponse:
+async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
     records = [_to_record(e) for e in request.exams]
     engine = _get_engine()
     risk_score = engine.predict(records)
@@ -252,11 +276,18 @@ async def _run_ingest(request: IngestRequest) -> IngestResponse:
     logger.info(
         "exam_ingested",
         extra={
-            "patient_id": request.patient_id,
+            "patient_id_hash": audit.pseudonymize(request.patient_id),
             "exam_count": len(records),
             "risk_score": round(risk_score, 4),
             "export_path": str(export_path),
         },
+    )
+    audit.log_access(
+        "ingest",
+        token_fp=token_fp,
+        patient_id=request.patient_id,
+        exam_count=len(records),
+        risk_score=round(risk_score, 4),
     )
     return IngestResponse(
         patient_id=request.patient_id,
@@ -277,14 +308,17 @@ async def dashboard():
     return {"message": "MOSAIC-FL API — painel web não encontrado em static/index.html"}
 
 
-@app.post("/api/predict", response_model=PredictResponse,
-          dependencies=[Depends(_require_auth)])
-async def predict(body: PredictRequest):
+@app.post("/api/predict", response_model=PredictResponse)
+async def predict(
+    body: PredictRequest,
+    fingerprint: str = Depends(_get_token_fingerprint),
+):
     """Score de risco pontual — não persiste estado, não exporta arquivos."""
     records = [_to_record(e) for e in body.exams]
     if not records:
         raise HTTPException(status_code=422, detail="exams não pode ser vazio")
     risk_score = _get_engine().predict(records)
+    audit.log_access("predict", token_fp=fingerprint, patient_id=body.patient_id)
     return PredictResponse(
         patient_id=body.patient_id,
         risk_score=round(risk_score, 4),
@@ -292,18 +326,20 @@ async def predict(body: PredictRequest):
     )
 
 
-@app.post("/api/exams/ingest", response_model=IngestResponse,
-          dependencies=[Depends(_require_auth)])
-async def ingest_exams(body: IngestRequest):
+@app.post("/api/exams/ingest", response_model=IngestResponse)
+async def ingest_exams(
+    body: IngestRequest,
+    fingerprint: str = Depends(_get_token_fingerprint),
+):
     """Ingere exames, gera score e exporta arquivos ClinicalPath."""
     if not body.exams:
         raise HTTPException(status_code=422, detail="exams não pode ser vazio")
-    return await _run_ingest(body)
+    return await _run_ingest(body, token_fp=fingerprint)
 
 
-@app.get("/api/patients", response_model=list[PatientSummary],
-         dependencies=[Depends(_require_auth)])
-async def list_patients():
+@app.get("/api/patients", response_model=list[PatientSummary])
+async def list_patients(fingerprint: str = Depends(_get_token_fingerprint)):
+    audit.log_access("patient_list", token_fp=fingerprint)
     rows = _db.list_patients()
     return [
         PatientSummary(
@@ -317,9 +353,12 @@ async def list_patients():
     ]
 
 
-@app.get("/api/patients/{patient_id}", response_model=PatientDetail,
-         dependencies=[Depends(_require_auth)])
-async def get_patient(patient_id: str):
+@app.get("/api/patients/{patient_id}", response_model=PatientDetail)
+async def get_patient(
+    patient_id: str,
+    fingerprint: str = Depends(_get_token_fingerprint),
+):
+    audit.log_access("patient_read", token_fp=fingerprint, patient_id=patient_id)
     if not _db.patient_exists(patient_id):
         raise HTTPException(status_code=404, detail=f"paciente {patient_id!r} não encontrado")
 
@@ -357,8 +396,8 @@ async def fl_status():
     )
 
 
-@app.post("/api/fl/reload", dependencies=[Depends(_require_auth)])
-async def reload_model():
+@app.post("/api/fl/reload")
+async def reload_model(fingerprint: str = Depends(_get_token_fingerprint)):
     """Força recarga do checkpoint mais recente (chamado automaticamente após round FL)."""
     global _engine
     ckpt = _latest_checkpoint()
@@ -366,4 +405,5 @@ async def reload_model():
         raise HTTPException(status_code=404, detail="nenhum checkpoint disponível")
     _engine = InferenceEngine(checkpoint_path=ckpt)
     logger.info("model_reloaded", extra={"checkpoint": str(ckpt)})
+    audit.log_access("model_reload", token_fp=fingerprint, checkpoint=str(ckpt))
     return {"reloaded": True, "checkpoint": str(ckpt)}
