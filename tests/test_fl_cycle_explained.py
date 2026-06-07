@@ -56,8 +56,8 @@ from mosaicfl.core.config import (
     MAX_SEQ_LEN, NUM_CLASSES, NUM_HEADS, NUM_LAYERS,
     PROXIMAL_MU, VOCAB_SIZE,
 )
-from mosaicfl.core.model_v2 import SimplifiedBEHRT
-from mosaicfl.core.client_v2 import FedProxClient
+from mosaicfl.core.model import SimplifiedBEHRT
+from mosaicfl.core.client import FedProxClient
 from mosaicfl.core.federated import weighted_average
 from mosaicfl.core.convergence import ConvergenceTracker
 from infrastructure.mosaicfl_scheduler.schedule_state import SchedulerState

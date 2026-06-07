@@ -19,7 +19,7 @@ import flwr as fl
 import torch
 from torch.utils.data import DataLoader, random_split
 
-from mosaicfl.core.client_v2 import FedProxClient
+from mosaicfl.core.client import FedProxClient
 from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
 
 from .datasource import DataSourceFactory
@@ -104,12 +104,7 @@ class ProductionClient:
         source_type = self.data_source or os.getenv("FL_DATA_SOURCE", "simulated")
         logger.info("Carregando dados locais (fonte=%s)...", source_type)
 
-        try:
-            source = DataSourceFactory.create(source_type)
-        except Exception as e:
-            logger.error("Falha ao criar fonte '%s': %s", source_type, e)
-            logger.info("Fallback para dados simulados.")
-            source = DataSourceFactory.create("simulated")
+        source = DataSourceFactory.create(source_type)
 
         meta = source.get_metadata()
         logger.info("Metadata da fonte: %s", meta)

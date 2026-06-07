@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.core.preprocess_v2 import split_by_institution
+from mosaicfl.core.preprocessor import split_by_institution
 
 
 @pytest.fixture

@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from mosaicfl.core.convergence import ConvergenceTracker
 from experiments.experiment_server import CustomFedProxStrategy
-from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.model import SimplifiedBEHRT
 
 
 class TestCustomFedProxStrategy:

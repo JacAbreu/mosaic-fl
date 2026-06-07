@@ -26,7 +26,7 @@ _MAX_SEQ_LEN = 128
 
 try:
     from mosaicfl.core.config import MODEL_CFG
-    from mosaicfl.core.model_v2 import SimplifiedBEHRT
+    from mosaicfl.core.model import SimplifiedBEHRT
     _MOSAICFL_AVAILABLE = True
     _VOCAB_SIZE = MODEL_CFG.vocab_size
     _MAX_SEQ_LEN = MODEL_CFG.max_seq_len

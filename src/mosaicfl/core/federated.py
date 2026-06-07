@@ -6,14 +6,14 @@ Funções de agregação ponderada usadas por ambos os adapters
 """
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import flwr as fl
 import torch
 from collections import OrderedDict
 
 
-def _weighted_average(metrics: List[Tuple[int, Dict]], key: str) -> Dict:
+def _weighted_average(metrics: List[Tuple[int, Dict[str, Any]]], key: str) -> Dict[str, float]:
     if not metrics:
         return {}
     total = sum(n for n, _ in metrics)
@@ -22,12 +22,12 @@ def _weighted_average(metrics: List[Tuple[int, Dict]], key: str) -> Dict:
     return {key: sum(n * m.get(key, 0.0) for n, m in metrics) / total}
 
 
-def weighted_average_accuracy(metrics: List[Tuple[int, Dict]]) -> Dict:
+def weighted_average_accuracy(metrics: List[Tuple[int, Dict[str, Any]]]) -> Dict[str, float]:
     """Média ponderada de accuracy — para evaluate_metrics_aggregation_fn."""
     return _weighted_average(metrics, "accuracy")
 
 
-def weighted_average_loss(metrics: List[Tuple[int, Dict]]) -> Dict:
+def weighted_average_loss(metrics: List[Tuple[int, Dict[str, Any]]]) -> Dict[str, float]:
     """Média ponderada de loss — para fit_metrics_aggregation_fn."""
     return _weighted_average(metrics, "loss")
 
@@ -36,14 +36,14 @@ def weighted_average_loss(metrics: List[Tuple[int, Dict]]) -> Dict:
 weighted_average = weighted_average_accuracy
 
 
-def get_evaluate_fn(test_loader) -> Callable:
+def get_evaluate_fn(test_loader: "torch.utils.data.DataLoader[Any]") -> Callable:
     """
     Retorna a função de avaliação global usada pelo servidor a cada rodada.
 
     Compatível com evaluate_fn do Flower — avalia o modelo global no
     test_loader fornecido e retorna (loss, {"accuracy": float}).
     """
-    from mosaicfl.core.model_v2 import SimplifiedBEHRT
+    from mosaicfl.core.model import SimplifiedBEHRT
     from mosaicfl.core.config import RUNTIME_CFG
 
     def evaluate(

@@ -45,12 +45,12 @@ from mosaicfl.core.config import (
     DEVICE, EMBED_DIM, LR, MAX_SEQ_LEN, NUM_CLASSES,
     NUM_HEADS, NUM_LAYERS, PROXIMAL_MU, VOCAB_SIZE,
 )
-from mosaicfl.core.model_v2 import BEHRTEncoderLayer, PositionalEncoding, SimplifiedBEHRT
+from mosaicfl.core.model import BEHRTEncoderLayer, PositionalEncoding, SimplifiedBEHRT
 from mosaicfl.core.convergence import ConvergenceTracker
 from mosaicfl.core.federated import get_evaluate_fn, weighted_average
 from experiments.experiment_server import start_server
-from mosaicfl.core.client_v2 import FedProxClient, create_client_fn
-from mosaicfl.core.preprocess_v2 import EHRPreprocessor, split_by_institution
+from mosaicfl.core.client import FedProxClient, create_client_fn
+from mosaicfl.core.preprocessor import EHRPreprocessor, split_by_institution
 
 # ── infrastructure ───────────────────────────────────────────────────────────
 from infrastructure.mosaicfl_scheduler.schedule_state import SchedulerState, DEFAULT_STATE_PATH
@@ -818,7 +818,7 @@ class TestConfigLoaderWithStrategy:
         from infrastructure.mosaicfl_server.config_loader import FileConfigLoader
         from infrastructure.mosaicfl_server.strategy import ProductionFedProxStrategy
         from infrastructure.mosaicfl_server.strategy import ConvergenceTracker as ProdTracker
-        from mosaicfl.core.model_v2 import SimplifiedBEHRT
+        from mosaicfl.core.model import SimplifiedBEHRT
         from unittest.mock import patch, MagicMock
 
         config_file = tmp_path / "runtime_config.json"

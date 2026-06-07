@@ -15,7 +15,7 @@ import json
 import logging
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
+from typing import Any, Dict, Optional, Type
 
 try:
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
@@ -43,8 +43,8 @@ class HealthServer:
         self._port = port
         self._lock = threading.Lock()
         self._state: dict[str, Any] = {"status": "starting"}
-        self._round_metrics: dict[int, dict] = {}
-        self._server: HTTPServer | None = None
+        self._round_metrics: Dict[int, Dict[str, Any]] = {}
+        self._server: Optional[HTTPServer] = None
 
     def set_status(self, status: str, **extra: Any) -> None:
         with self._lock:
@@ -54,7 +54,7 @@ class HealthServer:
         with self._lock:
             return dict(self._state)
 
-    def set_round_metrics(self, round_num: int, metrics: dict) -> None:
+    def set_round_metrics(self, round_num: int, metrics: Dict[str, Any]) -> None:
         """Armazena métricas de um round concluído e atualiza contadores Prometheus."""
         with self._lock:
             self._round_metrics[round_num] = metrics
@@ -68,7 +68,7 @@ class HealthServer:
             if conv is not None:
                 fl_convergence_round.set(conv)
 
-    def get_round_metrics(self, round_num: int) -> dict | None:
+    def get_round_metrics(self, round_num: int) -> Optional[Dict[str, Any]]:
         with self._lock:
             return self._round_metrics.get(round_num)
 
@@ -90,7 +90,7 @@ class HealthServer:
         if self._server:
             self._server.shutdown()
 
-    def _make_handler(self) -> type:
+    def _make_handler(self) -> Type[BaseHTTPRequestHandler]:
         health_server = self
 
         class _Handler(BaseHTTPRequestHandler):

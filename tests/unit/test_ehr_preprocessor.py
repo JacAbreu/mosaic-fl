@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.core.preprocess_v2 import EHRPreprocessor
+from mosaicfl.core.preprocessor import EHRPreprocessor
 
 
 @pytest.fixture

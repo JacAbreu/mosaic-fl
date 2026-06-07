@@ -100,7 +100,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         return super().configure_fit(server_round, parameters, client_manager)
 
     def _load_global_weights(self, parameters) -> None:
-        """Carrega pesos agregados no modelo global (compatível com client_v2)."""
+        """Carrega pesos agregados no modelo global (compatível com client)."""
         state_dict = OrderedDict(
             {
                 k: torch.tensor(v)

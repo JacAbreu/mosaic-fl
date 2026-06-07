@@ -2,20 +2,22 @@
 tls.py
 Utilitários de TLS para comunicação segura via gRPC (Flower).
 
+TLS é obrigatório. FL_TLS_CERT_DIR deve estar definido antes de iniciar
+qualquer servidor ou cliente. Ausência da variável lança EnvironmentError.
+
 Uso:
     # Servidor
     from infrastructure.shared.tls import get_server_certs
-    certs = get_server_certs()          # None se FL_TLS_CERT_DIR não definido
+    certs = get_server_certs()   # raises EnvironmentError se FL_TLS_CERT_DIR ausente
     fl.server.start_server(..., certificates=certs)
 
     # Cliente
     from infrastructure.shared.tls import get_client_root_cert
-    root_cert = get_client_root_cert()  # None se FL_TLS_CERT_DIR não definido
+    root_cert = get_client_root_cert()   # raises EnvironmentError se FL_TLS_CERT_DIR ausente
     fl.client.start_client(..., root_certificates=root_cert)
 
 Variáveis de ambiente:
-    FL_TLS_CERT_DIR  — diretório com os certificados (ver estrutura abaixo)
-                       se ausente, a conexão é insegura (adequado para rede local)
+    FL_TLS_CERT_DIR  — diretório com os certificados (obrigatório em produção)
 
 Estrutura esperada do diretório:
     $FL_TLS_CERT_DIR/
@@ -29,7 +31,6 @@ Gerar certificados de desenvolvimento:
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -82,28 +83,37 @@ def load_client_root_cert(cert_dir: Path) -> bytes:
     return ca
 
 
-def get_server_certs() -> Optional[tuple[bytes, bytes, bytes]]:
+def get_server_certs() -> tuple[bytes, bytes, bytes]:
     """Lê FL_TLS_CERT_DIR e carrega certificados do servidor.
 
-    Returns None se FL_TLS_CERT_DIR não estiver definido (modo inseguro).
-    Lança FileNotFoundError se a variável está definida mas os arquivos faltam.
+    Raises:
+        EnvironmentError: se FL_TLS_CERT_DIR não estiver definido.
+        FileNotFoundError: se algum arquivo de certificado estiver ausente.
     """
     cert_dir_str = os.getenv(_ENV_KEY)
     if not cert_dir_str:
-        logger.warning("tls_disabled: FL_TLS_CERT_DIR não definido — canal gRPC inseguro")
-        return None
+        raise EnvironmentError(
+            "FL_TLS_CERT_DIR não definido. "
+            "TLS é obrigatório. Configure o diretório de certificados ou execute "
+            "scripts/gen_certs.sh para gerar certificados de desenvolvimento."
+        )
     return load_server_certs(Path(cert_dir_str))
 
 
-def get_client_root_cert() -> Optional[bytes]:
+def get_client_root_cert() -> bytes:
     """Lê FL_TLS_CERT_DIR e carrega o certificado raiz para o cliente.
 
-    Returns None se FL_TLS_CERT_DIR não estiver definido (modo inseguro).
+    Raises:
+        EnvironmentError: se FL_TLS_CERT_DIR não estiver definido.
+        FileNotFoundError: se ca.crt estiver ausente.
     """
     cert_dir_str = os.getenv(_ENV_KEY)
     if not cert_dir_str:
-        logger.warning("tls_disabled: FL_TLS_CERT_DIR não definido — canal gRPC inseguro")
-        return None
+        raise EnvironmentError(
+            "FL_TLS_CERT_DIR não definido. "
+            "TLS é obrigatório. Configure o diretório de certificados ou execute "
+            "scripts/gen_certs.sh para gerar certificados de desenvolvimento."
+        )
     return load_client_root_cert(Path(cert_dir_str))
 
 

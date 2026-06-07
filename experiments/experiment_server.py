@@ -9,6 +9,7 @@ Diferenças em relação ao adapter de produção (infrastructure/mosaicfl_serve
   - History populado para análise pós-treino
   - Para treinamento via StopIteration ao convergir
 """
+import functools
 import logging
 import os
 from collections import OrderedDict
@@ -19,18 +20,21 @@ from flwr.server.strategy import FedProx
 
 import torch
 
-from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.model import SimplifiedBEHRT
 from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
 from mosaicfl.core.convergence import ConvergenceTracker
 from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_loss
 
 logger = logging.getLogger(__name__)
 
-_MODEL_SIZE_MB: float = round(
-    sum(v.numel() * v.element_size() for v in SimplifiedBEHRT(use_cls_token=True).state_dict().values())
-    / (1024 ** 2),
-    3,
-)
+@functools.lru_cache(maxsize=None)
+def _model_size_mb() -> float:
+    """Tamanho do modelo em MB — calculado uma vez na primeira chamada."""
+    return round(
+        sum(v.numel() * v.element_size() for v in SimplifiedBEHRT(use_cls_token=True).state_dict().values())
+        / (1024 ** 2),
+        3,
+    )
 
 
 class CustomFedProxStrategy(FedProx):
@@ -86,7 +90,7 @@ class CustomFedProxStrategy(FedProx):
 
             self.history["rounds"].append(server_round)
             self.history["accuracy"].append(accuracy)
-            self.history["communication_mb"].append(round(len(results) * _MODEL_SIZE_MB * 2, 3))
+            self.history["communication_mb"].append(round(len(results) * _model_size_mb() * 2, 3))
 
             if self.tracker.check(accuracy):
                 logger.info(

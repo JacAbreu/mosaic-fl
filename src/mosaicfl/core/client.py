@@ -11,11 +11,11 @@ import torch
 import flwr as fl
 from torch.utils.data import DataLoader, TensorDataset
 from collections import OrderedDict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.model import SimplifiedBEHRT
 from .config import FED_CFG, RUNTIME_CFG
 
 
@@ -27,7 +27,7 @@ class FedProxClient(fl.client.NumPyClient):
         self.model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
         self.criterion = torch.nn.CrossEntropyLoss()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=FED_CFG.lr)
-        self.global_params = None  # para termo proximal
+        self.global_params: Optional[List[torch.Tensor]] = None
 
     def set_parameters(self, parameters: List[np.ndarray]) -> None:
         """
@@ -56,21 +56,24 @@ class FedProxClient(fl.client.NumPyClient):
         #return [p.detach().cpu().numpy() for p in self.model.parameters()]
         return [v.cpu().detach().numpy().copy() for v in self.model.state_dict().values()]
 
-    def _proximal_loss(self, loss: torch.Tensor) -> torch.Tensor:
-        """Adiciona termo proximal do FedProx."""
+    def _proximal_loss(self, loss: torch.Tensor, proximal_mu: float) -> torch.Tensor:
+        """Adiciona termo proximal do FedProx com mu recebido do servidor."""
         if self.global_params is None:
             return loss
         proximal_term = 0.0
         for local_w, global_w in zip(self.model.parameters(), self.global_params):
             proximal_term += torch.norm(local_w - global_w, p=2) ** 2
-        return loss + (FED_CFG.proximal_mu / 2) * proximal_term
+        return loss + (proximal_mu / 2) * proximal_term
 
     def fit(self, parameters: List[np.ndarray], config: Dict) -> Tuple[List[np.ndarray], int, Dict]:
+        local_epochs = int(config.get("local_epochs", FED_CFG.local_epochs))
+        proximal_mu = float(config.get("proximal_mu", FED_CFG.proximal_mu))
+
         self.set_parameters(parameters)
         self.model.train()
         epoch_losses = []
 
-        for epoch in range(FED_CFG.local_epochs):
+        for epoch in range(local_epochs):
             running_loss = 0.0
             total_samples = 0
             for batch_x, batch_y in self.train_loader:
@@ -79,7 +82,7 @@ class FedProxClient(fl.client.NumPyClient):
                     self.optimizer.zero_grad()
                     outputs = self.model(batch_x)
                     loss = self.criterion(outputs, batch_y)
-                    loss = self._proximal_loss(loss)
+                    loss = self._proximal_loss(loss, proximal_mu)
                     loss.backward()
                     self.optimizer.step()
                     # Normaliza pelo número real de amostras no batch
@@ -114,7 +117,7 @@ class FedProxClient(fl.client.NumPyClient):
 
 
 def create_client_fn(client_id: int, train_data: torch.Tensor, train_labels: torch.Tensor,
-                     val_data: torch.Tensor, val_labels: torch.Tensor):
+                     val_data: torch.Tensor, val_labels: torch.Tensor) -> FedProxClient:
     """Factory para criar clientes com seus respectivos DataLoaders."""
     train_dataset = TensorDataset(train_data, train_labels)
     val_dataset = TensorDataset(val_data, val_labels)

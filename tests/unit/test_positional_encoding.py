@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from mosaicfl.core.config import EMBED_DIM, MAX_SEQ_LEN
-from mosaicfl.core.model_v2 import PositionalEncoding
+from mosaicfl.core.model import PositionalEncoding
 
 
 class TestPositionalEncoding:

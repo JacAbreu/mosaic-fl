@@ -30,7 +30,7 @@ from flwr.common import (
 from torch.utils.data import DataLoader, TensorDataset
 
 from experiments.experiment_server import CustomFedProxStrategy
-from mosaicfl.core.client_v2 import FedProxClient
+from mosaicfl.core.client import FedProxClient
 from mosaicfl.core.convergence import ConvergenceTracker
 from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_loss
 

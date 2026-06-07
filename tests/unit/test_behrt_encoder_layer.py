@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from mosaicfl.core.config import EMBED_DIM, NUM_HEADS
-from mosaicfl.core.model_v2 import BEHRTEncoderLayer
+from mosaicfl.core.model import BEHRTEncoderLayer
 
 
 class TestBEHRTEncoderLayer:

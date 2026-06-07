@@ -19,7 +19,7 @@ import flwr as fl
 import torch
 
 from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
-from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.model import SimplifiedBEHRT
 from mosaicfl.core.federated import get_evaluate_fn, weighted_average_accuracy, weighted_average_loss
 
 from .config_loader import get_config_loader

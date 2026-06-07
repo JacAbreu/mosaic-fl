@@ -32,12 +32,12 @@ class TestFedProxClient:
 
     @pytest.fixture
     def client_v2(self, dummy_loader):
-        from mosaicfl.core.client_v2 import FedProxClient
+        from mosaicfl.core.client import FedProxClient
         return FedProxClient(0, dummy_loader, dummy_loader)
 
     @pytest.fixture(scope="class")
     def contract_client(self):
-        from mosaicfl.core.client_v2 import FedProxClient
+        from mosaicfl.core.client import FedProxClient
         x_tr = torch.randint(1, VOCAB_SIZE, (self.TRAIN_SIZE, 16))
         y_tr = torch.randint(0, NUM_CLASSES, (self.TRAIN_SIZE,))
         x_va = torch.randint(1, VOCAB_SIZE, (self.VAL_SIZE, 16))
@@ -83,7 +83,7 @@ class TestFedProxClient:
     def test_proximal_loss_no_global_params(self, client_v2):
         client_v2.global_params = None
         loss = torch.tensor(1.5)
-        assert torch.isclose(client_v2._proximal_loss(loss), loss)
+        assert torch.isclose(client_v2._proximal_loss(loss, proximal_mu=0.1), loss)
 
     def test_proximal_loss_with_global_params_increases(self, client_v2):
         params = client_v2.get_parameters({})
@@ -91,7 +91,7 @@ class TestFedProxClient:
         for p in client_v2.model.parameters():
             p.data += 1.0
         loss = torch.tensor(1.0)
-        result = client_v2._proximal_loss(loss)
+        result = client_v2._proximal_loss(loss, proximal_mu=0.1)
         assert result > loss
 
     def test_fit_returns_correct_structure(self, client_v2):
@@ -112,7 +112,7 @@ class TestFedProxClient:
         assert "client_id" in metrics
 
     def test_fit_does_not_crash_on_edge_case_batch(self):
-        from mosaicfl.core.client_v2 import FedProxClient
+        from mosaicfl.core.client import FedProxClient
         x = torch.randint(0, VOCAB_SIZE, (4, MAX_SEQ_LEN))
         y = torch.randint(0, NUM_CLASSES, (4,))
         loader = DataLoader(TensorDataset(x, y), batch_size=4)
@@ -122,7 +122,7 @@ class TestFedProxClient:
         assert isinstance(updated, list)
 
     def test_create_client_fn_factory(self):
-        from mosaicfl.core.client_v2 import create_client_fn, FedProxClient
+        from mosaicfl.core.client import create_client_fn, FedProxClient
         x = torch.randint(1, VOCAB_SIZE, (8, 16))
         y = torch.randint(0, NUM_CLASSES, (8,))
         client = create_client_fn(1, x, y, x, y)

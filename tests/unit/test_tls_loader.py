@@ -65,9 +65,10 @@ class TestLoadClientRootCert:
 
 class TestGetServerCerts:
 
-    def test_returns_none_when_env_not_set(self, monkeypatch):
+    def test_raises_when_env_not_set(self, monkeypatch):
         monkeypatch.delenv("FL_TLS_CERT_DIR", raising=False)
-        assert get_server_certs() is None
+        with pytest.raises(EnvironmentError, match="FL_TLS_CERT_DIR"):
+            get_server_certs()
 
     def test_returns_tuple_when_env_set(self, tmp_path, monkeypatch):
         _write_fake_certs(tmp_path)
@@ -87,9 +88,10 @@ class TestGetServerCerts:
 
 class TestGetClientRootCert:
 
-    def test_returns_none_when_env_not_set(self, monkeypatch):
+    def test_raises_when_env_not_set(self, monkeypatch):
         monkeypatch.delenv("FL_TLS_CERT_DIR", raising=False)
-        assert get_client_root_cert() is None
+        with pytest.raises(EnvironmentError, match="FL_TLS_CERT_DIR"):
+            get_client_root_cert()
 
     def test_returns_bytes_when_env_set(self, tmp_path, monkeypatch):
         _write_fake_certs(tmp_path)

@@ -50,7 +50,7 @@ class ChromaDBConfigLoader:
     Lê e escreve config de runtime na collection ChromaDB existente do projeto.
 
     Não exige infraestrutura adicional: usa o mesmo PersistentClient
-    já configurado em rag_system_v2.py (CHROMA_DB_PATH).
+    já configurado em rag.py (CHROMA_DB_PATH).
     """
 
     def __init__(self, db_path: str = _CHROMA_PATH) -> None:

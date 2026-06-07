@@ -15,7 +15,7 @@ class TestClinicalRAG:
     """
 
     def _make_rag(self):
-        from mosaicfl.core.rag_system_v2 import ClinicalRAG
+        from mosaicfl.core.rag import ClinicalRAG
 
         mock_collection = MagicMock()
         mock_chroma = MagicMock()
@@ -33,11 +33,11 @@ class TestClinicalRAG:
         mock_llm = MagicMock()
         mock_generator = MagicMock(return_value=[{"generated_text": "Diagnóstico provável: covid19."}])
 
-        with patch("mosaicfl.core.rag_system_v2.chromadb.PersistentClient", return_value=mock_chroma), \
-             patch("mosaicfl.core.rag_system_v2.SentenceTransformer", return_value=mock_embedder), \
-             patch("mosaicfl.core.rag_system_v2.AutoTokenizer.from_pretrained", return_value=mock_tokenizer), \
-             patch("mosaicfl.core.rag_system_v2.AutoModelForCausalLM.from_pretrained", return_value=mock_llm), \
-             patch("mosaicfl.core.rag_system_v2.pipeline", return_value=mock_generator):
+        with patch("mosaicfl.core.rag.chromadb.PersistentClient", return_value=mock_chroma), \
+             patch("mosaicfl.core.rag.SentenceTransformer", return_value=mock_embedder), \
+             patch("mosaicfl.core.rag.AutoTokenizer.from_pretrained", return_value=mock_tokenizer), \
+             patch("mosaicfl.core.rag.AutoModelForCausalLM.from_pretrained", return_value=mock_llm), \
+             patch("mosaicfl.core.rag.pipeline", return_value=mock_generator):
             rag = ClinicalRAG()
 
         rag.embedder = mock_embedder

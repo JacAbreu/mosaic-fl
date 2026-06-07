@@ -2,11 +2,11 @@
 # run_v2.py — Orquestrador dos experimentos do TCC (MOSAIC-FL).
 
 # Integra todas as correções:
-#   • Masked Mean Pooling (model_v2)
-#   • Parâmetros treináveis apenas (client_v2)
+#   • Masked Mean Pooling (model)
+#   • Parâmetros treináveis apenas (client)
 #   • ConvergenceTracker funcional (server_v2)
-#   • Type-safe RAG com prompt em inglês (rag_system_v2)
-#   • Preservação de pontuação médica (preprocess_v2)
+#   • Type-safe RAG com prompt em inglês (rag)
+#   • Preservação de pontuação médica (preprocessor)
 
 # Uso:
 #     source .venv/bin/activate
@@ -400,12 +400,12 @@ import flwr as fl
 # ─── Imports do projeto — v2 ───────────────────────────────────────────────
 from mosaicfl.core.config import *
 from mosaicfl.core.data_loader import load_clinical_dataset, diagnose_dataset, load_with_fallback
-from mosaicfl.core.preprocess_v2 import EHRPreprocessor, split_by_institution
-from mosaicfl.core.model_v2 import SimplifiedBEHRT
-from mosaicfl.core.client_v2 import FedProxClient
+from mosaicfl.core.preprocessor import EHRPreprocessor, split_by_institution
+from mosaicfl.core.model import SimplifiedBEHRT
+from mosaicfl.core.client import FedProxClient
 from experiments.experiment_server import start_server
 from mosaicfl.core.convergence import ConvergenceTracker
-from mosaicfl.core.rag_system_v2 import ClinicalRAG
+from mosaicfl.core.rag import ClinicalRAG
 from mosaicfl.core.interpretability import BEHRTPatternExtractor
 
 
