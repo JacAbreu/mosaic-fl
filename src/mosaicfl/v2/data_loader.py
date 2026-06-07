@@ -303,10 +303,9 @@ class DatabaseDataSource(DataSourceStrategy):
         if not self.connection_string:
             return False
         try:
-            self._get_engine()
-            # Tenta conectar
+            engine = self._get_engine()
             from sqlalchemy import text
-            with self._engine.connect() as conn:
+            with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             return True
         except Exception as e:

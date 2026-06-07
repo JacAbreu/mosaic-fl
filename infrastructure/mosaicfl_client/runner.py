@@ -158,9 +158,13 @@ class ProductionClient:
                 flower_client = self._build_flower_client()
                 logger.info("Conectando ao servidor %s...", self.server_address)
                 _health.set_status("connecting", client_id=self.client_id, server=self.server_address)
+                from infrastructure.tls import get_client_root_cert, tls_enabled
+                root_cert = get_client_root_cert()
+                logger.info("client_tls", extra={"enabled": tls_enabled()})
                 fl.client.start_client(
                     server_address=self.server_address,
                     client=flower_client,
+                    root_certificates=root_cert,
                 )
                 _health.set_status("reconnecting", client_id=self.client_id, server=self.server_address)
                 logger.info("Sessão concluída. Reconectando em %ss...", RECONNECT_DELAY)
@@ -194,12 +198,19 @@ def main() -> None:
         help="Fonte de dados (default: FL_DATA_SOURCE ou simulated)",
     )
     parser.add_argument("--device", default=str(RUNTIME_CFG.device), help="Device PyTorch (informativo)")
+    parser.add_argument(
+        "--tls-cert-dir",
+        default=None,
+        help="Diretório com ca.crt (omitir = sem TLS)",
+    )
     args = parser.parse_args()
 
     setup_logging(args.client_id)
     os.environ["FL_CLIENT_ID"] = args.client_id
     if args.data_source:
         os.environ["FL_DATA_SOURCE"] = args.data_source
+    if args.tls_cert_dir:
+        os.environ["FL_TLS_CERT_DIR"] = args.tls_cert_dir
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     os.environ["FL_LOG_DIR"] = str(LOG_DIR)

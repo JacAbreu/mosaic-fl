@@ -281,3 +281,13 @@ htmlcov/
 # =============================================================================
 dist/
 build/
+
+# =============================================================================
+# Certificados TLS (nunca commitar chaves privadas)
+# =============================================================================
+certs/
+*.key
+*.pem
+# .crt é seguro para distribuir, mas excluímos por precaução
+# Remova a linha abaixo se quiser commitar ca.crt para facilitar distribuição
+*.crt

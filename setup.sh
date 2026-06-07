@@ -32,9 +32,9 @@ echo "[3/4] Ativando ambiente virtual..."
 source $VENV_DIR/bin/activate
 
 # Instala dependências
-echo "[4/4] Instalando Mosaic-FL e dependências..."
+echo "[4/4] Instalando Mosaic-FL e dependências (incluindo dev)..."
 pip install --upgrade pip
-pip install -e .
+pip install -e ".[dev]"
 
 echo ""
 echo "========================================"

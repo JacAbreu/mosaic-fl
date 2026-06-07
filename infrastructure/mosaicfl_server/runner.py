@@ -101,6 +101,11 @@ class FederatedServer:
         if runtime_config:
             logger.debug("Round %s config: %s", round_num, runtime_config)
 
+    def _on_round_complete(self, round_num: int, metrics: dict) -> None:
+        """Callback chamado pela strategy após aggregate_evaluate — publica no HealthServer."""
+        _health.set_round_metrics(round_num, metrics)
+        logger.debug("round_metrics_published", extra={"round": round_num})
+
     def start(self):
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -121,6 +126,7 @@ class FederatedServer:
             global_model=self.global_model,
             config_loader=config_loader,
             on_round_start=self._on_round_start,
+            on_round_complete=self._on_round_complete,
             proximal_mu=self.proximal_mu,
             fraction_fit=1.0,
             fraction_evaluate=1.0,
@@ -147,11 +153,19 @@ class FederatedServer:
 
         write_health_status("starting")
 
+        from infrastructure.tls import get_server_certs, tls_enabled
+        certs = get_server_certs()
+        logger.info(
+            "server_tls",
+            extra={"enabled": tls_enabled()},
+        )
+
         try:
             fl.server.start_server(
                 server_address=self.address,
                 config=fl.server.ServerConfig(num_rounds=self.num_rounds),
                 strategy=strategy,
+                certificates=certs,
             )
         except Exception as e:
             logger.error("server_error", extra={"error": str(e)})
@@ -184,6 +198,11 @@ def main() -> None:
         default=str(CHECKPOINT_DIR),
         help="Diretório de checkpoints",
     )
+    parser.add_argument(
+        "--tls-cert-dir",
+        default=None,
+        help="Diretório com ca.crt, server.crt e server.key (omitir = sem TLS)",
+    )
     args = parser.parse_args()
 
     checkpoint_dir = Path(args.checkpoint_dir)
@@ -197,6 +216,9 @@ def main() -> None:
         address = f"0.0.0.0:{args.port}"
     else:
         address = args.address
+
+    if args.tls_cert_dir:
+        os.environ["FL_TLS_CERT_DIR"] = args.tls_cert_dir
 
     FederatedServer(
         address=address,

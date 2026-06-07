@@ -68,6 +68,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         global_model: torch.nn.Module,
         config_loader: Optional[ConfigLoader] = None,
         on_round_start: Optional[Callable[[int, Dict], None]] = None,
+        on_round_complete: Optional[Callable[[int, Dict], None]] = None,
         *args,
         **kwargs,
     ):
@@ -77,6 +78,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         self.global_model = global_model
         self.config_loader: ConfigLoader = config_loader or get_config_loader()
         self.on_round_start = on_round_start
+        self.on_round_complete = on_round_complete
         self.tracker = ConvergenceTracker()
         self.round_counter = 0
         self.should_stop = False
@@ -159,23 +161,30 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         self.tracker.check(accuracy)
         self.round_counter = server_round
 
+        round_metrics = {
+            "round": server_round,
+            "loss": aggregated_loss,
+            "accuracy": accuracy,
+            "timestamp": datetime.now().isoformat(),
+            "converged": self.tracker.converged_round is not None,
+            "convergence_round": self.tracker.converged_round,
+        }
+
         metrics_file = LOG_DIR / f"round_{server_round}_metrics.json"
         try:
             with open(metrics_file, "w", encoding="utf-8") as f:
-                json.dump(
-                    {
-                        "round": server_round,
-                        "loss": aggregated_loss,
-                        "accuracy": accuracy,
-                        "timestamp": datetime.now().isoformat(),
-                        "converged": self.tracker.converged_round is not None,
-                        "convergence_round": self.tracker.converged_round,
-                    },
-                    f,
-                    indent=2,
-                )
+                json.dump(round_metrics, f, indent=2)
         except Exception as e:
             logger.warning("metrics_write_error", extra={"round": server_round, "error": str(e)})
+
+        if self.on_round_complete is not None:
+            try:
+                self.on_round_complete(server_round, round_metrics)
+            except Exception as e:
+                logger.warning(
+                    "round_complete_callback_error",
+                    extra={"round": server_round, "error": str(e)},
+                )
 
         if self.tracker.converged_round is not None:
             self.should_stop = True

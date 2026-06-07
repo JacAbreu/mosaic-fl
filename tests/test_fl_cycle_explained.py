@@ -96,8 +96,9 @@ def _fedavg_params(client_results):
 
 
 def _make_scheduler(state, checker, dispatcher):
-    """FederatedScheduler com dependências mockadas e TCP desabilitado."""
+    """FederatedScheduler com dependências mockadas e TCP/SQLite desabilitados."""
     with patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerState") as MS, \
+         patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerStateStore"), \
          patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.ClientAvailabilityChecker",
                return_value=checker), \
          patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.RoundDispatcher",
@@ -106,6 +107,7 @@ def _make_scheduler(state, checker, dispatcher):
         sched = FederatedScheduler(interval_hours=1, min_clients=3, max_rounds=20)
         sched.state = state
     sched._check_server_connectivity = MagicMock(return_value=True)
+    sched._store = MagicMock()
     return sched
 
 
@@ -140,7 +142,7 @@ class TestSchedulerDispatchesFLRound:
         checker = MagicMock()
         checker.check_via_server.return_value = (3, ["hosp_a", "hosp_b", "hosp_c"])
         dispatcher = MagicMock()
-        dispatcher.dispatch_round.return_value = True
+        dispatcher.dispatch_round.return_value = 0.75
         dispatcher.check_convergence.return_value = False
         sched = _make_scheduler(state, checker, dispatcher)
 
@@ -174,7 +176,7 @@ class TestSchedulerDispatchesFLRound:
         checker = MagicMock()
         checker.check_via_server.return_value = (3, ["h0", "h1", "h2"])
         dispatcher = MagicMock()
-        dispatcher.dispatch_round.return_value = True
+        dispatcher.dispatch_round.return_value = 0.75
         dispatcher.check_convergence.return_value = True
         sched = _make_scheduler(state, checker, dispatcher)
         sched._stop_scheduler = MagicMock()

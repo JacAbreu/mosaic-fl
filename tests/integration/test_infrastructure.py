@@ -262,82 +262,58 @@ class TestRoundDispatcher:
         'infrastructure.mosaicfl_scheduler.schedule_state.SchedulerState'
     """
 
-    def _make_dispatcher(self, state=None):
-        s = state or SchedulerState()
-        with patch("infrastructure.mosaicfl_scheduler.schedule_state.SchedulerState") as MockState:
-            MockState.load.return_value = s
-            d = RoundDispatcher(server_address="localhost:8080")
-        d.state = s  # sobrescreve estado no caso de mock imperfeito
-        return d, s
+    def _make_dispatcher(self):
+        return RoundDispatcher(server_address="localhost:8080")
 
     def test_check_convergence_insufficient_history(self):
-        d, s = self._make_dispatcher()
-        s.accuracy_history = [0.70, 0.71]
-        assert not d.check_convergence()
+        d = self._make_dispatcher()
+        assert not d.check_convergence([0.70, 0.71])
 
     def test_check_convergence_stable_accuracies(self):
-        d, s = self._make_dispatcher()
-        s.accuracy_history = [0.800, 0.8001, 0.8002, 0.8000]
-        s.total_rounds_completed = 4
-        assert d.check_convergence() is True
-        assert s.converged is True
-        assert s.convergence_round == 4
+        d = self._make_dispatcher()
+        assert d.check_convergence([0.800, 0.8001, 0.8002, 0.8000]) is True
 
     def test_check_convergence_unstable(self):
-        d, s = self._make_dispatcher()
-        s.accuracy_history = [0.60, 0.70, 0.65, 0.80]
-        assert not d.check_convergence()
-        assert s.converged is False
+        d = self._make_dispatcher()
+        assert not d.check_convergence([0.60, 0.70, 0.65, 0.80])
 
     def test_convergence_round_not_overwritten(self):
-        d, s = self._make_dispatcher()
-        s.accuracy_history = [0.800, 0.8001, 0.8002, 0.8000]
-        s.total_rounds_completed = 4
-        s.converged = True
-        s.convergence_round = 4
-        d.check_convergence()
-        assert s.convergence_round == 4
+        """check_convergence é puro — não tem efeito colateral no estado externo."""
+        d = self._make_dispatcher()
+        history = [0.800, 0.8001, 0.8002, 0.8000]
+        assert d.check_convergence(history) is True
+        # chamar novamente com o mesmo histórico ainda retorna True
+        assert d.check_convergence(history) is True
 
-    def test_dispatch_round_returns_true_on_metrics(self):
-        d, s = self._make_dispatcher()
+    def test_dispatch_round_returns_accuracy_on_metrics(self):
+        """dispatch_round retorna o float de accuracy quando métricas disponíveis."""
+        d = self._make_dispatcher()
         metrics = {"round": 1, "accuracy": 0.75, "loss": 0.42}
         d._poll_round_metrics = MagicMock(return_value=metrics)
         result = d.dispatch_round(1, ["h0", "h1", "h2"])
-        assert result is True
-        assert s.accuracy_history == [0.75]
-        assert s.total_rounds_completed == 1
+        assert result == 0.75
 
-    def test_dispatch_round_returns_false_on_no_metrics(self):
-        d, s = self._make_dispatcher()
+    def test_dispatch_round_returns_none_on_no_metrics(self):
+        """dispatch_round retorna None quando métricas não chegam."""
+        d = self._make_dispatcher()
         d._poll_round_metrics = MagicMock(return_value=None)
-        assert d.dispatch_round(1, ["h0"]) is False
+        assert d.dispatch_round(1, ["h0"]) is None
 
-    def test_dispatch_round_saves_state_on_success(self):
-        d, s = self._make_dispatcher()
-        metrics = {"round": 2, "accuracy": 0.80, "loss": 0.30}
-        d._poll_round_metrics = MagicMock(return_value=metrics)
-        s.save = MagicMock()
-        d.dispatch_round(2, ["h0", "h1"])
-        s.save.assert_called_once()
-
-    def test_dispatch_round_does_not_save_on_failure(self):
-        d, s = self._make_dispatcher()
-        d._poll_round_metrics = MagicMock(return_value=None)
-        s.save = MagicMock()
-        d.dispatch_round(1, ["h0"])
-        s.save.assert_not_called()
+    def test_dispatch_round_returns_none_when_accuracy_missing(self):
+        """dispatch_round retorna None quando accuracy não está nas métricas."""
+        d = self._make_dispatcher()
+        d._poll_round_metrics = MagicMock(return_value={"round": 1, "loss": 0.5})
+        assert d.dispatch_round(1, ["h0"]) is None
 
     def test_poll_round_metrics_returns_callable(self):
         """_poll_round_metrics deve existir e ser callable."""
-        d, _ = self._make_dispatcher()
+        d = self._make_dispatcher()
         assert callable(d._poll_round_metrics)
 
     def test_check_convergence_needs_patience_plus_one_values(self):
-        d, s = self._make_dispatcher()
-        s.accuracy_history = [0.8] * CONVERGENCE_PATIENCE
-        assert not d.check_convergence()
-        s.accuracy_history = [0.8] * (CONVERGENCE_PATIENCE + 1)
-        assert d.check_convergence()
+        d = self._make_dispatcher()
+        assert not d.check_convergence([0.8] * CONVERGENCE_PATIENCE)
+        assert d.check_convergence([0.8] * (CONVERGENCE_PATIENCE + 1))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -367,11 +343,12 @@ class TestFederatedScheduler:
             [f"h{i}" for i in range(num_available)],
         )
         dispatcher = MagicMock()
-        dispatcher.dispatch_round.return_value = dispatch_success
+        dispatcher.dispatch_round.return_value = 0.75 if dispatch_success else None
         dispatcher.check_convergence.return_value = converge_after_dispatch
         s = state or SchedulerState()
 
         with patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerState") as MockState, \
+             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerStateStore"), \
              patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.ClientAvailabilityChecker",
                    return_value=checker), \
              patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.RoundDispatcher",
@@ -380,8 +357,8 @@ class TestFederatedScheduler:
             scheduler = FederatedScheduler(interval_hours=1, min_clients=3, max_rounds=20)
             scheduler.state = s
 
-        # Mock de conectividade — sem conexão TCP real nos testes
         scheduler._check_server_connectivity = MagicMock(return_value=True)
+        scheduler._store = MagicMock()
         return scheduler, checker, dispatcher, s
 
     def test_job_round_skips_when_converged(self):
@@ -609,6 +586,8 @@ class TestProductionFedProxStrategy:
             strategy.tracker = ConvergenceTracker()
             strategy.round_counter = 0
             strategy.should_stop = False
+            strategy.on_round_complete = None
+            strategy.on_round_start = None
             strategy.CHECKPOINT_DIR = tmp_path / "checkpoints"
             strategy.LOG_DIR = tmp_path / "logs"
             strategy.CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
@@ -707,6 +686,7 @@ class TestSchedulerIntegration:
     def _scheduler_with_connectivity_mock(self, state, checker, dispatcher):
         """Helper: cria FederatedScheduler com mocks injetados e TCP desabilitado."""
         with patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerState") as MockState, \
+             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerStateStore"), \
              patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.ClientAvailabilityChecker",
                    return_value=checker), \
              patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.RoundDispatcher",
@@ -715,6 +695,7 @@ class TestSchedulerIntegration:
             scheduler = FederatedScheduler(interval_hours=1, min_clients=3, max_rounds=20)
             scheduler.state = state
         scheduler._check_server_connectivity = MagicMock(return_value=True)
+        scheduler._store = MagicMock()
         return scheduler
 
     def test_state_survives_scheduler_restart(self, tmp_path):
@@ -777,9 +758,7 @@ class TestSchedulerIntegration:
         checker.check_via_server.return_value = (3, ["h0", "h1", "h2"])
 
         def mock_dispatch(round_num, clients):
-            state.accuracy_history.append(metrics["accuracy"])
-            state.total_rounds_completed = round_num
-            return True
+            return metrics["accuracy"]
 
         dispatcher = MagicMock()
         dispatcher.dispatch_round.side_effect = mock_dispatch
@@ -804,9 +783,7 @@ class TestSchedulerIntegration:
 
         def mock_dispatch(round_num, clients):
             called_rounds.append(round_num)
-            state.accuracy_history.append(0.70 + round_num * 0.01)
-            state.total_rounds_completed = round_num
-            return True
+            return 0.70 + round_num * 0.01
 
         checker = MagicMock()
         checker.check_via_server.return_value = (3, ["h0", "h1", "h2"])

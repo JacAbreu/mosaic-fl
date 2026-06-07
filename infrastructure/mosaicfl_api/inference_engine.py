@@ -33,6 +33,10 @@ try:
 except Exception:
     pass
 
+# Exportação pública — usada em testes e por consumidores externos
+VOCAB_SIZE = _VOCAB_SIZE
+MAX_SEQ_LEN = _MAX_SEQ_LEN
+
 
 def exam_name_to_token(name: str) -> int:
     """MD5 do nome do exame → índice em [1, _VOCAB_SIZE-2].

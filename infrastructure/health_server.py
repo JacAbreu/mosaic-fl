@@ -24,12 +24,13 @@ _UNHEALTHY = frozenset({"error", "stopped"})
 
 
 class HealthServer:
-    """Servidor HTTP mínimo que expõe /healthz para probes de Kubernetes e Docker."""
+    """Servidor HTTP mínimo que expõe /healthz e /metrics/round/{n} para os daemons."""
 
     def __init__(self, port: int = 8081) -> None:
         self._port = port
         self._lock = threading.Lock()
         self._state: dict[str, Any] = {"status": "starting"}
+        self._round_metrics: dict[int, dict] = {}
         self._server: HTTPServer | None = None
 
     def set_status(self, status: str, **extra: Any) -> None:
@@ -39,6 +40,16 @@ class HealthServer:
     def get_state(self) -> dict[str, Any]:
         with self._lock:
             return dict(self._state)
+
+    def set_round_metrics(self, round_num: int, metrics: dict) -> None:
+        """Armazena métricas de um round concluído (consultável via HTTP)."""
+        with self._lock:
+            self._round_metrics[round_num] = metrics
+        logger.debug("round_metrics_stored", extra={"round": round_num})
+
+    def get_round_metrics(self, round_num: int) -> dict | None:
+        with self._lock:
+            return self._round_metrics.get(round_num)
 
     def start(self) -> None:
         """Inicia o servidor HTTP em thread daemon. Silencia erros de porta ocupada."""
@@ -64,15 +75,27 @@ class HealthServer:
         class _Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
                 if self.path == "/livez":
-                    # Liveness: processo está vivo se consegue responder.
-                    # Nunca retorna 503 — se o processo morreu, a probe falha
-                    # por timeout, não por código de status.
                     self._send(200, {"status": "alive"})
                 elif self.path in ("/readyz", "/healthz"):
-                    # Readiness: reflete estado funcional do daemon.
                     state = health_server.get_state()
                     code = 503 if state.get("status") in _UNHEALTHY else 200
                     self._send(code, state)
+                elif self.path.startswith("/metrics/round/"):
+                    # GET /metrics/round/{n} — consultado pelo RoundDispatcher
+                    try:
+                        round_num = int(self.path.split("/")[-1])
+                        metrics = health_server.get_round_metrics(round_num)
+                        if metrics is not None:
+                            self._send(200, metrics)
+                        else:
+                            self._send(404, {"available": False, "round": round_num})
+                    except ValueError:
+                        self._send(400, {"error": "round must be an integer"})
+                elif self.path == "/metrics/rounds":
+                    # GET /metrics/rounds — histórico completo (útil para debug)
+                    with health_server._lock:
+                        all_metrics = dict(health_server._round_metrics)
+                    self._send(200, all_metrics)
                 else:
                     self.send_response(404)
                     self.end_headers()

@@ -9,7 +9,8 @@ via SchedulerStateStore.
 import json
 import logging
 import time
-from pathlib import Path
+import urllib.error
+import urllib.request
 from typing import List, Optional
 
 CONVERGENCE_THRESHOLD = 0.005
@@ -22,16 +23,24 @@ class RoundDispatcher:
     """
     Dispara uma rodada de treinamento federado e coleta métricas.
 
-    Nota: O Flower gerencia rounds quando clientes se conectam.
-    Este dispatcher atua como supervisor externo que monitora métricas
-    escritas pelo servidor em arquivo compartilhado.
+    Consulta métricas via HTTP GET no HealthServer do servidor Flower
+    (endpoint /metrics/round/{n}), usando backoff exponencial até o
+    round completar ou o timeout ser atingido.
 
-    TODO produção: substituir _poll_round_metrics por chamada gRPC
-    ou polling de endpoint REST /metrics no servidor Flower.
+    O endereço de saúde é derivado automaticamente de server_address
+    (mesmo host, porta 8081), podendo ser sobrescrito por health_address.
     """
 
-    def __init__(self, server_address: str = "localhost:8080"):
+    def __init__(
+        self,
+        server_address: str = "localhost:8080",
+        health_address: Optional[str] = None,
+    ):
         self.server_address = server_address
+        if health_address is None:
+            host = server_address.split(":")[0]
+            health_address = f"http://{host}:8081"
+        self.health_address = health_address
 
     def dispatch_round(self, round_num: int, active_clients: List[str]) -> Optional[float]:
         """
@@ -60,21 +69,54 @@ class RoundDispatcher:
         return None
 
     def _poll_round_metrics(self, round_num: int, max_wait: int = 600) -> Optional[dict]:
-        """Polling por métricas da rodada em arquivo compartilhado."""
-        metrics_file = Path(f"logs/round_{round_num}_metrics.json")
+        """
+        Consulta métricas do round via HTTP GET com backoff exponencial.
 
-        for attempt in range(max_wait // 10):
-            if metrics_file.exists():
-                try:
-                    with open(metrics_file, "r", encoding="utf-8") as f:
-                        return json.load(f)
-                except Exception as e:
+        Faz GET {health_address}/metrics/round/{round_num}:
+          - 200 → métricas disponíveis, retorna o dict
+          - 404 → round ainda não concluído, aguarda e tenta de novo
+          - erro de conexão → servidor ainda subindo, aguarda e tenta de novo
+        """
+        url = f"{self.health_address}/metrics/round/{round_num}"
+        delay = 5
+        elapsed = 0
+
+        while elapsed < max_wait:
+            try:
+                with urllib.request.urlopen(url, timeout=10) as resp:
+                    if resp.status == 200:
+                        body = resp.read().decode("utf-8")
+                        metrics = json.loads(body)
+                        logger.debug(
+                            "metrics_fetched",
+                            extra={"round": round_num, "elapsed": elapsed},
+                        )
+                        return metrics
+            except urllib.error.HTTPError as exc:
+                if exc.code == 404:
                     logger.debug(
-                        "metrics_read_error",
-                        extra={"round": round_num, "attempt": attempt, "error": str(e)},
+                        "metrics_not_ready",
+                        extra={"round": round_num, "elapsed": elapsed, "next_check": delay},
                     )
-            time.sleep(10)
+                else:
+                    logger.warning(
+                        "metrics_http_error",
+                        extra={"round": round_num, "status": exc.code, "error": str(exc)},
+                    )
+            except Exception as exc:
+                logger.debug(
+                    "metrics_connection_error",
+                    extra={"round": round_num, "elapsed": elapsed, "error": str(exc)},
+                )
 
+            time.sleep(delay)
+            elapsed += delay
+            delay = min(delay * 2, 60)
+
+        logger.warning(
+            "metrics_timeout",
+            extra={"round": round_num, "max_wait": max_wait},
+        )
         return None
 
     def check_convergence(self, accuracy_history: List[float]) -> bool:

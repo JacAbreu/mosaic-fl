@@ -59,12 +59,13 @@ class ClinicalRAG:
         query_emb = self.embedder.encode([query_text]).tolist()
         results = self.collection.query(query_embeddings=query_emb, n_results=top_k)
         
+        docs = results['documents'][0]
         retrieved = []
-        for i in range(top_k):
+        for i in range(len(docs)):
             retrieved.append({
-                "texto": results['documents'][0][i],
+                "texto": docs[i],
                 "metadata": results['metadatas'][0][i],
-                "distancia": results['distances'][0][i]
+                "distancia": results['distances'][0][i],
             })
         return retrieved
 
