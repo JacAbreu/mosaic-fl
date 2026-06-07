@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from infrastructure.tls import (
+from infrastructure.shared.tls import (
     load_client_root_cert,
     load_server_certs,
     get_server_certs,

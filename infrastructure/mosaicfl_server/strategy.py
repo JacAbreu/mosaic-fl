@@ -14,8 +14,8 @@ from typing import Callable, Dict, List, Optional, Tuple
 import flwr as fl
 import torch
 
-from mosaicfl.v2.config import FED_CFG
-from mosaicfl.v2.server_v2 import weighted_average_accuracy, weighted_average_loss
+from mosaicfl.core.config import FED_CFG
+from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_loss
 from .config_loader import ConfigLoader, get_config_loader
 
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
@@ -24,34 +24,7 @@ LOG_DIR = Path(os.getenv("FL_LOG_DIR", "logs"))
 logger = logging.getLogger(__name__)
 
 
-class ConvergenceTracker:
-    """Rastreia convergência da acurácia global."""
-
-    def __init__(
-        self,
-        threshold: float = FED_CFG.convergence_threshold,
-        patience: int = FED_CFG.convergence_patience,
-    ):
-        self.threshold = threshold
-        self.patience = patience
-        self.history: List[float] = []
-        self.converged_round: Optional[int] = None
-
-    def check(self, accuracy: float) -> bool:
-        self.history.append(accuracy)
-        if len(self.history) < self.patience + 1:
-            return False
-        recent = self.history[-(self.patience + 1) :]
-        deltas = [abs(recent[i] - recent[i - 1]) for i in range(1, len(recent))]
-        converged = all(d < self.threshold for d in deltas)
-        if converged and self.converged_round is None:
-            self.converged_round = len(self.history)
-            logger.info("convergence_reached", extra={"convergence_round": self.converged_round})
-        return converged
-
-    def reset(self):
-        self.history.clear()
-        self.converged_round = None
+from mosaicfl.core.convergence import ConvergenceTracker  # noqa: F401 — re-exportado para adapters
 
 
 class ProductionFedProxStrategy(fl.server.strategy.FedProx):
@@ -79,7 +52,10 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         self.config_loader: ConfigLoader = config_loader or get_config_loader()
         self.on_round_start = on_round_start
         self.on_round_complete = on_round_complete
-        self.tracker = ConvergenceTracker()
+        self.tracker = ConvergenceTracker(
+            threshold=FED_CFG.convergence_threshold,
+            patience=FED_CFG.convergence_patience,
+        )
         self.round_counter = 0
         self.should_stop = False
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)

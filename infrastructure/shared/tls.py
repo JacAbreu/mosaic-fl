@@ -4,12 +4,12 @@ Utilitários de TLS para comunicação segura via gRPC (Flower).
 
 Uso:
     # Servidor
-    from infrastructure.tls import get_server_certs
+    from infrastructure.shared.tls import get_server_certs
     certs = get_server_certs()          # None se FL_TLS_CERT_DIR não definido
     fl.server.start_server(..., certificates=certs)
 
     # Cliente
-    from infrastructure.tls import get_client_root_cert
+    from infrastructure.shared.tls import get_client_root_cert
     root_cert = get_client_root_cert()  # None se FL_TLS_CERT_DIR não definido
     fl.client.start_client(..., root_certificates=root_cert)
 

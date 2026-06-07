@@ -7,15 +7,16 @@ from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.config import VOCAB_SIZE, NUM_CLASSES
-from mosaicfl.v2.server_v2 import ConvergenceTracker, start_server
+from mosaicfl.core.config import VOCAB_SIZE, NUM_CLASSES
+from mosaicfl.core.convergence import ConvergenceTracker
+from experiments.experiment_server import start_server
 
 
 class TestStartServer:
 
     @staticmethod
     def _start(**kwargs):
-        with patch("mosaicfl.v2.server_v2.fl.server.start_server"):
+        with patch("experiments.experiment_server.fl.server.start_server"):
             return start_server(**kwargs)
 
     def test_returns_three_values(self):

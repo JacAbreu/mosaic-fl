@@ -1,27 +1,31 @@
 """
-Servidor Flower com estratégia FedProx e criterio de parada antecipada (CustomFedProxStrategy).
+experiment_server.py — Adapter de servidor FL para experimentos locais.
 
-Agrega pesos dos clientes via FedAvg ponderado, rastreia convergencia da acuracia
-global e para automaticamente quando delta < threshold por patience rodadas consecutivas.
-Salva checkpoint a cada round e checkpoint final ao convergir.
+Não é destinado a deploy. Usa mosaicfl.core como domínio e Flower gRPC
+localmente para simular rounds federados durante a pesquisa do TCC.
+
+Diferenças em relação ao adapter de produção (infrastructure/mosaicfl_server/):
+  - Sem TLS, sem health server, sem ChromaDB
+  - History populado para análise pós-treino
+  - Para treinamento via StopIteration ao convergir
 """
 import logging
+import os
+from collections import OrderedDict
+from typing import Callable, Dict, List, Optional, Tuple
+
 import flwr as fl
+from flwr.server.strategy import FedProx
+
+import torch
+
+from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
+from mosaicfl.core.convergence import ConvergenceTracker
+from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_loss
 
 logger = logging.getLogger(__name__)
-from flwr.server.strategy import FedProx
-from typing import List, Tuple, Dict, Optional, Callable
-from collections import OrderedDict
-import numpy as np
-import torch
-import json
-import os
-from datetime import datetime
 
-from .model_v2 import SimplifiedBEHRT
-from .config import FED_CFG, RUNTIME_CFG
-
-# Tamanho real do state_dict (upload + download por cliente = × 2)
 _MODEL_SIZE_MB: float = round(
     sum(v.numel() * v.element_size() for v in SimplifiedBEHRT(use_cls_token=True).state_dict().values())
     / (1024 ** 2),
@@ -29,66 +33,23 @@ _MODEL_SIZE_MB: float = round(
 )
 
 
-class ConvergenceTracker:
-    def __init__(self, threshold: float = FED_CFG.convergence_threshold, patience: int = FED_CFG.convergence_patience):
-        self.threshold = threshold
-        self.patience = patience
-        self.history = []
-        self.stable_count = 0
-        self.converged_round = None
-
-    def check(self, accuracy: float) -> bool:
-        self.history.append(accuracy)
-        if len(self.history) < 2:
-            return False
-        delta = abs(self.history[-1] - self.history[-2])
-        if delta < self.threshold:
-            self.stable_count += 1
-        else:
-            self.stable_count = 0
-        if self.stable_count >= self.patience and self.converged_round is None:
-            self.converged_round = len(self.history)
-        return self.stable_count >= self.patience
-
-    def reset(self) -> None:
-        self.history.clear()
-        self.stable_count = 0
-        self.converged_round = None
-
-
-def _weighted_average(metrics: List[Tuple[int, Dict]], key: str) -> Dict:
-    if not metrics:
-        return {}
-    total = sum(n for n, _ in metrics)
-    if total == 0:
-        return {key: 0.0}
-    return {key: sum(n * m.get(key, 0.0) for n, m in metrics) / total}
-
-
-def weighted_average_accuracy(metrics: List[Tuple[int, Dict]]) -> Dict:
-    """Média ponderada de accuracy — para evaluate_metrics_aggregation_fn."""
-    return _weighted_average(metrics, "accuracy")
-
-
-def weighted_average_loss(metrics: List[Tuple[int, Dict]]) -> Dict:
-    """Média ponderada de loss — para fit_metrics_aggregation_fn."""
-    return _weighted_average(metrics, "loss")
-
-
-# Alias para compatibilidade com código existente
-weighted_average = weighted_average_accuracy
-
-
 class CustomFedProxStrategy(FedProx):
     """
-    Estratégia FedProx customizada com:
+    Estratégia FedProx customizada para experimentos:
       - ConvergenceTracker integrado (parada antecipada)
-      - Histórico de treinamento populado
+      - Histórico de treinamento populado para análise
       - Persistência de modelo global
     """
-    def __init__(self, tracker: ConvergenceTracker, history: Dict,
-                 save_dir: str = "checkpoints", on_converged: Optional[Callable] = None,
-                 *args, **kwargs):
+
+    def __init__(
+        self,
+        tracker: ConvergenceTracker,
+        history: Dict,
+        save_dir: str = "checkpoints",
+        on_converged: Optional[Callable] = None,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.tracker = tracker
         self.history = history
@@ -130,8 +91,12 @@ class CustomFedProxStrategy(FedProx):
             if self.tracker.check(accuracy):
                 logger.info(
                     "convergence_reached",
-                    extra={"round": server_round, "accuracy": accuracy,
-                           "threshold": self.tracker.threshold, "patience": self.tracker.patience},
+                    extra={
+                        "round": server_round,
+                        "accuracy": accuracy,
+                        "threshold": self.tracker.threshold,
+                        "patience": self.tracker.patience,
+                    },
                 )
                 if self.on_converged:
                     self.on_converged(server_round, accuracy, self.history)
@@ -153,46 +118,6 @@ class CustomFedProxStrategy(FedProx):
             logger.info("checkpoint_final_saved", extra={"path": final_path})
 
 
-def get_evaluate_fn(test_loader) -> Callable:
-    """
-    Retorna a função de avaliação global usada pelo servidor a cada rodada.
-    """
-    def evaluate(
-        server_round: int,
-        parameters: fl.common.NDArrays,
-        config: Dict,
-    ) -> Tuple[float, Dict]:
-        model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
-        params_dict = zip(model.state_dict().keys(), parameters)
-        state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
-        model.load_state_dict(state_dict, strict=False)
-        model.eval()
-
-        criterion = torch.nn.CrossEntropyLoss()
-        correct, total, loss_sum = 0, 0, 0.0
-
-        with torch.no_grad():
-            for batch_x, batch_y in test_loader:
-                batch_x, batch_y = batch_x.to(RUNTIME_CFG.device), batch_y.to(RUNTIME_CFG.device)
-                logits = model(batch_x)
-                loss = criterion(logits, batch_y)
-                loss_sum += loss.item() * batch_y.size(0)
-                _, predicted = torch.max(logits, dim=1)
-                total   += batch_y.size(0)
-                correct += (predicted == batch_y).sum().item()
-
-        avg_loss = loss_sum / total if total > 0 else 0.0
-        accuracy = correct / total if total > 0 else 0.0
-
-        print(
-            f"  [Servidor] Rodada {server_round:>3} | "
-            f"Loss global: {avg_loss:.4f} | Acurácia global: {accuracy:.4f}"
-        )
-        return avg_loss, {"accuracy": accuracy, "rodada": server_round}
-
-    return evaluate
-
-
 def start_server(
     num_rounds: int = FED_CFG.num_rounds,
     num_clients: int = FED_CFG.num_clients,
@@ -200,12 +125,16 @@ def start_server(
     on_converged: Optional[Callable] = None,
 ) -> Tuple["CustomFedProxStrategy", ConvergenceTracker, Dict]:
     """
-    Monta a estratégia FedProx com convergência integrada.
+    Monta a estratégia FedProx com convergência integrada e inicia servidor local.
 
     Se test_loader for fornecido, a avaliação global real é ativada.
     """
+    from mosaicfl.core.federated import get_evaluate_fn
     evaluate_fn = get_evaluate_fn(test_loader) if test_loader is not None else None
-    tracker = ConvergenceTracker()
+    tracker = ConvergenceTracker(
+        threshold=FED_CFG.convergence_threshold,
+        patience=FED_CFG.convergence_patience,
+    )
     history = {"rounds": [], "accuracy": [], "communication_mb": [], "last_checkpoint": None}
 
     strategy = CustomFedProxStrategy(
@@ -241,7 +170,3 @@ def start_server(
         print(f"\nTreinamento interrompido por convergência antecipada: {e}")
 
     return strategy, tracker, history
-
-
-if __name__ == "__main__":
-    strategy, tracker, history = start_server()

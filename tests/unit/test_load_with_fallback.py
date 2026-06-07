@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.data_loader import DataLoadError, load_with_fallback
+from mosaicfl.core.data_loader import DataLoadError, load_with_fallback
 
 
 class TestLoadWithFallback:
@@ -50,7 +50,7 @@ class TestLoadWithFallback:
 
     def test_sgbd_fails_gracefully_on_bad_url(self):
         with patch.dict("os.environ", {"MOSAICFL_DB_URL": "postgresql://invalid:5432/db"}):
-            with patch("mosaicfl.v2.data_loader.DatabaseDataSource.is_available",
+            with patch("mosaicfl.core.data_loader.DatabaseDataSource.is_available",
                        return_value=False):
                 df = load_with_fallback(allow_synthetic=True, n_synthetic_samples=10)
         assert df["_fonte"].iloc[0] == "sintetico"

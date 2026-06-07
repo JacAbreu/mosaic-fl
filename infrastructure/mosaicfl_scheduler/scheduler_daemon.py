@@ -155,7 +155,7 @@ class FederatedScheduler:
         logger.info(f"Clientes ativos: {active_clients}")
 
         try:
-            from infrastructure.metrics import fl_clients_active
+            from infrastructure.shared.metrics import fl_clients_active
             fl_clients_active.set(num_clients)
         except Exception:
             pass
@@ -282,7 +282,7 @@ class FederatedScheduler:
         self._job_round()
 
         try:
-            from infrastructure.metrics import push_metrics
+            from infrastructure.shared.metrics import push_metrics
             push_metrics(job="mosaicfl-scheduler")
         except Exception:
             pass

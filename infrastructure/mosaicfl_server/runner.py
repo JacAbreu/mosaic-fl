@@ -18,14 +18,14 @@ from typing import Optional
 import flwr as fl
 import torch
 
-from mosaicfl.v2.config import FED_CFG, RUNTIME_CFG
-from mosaicfl.v2.model_v2 import SimplifiedBEHRT
-from mosaicfl.v2.server_v2 import get_evaluate_fn, weighted_average_accuracy, weighted_average_loss
+from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
+from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.federated import get_evaluate_fn, weighted_average_accuracy, weighted_average_loss
 
 from .config_loader import get_config_loader
 from .strategy import ProductionFedProxStrategy
-from infrastructure.logging_setup import setup_logging as _setup_logging
-from infrastructure.health_server import HealthServer
+from infrastructure.shared.logging_setup import setup_logging as _setup_logging
+from infrastructure.shared.health_server import HealthServer
 
 SERVER_ADDRESS = os.getenv("FL_SERVER_ADDRESS", "0.0.0.0:8080")
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
@@ -153,7 +153,7 @@ class FederatedServer:
 
         write_health_status("starting")
 
-        from infrastructure.tls import get_server_certs, tls_enabled
+        from infrastructure.shared.tls import get_server_certs, tls_enabled
         certs = get_server_certs()
         logger.info(
             "server_tls",

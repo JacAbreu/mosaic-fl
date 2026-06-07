@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from infrastructure.logging_setup import setup_logging as _setup_logging
+from infrastructure.shared.logging_setup import setup_logging as _setup_logging
 
 logger = logging.getLogger(__name__)
 

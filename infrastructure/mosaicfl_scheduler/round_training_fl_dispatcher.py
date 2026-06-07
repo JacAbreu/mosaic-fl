@@ -13,8 +13,8 @@ import urllib.error
 import urllib.request
 from typing import List, Optional
 
-CONVERGENCE_THRESHOLD = 0.005
-CONVERGENCE_PATIENCE = 3
+from mosaicfl.core.convergence import ConvergenceTracker
+from mosaicfl.core.config import FED_CFG
 
 logger = logging.getLogger(__name__)
 
@@ -123,12 +123,14 @@ class RoundDispatcher:
         """
         Verifica se convergência foi atingida com base no histórico fornecido.
 
-        Args:
-            accuracy_history: histórico completo de accuracy, mantido pelo caller.
+        Usa o mesmo ConvergenceTracker canônico do core, replaying o histórico
+        completo a cada chamada (n <= max_rounds, sem impacto de performance).
         """
-        if len(accuracy_history) < CONVERGENCE_PATIENCE + 1:
-            return False
-
-        recent = accuracy_history[-(CONVERGENCE_PATIENCE + 1):]
-        deltas = [abs(recent[i] - recent[i - 1]) for i in range(1, len(recent))]
-        return all(d < CONVERGENCE_THRESHOLD for d in deltas)
+        tracker = ConvergenceTracker(
+            threshold=FED_CFG.convergence_threshold,
+            patience=FED_CFG.convergence_patience,
+        )
+        result = False
+        for acc in accuracy_history:
+            result = tracker.check(acc)
+        return result

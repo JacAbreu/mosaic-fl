@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
-from mosaicfl.v2.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.model_v2 import SimplifiedBEHRT
 from .config import FED_CFG, RUNTIME_CFG
 
 

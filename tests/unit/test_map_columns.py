@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.data_loader import _map_columns
+from mosaicfl.core.data_loader import _map_columns
 
 
 class TestMapColumns:

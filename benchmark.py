@@ -48,11 +48,11 @@ import matplotlib.pyplot as plt
 
 import flwr as fl
 
-from mosaicfl.v2.config import FED_CFG, MODEL_CFG
-from mosaicfl.v2.model_v2 import SimplifiedBEHRT
-from mosaicfl.v2.client_v2 import FedProxClient
-from mosaicfl.v2.server_v2 import weighted_average, get_evaluate_fn
-from mosaicfl.v2.preprocess_v2 import EHRPreprocessor, split_by_institution
+from mosaicfl.core.config import FED_CFG, MODEL_CFG
+from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.client_v2 import FedProxClient
+from mosaicfl.core.federated import weighted_average, get_evaluate_fn
+from mosaicfl.core.preprocess_v2 import EHRPreprocessor, split_by_institution
 
 logging.basicConfig(
     level=logging.INFO,

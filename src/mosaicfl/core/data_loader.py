@@ -27,7 +27,7 @@ Cadeia de fallback (load_with_fallback):
   5. DataLoadError                                → falha com diagnóstico completo
 
 Uso:
-    from mosaicfl.v2.data_loader import load_with_fallback
+    from mosaicfl.core.data_loader import load_with_fallback
 
     # Tenta tudo automaticamente
     df = load_with_fallback()
@@ -42,7 +42,7 @@ Uso:
     df = load_clinical_dataset(source_type="postgresql", connection_string="...")
 
 Para diagnóstico:
-    python -c "from mosaicfl.v2.data_loader import diagnose_connection; diagnose_connection()"
+    python -c "from mosaicfl.core.data_loader import diagnose_connection; diagnose_connection()"
 """
 import os
 import re

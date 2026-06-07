@@ -3,7 +3,7 @@ logging_setup.py
 Configuração centralizada de logging estruturado em JSON para MOSAIC-FL.
 
 Uso:
-    from infrastructure.logging_setup import setup_logging
+    from infrastructure.shared.logging_setup import setup_logging
     setup_logging()  # chame uma vez no entrypoint
 
 Variáveis de ambiente:

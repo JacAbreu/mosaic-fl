@@ -248,7 +248,7 @@
 
 #     # Salva histórico
 #     os.makedirs("experiments", exist_ok=True)
-#     hist_path = f"experiments/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+#     hist_path = f"experiments/data/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 #     with open(hist_path, "w", encoding="utf-8") as f:
 #         json.dump(history, f, indent=2, ensure_ascii=False)
 #     logger.info(f"Histórico salvo em: {hist_path}")
@@ -358,7 +358,7 @@ run_v2.py — Ponto de entrada da v2 (integração com dados reais).
 
 Requer o dataset da orientadora em data/ ou MOSAICFL_DB_URL configurado.
 Para diagnóstico do dataset antes de rodar:
-    python -c "from mosaicfl.v2.data_loader import diagnose_connection; diagnose_connection()"
+    python -c "from mosaicfl.core.data_loader import diagnose_connection; diagnose_connection()"
 
 run_v2_unified.py — Orquestrador MOSAIC-FL com modo Ray configurável.
 
@@ -398,14 +398,15 @@ from collections import OrderedDict
 import flwr as fl
 
 # ─── Imports do projeto — v2 ───────────────────────────────────────────────
-from mosaicfl.v2.config import *
-from mosaicfl.v2.data_loader import load_clinical_dataset, diagnose_dataset, load_with_fallback
-from mosaicfl.v2.preprocess_v2 import EHRPreprocessor, split_by_institution
-from mosaicfl.v2.model_v2 import SimplifiedBEHRT
-from mosaicfl.v2.client_v2 import FedProxClient
-from mosaicfl.v2.server_v2 import start_server, ConvergenceTracker
-from mosaicfl.v2.rag_system_v2 import ClinicalRAG
-from mosaicfl.v1.extract_patterns import BEHRTPatternExtractor
+from mosaicfl.core.config import *
+from mosaicfl.core.data_loader import load_clinical_dataset, diagnose_dataset, load_with_fallback
+from mosaicfl.core.preprocess_v2 import EHRPreprocessor, split_by_institution
+from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.client_v2 import FedProxClient
+from experiments.experiment_server import start_server
+from mosaicfl.core.convergence import ConvergenceTracker
+from mosaicfl.core.rag_system_v2 import ClinicalRAG
+from mosaicfl.core.interpretability import BEHRTPatternExtractor
 
 
 # Reprodutibilidade
@@ -414,8 +415,9 @@ np.random.seed(RANDOM_SEED)
 torch.manual_seed(RANDOM_SEED)
 
 # Logging
-os.makedirs("experiments", exist_ok=True)
-log_file = f"experiments/run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+os.makedirs("experiments/logs", exist_ok=True)
+os.makedirs("experiments/data", exist_ok=True)
+log_file = f"experiments/logs/run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -648,7 +650,7 @@ def run_federated_learning_manual(
     logger.info(f"  Tempo total:  {overall_duration:.2f}s ({overall_duration/60:.2f} min)")
     logger.info(f"{'='*60}")
 
-    hist_path = f"experiments/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    hist_path = f"experiments/data/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(hist_path, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
@@ -692,7 +694,8 @@ def run_federated_learning_ray(
         return FedProxClient(cid_int, train_loader, val_loader)
 
     # Estratégia
-    from mosaicfl.v2.server_v2 import start_server, weighted_average
+    from experiments.experiment_server import start_server
+    from mosaicfl.core.federated import weighted_average
     strategy, tracker, history = start_server(
         num_rounds=NUM_ROUNDS,
         num_clients=len(client_loaders),
@@ -722,7 +725,7 @@ def run_federated_learning_ray(
     global_model = SimplifiedBEHRT(use_cls_token=True).to(DEVICE)
     logger.info("Modelo global reconstruído.")
 
-    hist_path = f"experiments/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    hist_path = f"experiments/data/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(hist_path, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
@@ -773,7 +776,7 @@ def run_federated_learning(
 
     # global_model = SimplifiedBEHRT().to(DEVICE)
 
-    # hist_path = f"experiments/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    # hist_path = f"experiments/data/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     # with open(hist_path, "w", encoding="utf-8") as f:
     #     json.dump(history, f, indent=2, ensure_ascii=False)
     # logger.info(f"Histórico salvo: {hist_path}")
@@ -840,7 +843,7 @@ def run_rag_pipeline(
     logger.info(f"Justificativa — confiável: {result['confiavel']} | "
                 f"alucinação: {result['alucinacao_detectada']}")
 
-    rag_path = f"experiments/rag_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    rag_path = f"experiments/data/rag_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(rag_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
@@ -873,7 +876,7 @@ def main():
     except FileNotFoundError as e:
         logger.error(f"Dataset não encontrado: {e}")
         logger.error("Coloque o CSV em data/ ou configure MOSAICFL_DB_URL")
-        logger.error("Diagnóstico: python -c \"from mosaicfl.v2.data_loader import diagnose_dataset; diagnose_dataset()\"")
+        logger.error("Diagnóstico: python -c \"from mosaicfl.core.data_loader import diagnose_dataset; diagnose_dataset()\"")
         sys.exit(1)
     except ValueError as e:
         logger.error(f"Schema inválido: {e}")

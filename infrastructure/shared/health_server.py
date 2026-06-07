@@ -19,7 +19,7 @@ from typing import Any
 
 try:
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-    from infrastructure.metrics import (
+    from infrastructure.shared.metrics import (
         REGISTRY,
         fl_rounds_total,
         fl_round_accuracy,

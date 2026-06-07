@@ -5,12 +5,12 @@ Registry isolado (não usa o global do prometheus_client) para evitar colisões
 entre testes e entre múltiplos processos que importem este módulo.
 
 Uso pelo servidor:
-    from infrastructure.metrics import REGISTRY, fl_rounds_total, fl_round_accuracy
+    from infrastructure.shared.metrics import REGISTRY, fl_rounds_total, fl_round_accuracy
     fl_rounds_total.inc()
     fl_round_accuracy.set(0.87)
 
 Uso pelo scheduler (CronJob — push antes de sair):
-    from infrastructure.metrics import push_metrics
+    from infrastructure.shared.metrics import push_metrics
     push_metrics(job="scheduler")
 """
 import logging

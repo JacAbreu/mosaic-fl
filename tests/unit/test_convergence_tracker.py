@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.server_v2 import ConvergenceTracker
+from mosaicfl.core.convergence import ConvergenceTracker
 
 
 class TestConvergenceTracker:
@@ -40,7 +40,6 @@ class TestConvergenceTracker:
         t.check(0.80); t.check(0.80); t.check(0.80)
         t.reset()
         assert t.history == []
-        assert t.stable_count == 0
         assert t.converged_round is None
 
     def test_single_value_never_converges(self):

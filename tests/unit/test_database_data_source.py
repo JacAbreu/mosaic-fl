@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.data_loader import DatabaseDataSource
+from mosaicfl.core.data_loader import DatabaseDataSource
 
 
 class TestDatabaseDataSource:
@@ -33,7 +33,7 @@ class TestDatabaseDataSource:
         assert src._engine is None
 
     def test_init_empty_connection_string_uses_default(self, monkeypatch):
-        import mosaicfl.v2.data_loader as dl
+        import mosaicfl.core.data_loader as dl
         monkeypatch.setattr(dl, "DEFAULT_CONNECTION_STRING", "sqlite:///env.db")
         src = dl.DatabaseDataSource(connection_string="")
         assert "sqlite" in src.connection_string
@@ -41,14 +41,14 @@ class TestDatabaseDataSource:
     # ── is_available() ────────────────────────────────────────────────────────
 
     def test_is_available_false_when_no_connection_string(self, monkeypatch):
-        import mosaicfl.v2.data_loader as dl
+        import mosaicfl.core.data_loader as dl
         monkeypatch.setattr(dl, "DEFAULT_CONNECTION_STRING", "")
         src = DatabaseDataSource(connection_string="")
         assert src.is_available() is False
 
     def test_is_available_false_when_engine_raises(self):
         src = self._make_source()
-        with patch("mosaicfl.v2.data_loader.DatabaseDataSource._get_engine",
+        with patch("mosaicfl.core.data_loader.DatabaseDataSource._get_engine",
                    side_effect=Exception("conexão recusada")):
             assert src.is_available() is False
 
@@ -58,7 +58,7 @@ class TestDatabaseDataSource:
         mock_engine = MagicMock()
         mock_engine.connect.return_value.__enter__ = lambda s: mock_conn
         mock_engine.connect.return_value.__exit__ = MagicMock(return_value=False)
-        with patch("mosaicfl.v2.data_loader.DatabaseDataSource._get_engine",
+        with patch("mosaicfl.core.data_loader.DatabaseDataSource._get_engine",
                    return_value=mock_engine):
             assert src.is_available() is True
 
@@ -83,14 +83,14 @@ class TestDatabaseDataSource:
     # ── load() ────────────────────────────────────────────────────────────────
 
     def test_load_raises_value_error_when_no_query(self, monkeypatch):
-        import mosaicfl.v2.data_loader as dl
+        import mosaicfl.core.data_loader as dl
         monkeypatch.setattr(dl, "DEFAULT_QUERY", "")
         src = dl.DatabaseDataSource(connection_string="sqlite:///x.db", query="")
         with pytest.raises(ValueError, match="Query SQL"):
             src.load(query="")
 
     def test_load_raises_value_error_when_no_connection_string(self, monkeypatch):
-        import mosaicfl.v2.data_loader as dl
+        import mosaicfl.core.data_loader as dl
         monkeypatch.setattr(dl, "DEFAULT_CONNECTION_STRING", "")
         src = dl.DatabaseDataSource(connection_string="", query="SELECT 1")
         with pytest.raises(ValueError, match="Connection string"):
@@ -100,7 +100,7 @@ class TestDatabaseDataSource:
         src = self._make_source()
         expected_df = pd.DataFrame({"id": [1, 2], "desfecho": [0, 1]})
         mock_engine = MagicMock()
-        with patch("mosaicfl.v2.data_loader.DatabaseDataSource._get_engine",
+        with patch("mosaicfl.core.data_loader.DatabaseDataSource._get_engine",
                    return_value=mock_engine), \
              patch("pandas.read_sql", return_value=expected_df):
             df = src.load()
@@ -110,7 +110,7 @@ class TestDatabaseDataSource:
     def test_load_raises_runtime_error_on_sql_failure(self):
         src = self._make_source()
         mock_engine = MagicMock()
-        with patch("mosaicfl.v2.data_loader.DatabaseDataSource._get_engine",
+        with patch("mosaicfl.core.data_loader.DatabaseDataSource._get_engine",
                    return_value=mock_engine), \
              patch("pandas.read_sql", side_effect=Exception("tabela não existe")):
             with pytest.raises(RuntimeError, match="Erro ao executar query"):

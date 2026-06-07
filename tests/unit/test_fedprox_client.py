@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.config import VOCAB_SIZE, NUM_CLASSES, MAX_SEQ_LEN
-from mosaicfl.v2.server_v2 import weighted_average_loss, weighted_average_accuracy
+from mosaicfl.core.config import VOCAB_SIZE, NUM_CLASSES, MAX_SEQ_LEN
+from mosaicfl.core.federated import weighted_average_loss, weighted_average_accuracy
 
 
 class TestFedProxClient:
@@ -32,12 +32,12 @@ class TestFedProxClient:
 
     @pytest.fixture
     def client_v2(self, dummy_loader):
-        from mosaicfl.v2.client_v2 import FedProxClient
+        from mosaicfl.core.client_v2 import FedProxClient
         return FedProxClient(0, dummy_loader, dummy_loader)
 
     @pytest.fixture(scope="class")
     def contract_client(self):
-        from mosaicfl.v2.client_v2 import FedProxClient
+        from mosaicfl.core.client_v2 import FedProxClient
         x_tr = torch.randint(1, VOCAB_SIZE, (self.TRAIN_SIZE, 16))
         y_tr = torch.randint(0, NUM_CLASSES, (self.TRAIN_SIZE,))
         x_va = torch.randint(1, VOCAB_SIZE, (self.VAL_SIZE, 16))
@@ -112,7 +112,7 @@ class TestFedProxClient:
         assert "client_id" in metrics
 
     def test_fit_does_not_crash_on_edge_case_batch(self):
-        from mosaicfl.v2.client_v2 import FedProxClient
+        from mosaicfl.core.client_v2 import FedProxClient
         x = torch.randint(0, VOCAB_SIZE, (4, MAX_SEQ_LEN))
         y = torch.randint(0, NUM_CLASSES, (4,))
         loader = DataLoader(TensorDataset(x, y), batch_size=4)
@@ -122,7 +122,7 @@ class TestFedProxClient:
         assert isinstance(updated, list)
 
     def test_create_client_fn_factory(self):
-        from mosaicfl.v2.client_v2 import create_client_fn, FedProxClient
+        from mosaicfl.core.client_v2 import create_client_fn, FedProxClient
         x = torch.randint(1, VOCAB_SIZE, (8, 16))
         y = torch.randint(0, NUM_CLASSES, (8,))
         client = create_client_fn(1, x, y, x, y)

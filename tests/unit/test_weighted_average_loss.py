@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.server_v2 import weighted_average_loss
+from mosaicfl.core.federated import weighted_average_loss
 
 
 class TestWeightedAverageLoss:

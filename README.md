@@ -37,7 +37,7 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 ### O que deve ser avaliado
 
 - **Qualidade do código Python:** type hints, design patterns, structured logging, separação de responsabilidades, ausência de anti-patterns
-- **Arquitetura:** separação `src/` (pacote core) vs `infrastructure/` (daemons de produção), Strategy pattern, Single Responsibility
+- **Arquitetura:** estrutura inspirada na arquitetura hexagonal — `mosaicfl.core` (domínio puro) isolado de `infrastructure/` (adapters de produção) e `experiments/` (adapter de pesquisa); Strategy pattern, Single Responsibility
 - **Testes:** cobertura, organização (um arquivo por classe), contratos de API, testes explicativos
 - **Corretude funcional:** implementação de FedProx, BEHRT, RAG, convergência, persistência de estado
 - **Documentação:** README, CHANGELOG, CONTRIBUTING, TODO rastreável
@@ -122,50 +122,50 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 
 ## Estrutura do Projeto
 
+O projeto segue **estrutura inspirada na arquitetura hexagonal**: `mosaicfl.core` contém o domínio puro, sem dependência de framework de deployment. `infrastructure/` e `experiments/` são adapters que importam o core e o conectam ao mundo externo.
+
 ```
 mosaic-fl/
 │
-├── src/                                ← pacote core instalável (mosaicfl)
+├── src/                                ← pacote instalável (pip install -e .)
 │   └── mosaicfl/
 │       ├── __init__.py
-│       ├── v1/                         ← protótipo inicial (dados sintéticos)
-│       │   ├── config.py
-│       │   ├── model.py                # BEHRT v1 (mean pooling)
-│       │   ├── client.py               # FedProxClient v1
-│       │   ├── server.py               # Servidor v1
-│       │   ├── preprocess.py           # Preprocessador v1
-│       │   ├── rag_system.py           # RAG v1 (ChromaDB)
-│       │   └── extract_patterns.py     # Perfis prototípicos BEHRT
-│       ├── v2/                         ← versão atual (dados reais + fallback sintético)
-│       │   ├── config.py               # Hiperparâmetros (hardware-aware)
-│       │   ├── model_v2.py             # BEHRT v2 (CLS token pooling)
-│       │   ├── client_v2.py            # FedProxClient v2 (state_dict completo)
-│       │   ├── server_v2.py            # Servidor v2 + ConvergenceTracker
-│       │   ├── preprocess_v2.py        # Preprocessador v2 (unidades médicas)
-│       │   ├── rag_system_v2.py        # RAG v2 (type-safe, truncagem GPT-2)
-│       │   └── data_loader.py          # Strategy: SGBD → CSV → sintético
+│       ├── core/                       ← domínio puro — sem dependência de deploy
+│       │   ├── config.py               # Hiperparâmetros (hardware-aware, frozen dataclass)
+│       │   ├── model_v2.py             # BEHRT simplificado (CLS token pooling)
+│       │   ├── client_v2.py            # FedProxClient (state_dict completo)
+│       │   ├── preprocess_v2.py        # Preprocessador EHR (unidades médicas)
+│       │   ├── rag_system_v2.py        # RAG type-safe (ChromaDB + DistilGPT-2)
+│       │   ├── data_loader.py          # Strategy: SGBD → CSV → sintético
+│       │   ├── convergence.py          # ConvergenceTracker — fonte única da verdade
+│       │   ├── federated.py            # weighted_average_*, get_evaluate_fn
+│       │   └── interpretability.py     # BEHRTPatternExtractor (atenção → padrões RAG)
+│       ├── v1/                         ← protótipo inicial (legado — dados sintéticos)
+│       │   └── ...
 │       └── experiments/
-│           └── runner.py               # Orquestrador dos experimentos v1
+│           └── runner.py               # Orquestrador dos experimentos v1 (legado)
 │
-├── infrastructure/                     ← daemons de produção (executados como processos independentes)
-│   ├── health_server.py                # Servidor HTTP health/readiness (compartilhado)
-│   ├── logging_setup.py                # Configuração de logging JSON estruturado
-│   ├── mosaicfl_server/
-│   │   ├── server_daemon.py            # Servidor Flower 24/7
-│   │   ├── strategy.py                 # CustomFedProxStrategy: FedProx + checkpoint + métricas
+├── infrastructure/                     ← adapters de produção (deployáveis como serviços independentes)
+│   ├── shared/                         ← concerns transversais (usados por todos os adapters)
+│   │   ├── health_server.py            # HTTP health/readiness + /metrics Prometheus (porta 8081)
+│   │   ├── metrics.py                  # Registry Prometheus isolado (CollectorRegistry)
+│   │   ├── logging_setup.py            # Logging JSON estruturado
+│   │   └── tls.py                      # Carga de certificados mTLS
+│   ├── mosaicfl_server/                ← adapter: servidor Flower gRPC
+│   │   ├── server_daemon.py            # Processo 24/7
+│   │   ├── strategy.py                 # ProductionFedProxStrategy: FedProx + checkpoint + convergência
 │   │   ├── config_loader.py            # Config de runtime: ChromaDB | arquivo (FL_CONFIG_BACKEND)
-│   │   ├── runner.py                   # Entrypoint do servidor
+│   │   ├── runner.py                   # Entrypoint
 │   │   ├── __init__.py
 │   │   └── __main__.py                 # python -m mosaicfl_server
-│   ├── mosaicfl_client/
-│   │   ├── client_daemon.py            # Cliente Flower 24/7 (hospital)
-│   │   ├── client_daemon_v2.py         # Cliente v2 com datasource flexível
-│   │   ├── datasource.py               # Adaptador de dados do cliente
-│   │   ├── heartbeat.py                # Registry JSON de status (único ponto de verdade)
-│   │   ├── runner.py                   # Entrypoint do cliente
+│   ├── mosaicfl_client/                ← adapter: cliente Flower (hospital)
+│   │   ├── client_daemon.py            # Processo 24/7
+│   │   ├── datasource.py               # Adaptador de dados do hospital
+│   │   ├── heartbeat.py                # Registry JSON de status
+│   │   ├── runner.py                   # Entrypoint
 │   │   ├── __init__.py
 │   │   └── __main__.py                 # python -m mosaicfl_client
-│   ├── mosaicfl_scheduler/
+│   ├── mosaicfl_scheduler/             ← adapter: orquestrador de rounds
 │   │   ├── scheduler_daemon.py         # FederatedScheduler (APScheduler)
 │   │   ├── scheduler_cli.py            # Entrypoint CLI (cron/systemd)
 │   │   ├── schedule_state.py           # SchedulerState: estado persistido em JSON
@@ -174,14 +174,20 @@ mosaic-fl/
 │   │   ├── client_availability_checker.py   # Verifica quórum de hospitais online
 │   │   ├── __init__.py
 │   │   └── __main__.py                 # python -m mosaicfl_scheduler
-│   └── mosaicfl_api/
+│   └── mosaicfl_api/                   ← adapter: REST API de inferência
 │       ├── service.py                  # FastAPI: /predict, /health, /ready
-│       ├── inference_engine.py         # InferenceEngine: carrega checkpoint e expõe predict()
+│       ├── inference_engine.py         # Carrega checkpoint e expõe predict()
 │       ├── db.py                       # Persistência de predições (SQLAlchemy)
-│       ├── runner.py                   # Entrypoint da API (uvicorn)
-│       ├── static/index.html           # UI minimalista de inferência
+│       ├── runner.py                   # Entrypoint (uvicorn)
+│       ├── static/index.html           # UI minimalista
 │       ├── __init__.py
 │       └── __main__.py                 # python -m mosaicfl_api
+│
+├── experiments/                        ← adapter de pesquisa (não deployável)
+│   ├── experiment_server.py            # CustomFedProxStrategy + start_server (simulação local)
+│   ├── run_experiments_v2.py           # Orquestrador dos 5 experimentos do TCC
+│   ├── data/                           # Históricos de experimentos (history_*.json, rag_*.json)
+│   └── logs/                           # Logs de execução (run_*.log)
 │
 ├── tests/
 │   ├── test_fl_cycle_explained.py      # Documentação executável do ciclo FL completo
@@ -209,6 +215,8 @@ mosaic-fl/
 │   │   ├── test_fed_config.py
 │   │   ├── test_start_server.py
 │   │   ├── test_get_evaluate_fn.py
+│   │   ├── test_round_dispatcher.py
+│   │   ├── test_prometheus_metrics.py
 │   │   ├── test_map_columns.py
 │   │   ├── test_convert_desfecho.py
 │   │   ├── test_split_by_institution.py
@@ -237,8 +245,7 @@ mosaic-fl/
 │   ├── .env.example
 │   └── seed/generate_data.py
 │
-├── run_experiments.py                  # Experimentos v1 (sintético)
-├── run_experiments_v2.py               # Experimentos v2 (dados reais)
+├── run_experiments.py                  # Experimentos v1 (sintético — legado)
 ├── benchmark.py                        # Benchmark de performance (tempo, RAM, CPU, tráfego)
 ├── datasource.py                       # Strategy Pattern standalone (demo)
 │
@@ -255,9 +262,8 @@ mosaic-fl/
 ├── install.sh                          # Script de instalação alternativo
 │
 ├── README.md                           # Este arquivo
-├── README_v2.md                        # Notas técnicas da v2
 ├── README_DOCKER.md                    # Guia Docker detalhado
-├── README_INFRASTRUCTURE.md           # Guia de infraestrutura
+├── README_INFRASTRUCTURE.md            # Guia de infraestrutura
 ├── README_SCHEDULER.md                 # Guia do scheduler
 ├── CHANGELOG.md                        # Histórico de versões
 ├── CONTRIBUTING.md                     # Guia de contribuição
@@ -311,7 +317,7 @@ python run_experiments.py
 
 ```bash
 source .venv/bin/activate
-python run_experiments_v2.py
+python experiments/run_experiments_v2.py
 ```
 
 O v2 tenta carregar dados nesta ordem: **SGBD → CSV explícito → CSV padrão → sintético**.
@@ -326,7 +332,7 @@ python run_experiments_v2.py
 Para forçar um CSV específico:
 ```bash
 python -c "
-from mosaicfl.v2.data_loader import load_with_fallback
+from mosaicfl.core.data_loader import load_with_fallback
 df = load_with_fallback(csv_path='data/minha_base.csv', allow_synthetic=False)
 print(df.shape)
 "
@@ -441,23 +447,20 @@ python -m pytest tests/integration/test_infrastructure.py::TestSchedulerIntegrat
 **Resultado esperado (suite completa):**
 
 ```
-426 passed, 1 warning in ~9s
+468 passed, 1 warning in ~10s
 ```
 
 ---
 
-### Estrutura da suite — 426 testes
+### Estrutura da suite — 468 testes
 
 | Arquivo | Foco | Testes |
 |---|---|---|
-| `tests/unit/test_mosaicfl.py` | Unidades core: modelo, RAG, preprocessamento, data loader | ~147 |
-| `tests/unit/test_v2_core.py` | Integração v2: pipeline EHR → FedProxClient → modelo | ~44 |
-| `tests/integration/test_infrastructure.py` | Daemons de produção: scheduler, servidor, cliente (com mocks) | ~70 |
-| `tests/integration/test_config_loader.py` | Config de runtime: `_cast`, ChromaDB, arquivo, `configure_fit` | ~55 |
-| `tests/test_fl_cycle_explained.py` | Documentação executável do ciclo FL completo | ~29 |
-| `tests/unit/test_database_data_source.py` | `DatabaseDataSource`: SQLAlchemy, is_available, load | 20 |
-| `tests/unit/test_load_with_fallback.py` | Estratégia de fallback de dados | 7 |
-| `tests/integration/test_mosaicfl_api.py` | API FastAPI de inferência | ~54 |
+| `tests/unit/` (26 arquivos) | Um arquivo por classe: modelo, cliente, servidor, convergência, RAG, data loader, config, métricas, dispatcher | ~330 |
+| `tests/integration/test_infrastructure.py` | Scheduler, servidor, cliente, dispatcher (com mocks) | ~70 |
+| `tests/integration/test_mosaicfl_api.py` | FastAPI /predict e /health (TestClient) | ~30 |
+| `tests/test_fl_cycle_explained.py` | Documentação executável do ciclo FL completo | ~35 |
+| `tests/integration/test_clinicalpath_exporter.py` | Exportador ClinicalPath | ~3 |
 
 ### `test_fl_cycle_explained.py` — Documentação executável
 
@@ -480,7 +483,7 @@ python -m pytest tests/test_fl_cycle_explained.py -v -s -k "TestServerAggregates
 | `TestClientLocalTraining` | 3 — Treino local | `fit()` retorna `(params, n_samples, {"loss": float})`; FedProx adiciona regularização |
 | `TestClientReturnsWeightsToServer` | 4 — Cliente → Servidor | `get_parameters()` exporta state_dict completo (32 params + 2 buffers = 34 tensores) |
 | `TestServerAggregatesWeights` | 5 — Agregação | `weighted_average()` agrega **métricas** (accuracy); `_fedavg_params()` agrega **pesos** |
-| `TestServerConvergenceTracking` | 6 — Convergência | `ConvergenceTracker` usa `stable_count` incremental: converge quando Δ < threshold por `patience` rounds consecutivos |
+| `TestServerConvergenceTracking` | 6 — Convergência | `ConvergenceTracker` usa **janela deslizante**: converge quando todos os `patience` deltas na janela são < threshold; rounds ruidosos envelhecem e saem — não reiniciam a contagem |
 | `TestFullFLCycle` | 7 — End-to-end | 1 cliente, 3 clientes, 5 rounds com rastreamento de convergência |
 
 **APIs documentadas pelos testes:**
@@ -768,7 +771,7 @@ O CronJob do scheduler (`scheduler-cronjob.yaml`) executa por padrão às **2h d
 | 4 | RAG e detecção de alucinação | ChromaDB + DistilGPT-2 | [OK] Real |
 | 5 | Eficiência operacional | Convergência vs. comunicação | [OK] Real |
 
-Resultados salvos em `experiment_results.json` após cada execução.
+Resultados salvos em `experiments/data/` após cada execução (`history_*.json`, `rag_*.json`). Logs em `experiments/logs/`.
 
 Para documentação detalhada de cada experimento (hipótese, limitações, caminho para dados reais), veja `EXPERIMENTOS.md`.
 
@@ -859,6 +862,6 @@ Apache 2.0 — veja `pyproject.toml` para detalhes.
 
 ---
 
-> **Autora:** Jacqueline Abreu do N. T. R. Lopes  
+> **Autora:** Jacqueline Abreu
 > **Instituição:** ICMC/USP — São Carlos  
-> **Contato:** abreujacline@gmail.com
+

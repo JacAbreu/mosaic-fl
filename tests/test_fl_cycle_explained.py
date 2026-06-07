@@ -28,8 +28,7 @@ APIs reais usadas nestes testes:
     Para parâmetros, use o helper _fedavg_params() deste arquivo.
 
   ConvergenceTracker.check(accuracy) → bool
-    Usa stable_count incremental (não janela deslizante).
-    Converge quando stable_count >= patience consecutivos com Δ < threshold.
+    Usa janela deslizante: converge quando os últimos patience deltas são < threshold.
 
 Uso:
     pytest tests/test_fl_cycle_explained.py -v -s
@@ -52,14 +51,15 @@ for _p in [str(ROOT), str(SRC)]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from mosaicfl.v2.config import (
+from mosaicfl.core.config import (
     BATCH_SIZE, DEVICE, EMBED_DIM, LR, LOCAL_EPOCHS,
     MAX_SEQ_LEN, NUM_CLASSES, NUM_HEADS, NUM_LAYERS,
     PROXIMAL_MU, VOCAB_SIZE,
 )
-from mosaicfl.v2.model_v2 import SimplifiedBEHRT
-from mosaicfl.v2.client_v2 import FedProxClient
-from mosaicfl.v2.server_v2 import weighted_average, ConvergenceTracker
+from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.client_v2 import FedProxClient
+from mosaicfl.core.federated import weighted_average
+from mosaicfl.core.convergence import ConvergenceTracker
 from infrastructure.mosaicfl_scheduler.schedule_state import SchedulerState
 from infrastructure.mosaicfl_scheduler.scheduler_daemon import FederatedScheduler
 
@@ -608,80 +608,82 @@ class TestServerAggregatesWeights:
 class TestServerConvergenceTracking:
     """
     ConvergenceTracker monitora se a accuracy global parou de melhorar.
-    Algoritmo: incrementa stable_count quando |Δacc| < threshold;
-               reseta para 0 quando |Δacc| >= threshold.
-    Converge quando stable_count >= patience CONSECUTIVOS.
 
-    DIFERENÇA DO TRACKER DA INFRASTRUCTURE:
-    - v2 (server_v2.py): stable_count incremental (precisa de patience Δ pequenos)
-    - produção (strategy.py): janela deslizante (precisa de patience+1 valores na janela)
+    Algoritmo: janela deslizante sobre os últimos `patience` deltas.
+    Converge quando TODOS os deltas dentro da janela são < threshold.
+    Um round ruidoso "envelhece" e sai da janela sem reiniciar a contagem
+    — adequado para FL com dados hospitalares non-IID.
+
+    Idempotência: uma vez convergido, check() sempre retorna True,
+    garantindo consistência entre o bool e converged_round.
+
+    Fonte única: mosaicfl.core.convergence.ConvergenceTracker
+    Usado por: CustomFedProxStrategy (experimento) e
+               ProductionFedProxStrategy (produção) — mesmo código.
     """
 
     def test_single_value_never_converges(self):
-        """FASE 6a — Apenas 1 valor: não há Δ para calcular → False."""
+        """FASE 6a — Apenas 1 valor: janela incompleta → False."""
         tracker = ConvergenceTracker(threshold=0.005, patience=3)
         assert not tracker.check(0.80)
-        print("\n[SERVER — FASE 6a] 1 valor: sem Δ → sem convergência [OK]")
+        print("\n[SERVER — FASE 6a] 1 valor: janela vazia → sem convergência [OK]")
 
-    def test_three_small_deltas_trigger_convergence(self):
+    def test_patience_plus_one_values_required(self):
+        """FASE 6b — Precisamos de patience+1 valores para ter patience deltas na janela."""
+        tracker = ConvergenceTracker(threshold=0.005, patience=3)
+        assert not tracker.check(0.800)   # 1 valor
+        assert not tracker.check(0.8001)  # 2 valores
+        assert not tracker.check(0.8002)  # 3 valores — ainda falta 1
+        assert tracker.check(0.8000)      # 4 valores — janela completa, todos Δ < 0.005
+        assert tracker.converged_round == 4
+        print("\n[SERVER — FASE 6b] patience+1 valores → convergência [OK]")
+
+    def test_instability_in_window_prevents_convergence(self):
         """
-        FASE 6b — 3 deltas < threshold → stable_count=3 >= patience=3 → converge.
-        Sequência: 0.800, 0.8001, 0.8002, 0.8000
-          Δ₁ = 0.0001 → stable=1
-          Δ₂ = 0.0001 → stable=2
-          Δ₃ = 0.0002 → stable=3 ≥ patience → CONVERGÊNCIA
+        FASE 6c — Delta grande dentro da janela impede convergência.
+        A janela deslizante garante que rounds instáveis recentes não convergem.
         """
         tracker = ConvergenceTracker(threshold=0.005, patience=3)
-        acc_seq = [0.800, 0.8001, 0.8002, 0.8000]
-
-        print("\n[SERVER — FASE 6b] Rastreamento de convergência:")
-        results = []
-        for i, acc in enumerate(acc_seq, 1):
-            conv = tracker.check(acc)
-            delta = abs(tracker.history[-1] - tracker.history[-2]) \
-                if len(tracker.history) >= 2 else 0
-            stable = tracker.stable_count
-            print(f"  Rodada {i}: acc={acc:.4f}  Δ={delta:.4f}  "
-                  f"stable_count={stable}  converged={conv}")
-            results.append(conv)
-
-        assert results[-1] is True
-        assert tracker.converged_round is not None
-        print(f"  → converged_round = {tracker.converged_round} [OK]")
-
-    def test_unstable_delta_resets_stable_count(self):
-        """
-        FASE 6c — Grande variação reseta stable_count.
-        Δ grande → stable=0; Δ pequeno reinicia contagem do zero.
-        """
-        tracker = ConvergenceTracker(threshold=0.005, patience=3)
-        for acc in [0.60, 0.70, 0.65, 0.80]:
+        for acc in [0.60, 0.70, 0.65, 0.80]:  # Δ=[0.10, 0.05, 0.15] — todos >= 0.005
             tracker.check(acc)
         assert tracker.converged_round is None
-        assert tracker.stable_count == 0
-        print("\n[SERVER — FASE 6c] Accuracy instável → stable_count reseta [OK]")
+        print("\n[SERVER — FASE 6c] Instabilidade na janela → sem convergência [OK]")
 
-    def test_mixed_stable_then_unstable_resets(self):
-        """FASE 6d — stable_count acumulava mas um Δ grande reseta tudo."""
+    def test_spike_ages_out_of_window(self):
+        """
+        FASE 6d — Spike em round anterior sai da janela após patience rounds estáveis.
+        Propriedade fundamental da janela deslizante para FL non-IID:
+        um round ruim não penaliza indefinidamente.
+        """
         tracker = ConvergenceTracker(threshold=0.005, patience=3)
-        tracker.check(0.800)
-        tracker.check(0.8001)  # stable=1
-        tracker.check(0.8002)  # stable=2
-        tracker.check(0.85)    # Δ=0.05 → stable RESET=0
-        assert tracker.stable_count == 0
-        assert tracker.converged_round is None
-        print("\n[SERVER — FASE 6d] Salto no acc reseta stable_count [OK]")
+        tracker.check(0.800)   # round 1
+        tracker.check(0.850)   # round 2 — spike, Δ=0.05
+        tracker.check(0.8501)  # round 3
+        tracker.check(0.8502)  # round 4 — spike ainda na janela
+        tracker.check(0.8503)  # round 5 — janela=[0.8501,0.8502,0.8503], spike saiu
+        assert tracker.converged_round is not None
+        print("\n[SERVER — FASE 6d] Spike envelhece e sai da janela → convergência [OK]")
+
+    def test_convergence_is_idempotent(self):
+        """FASE 6e — check() após convergência sempre retorna True."""
+        tracker = ConvergenceTracker(threshold=0.005, patience=3)
+        for acc in [0.80, 0.8001, 0.8002, 0.8000]:
+            tracker.check(acc)
+        assert tracker.converged_round is not None
+        # Spike pós-convergência — não deve reverter
+        assert tracker.check(0.50) is True
+        assert tracker.converged_round is not None
+        print("\n[SERVER — FASE 6e] Convergência idempotente: spike pós-convergência ignorado [OK]")
 
     def test_reset_clears_all_state(self):
-        """FASE 6e — reset() permite reiniciar rastreamento do zero."""
+        """FASE 6f — reset() permite reiniciar rastreamento do zero."""
         tracker = ConvergenceTracker(threshold=0.005, patience=3)
         for acc in [0.80, 0.8001, 0.8002, 0.8000]:
             tracker.check(acc)
         tracker.reset()
         assert tracker.history == []
-        assert tracker.stable_count == 0
         assert tracker.converged_round is None
-        print("\n[SERVER — FASE 6e] tracker.reset(): histórico zerado [OK]")
+        print("\n[SERVER — FASE 6f] tracker.reset(): histórico zerado [OK]")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -817,8 +819,13 @@ class TestFullFLCycle:
                 if len(tracker.history) >= 2 else float("nan")
             mark = "  ← CONVERGÊNCIA" if converged else ""
             delta_str = f"{delta:.4f}" if delta == delta else "N/A"
+            window_ok = converged or (
+                len(tracker.history) >= tracker.patience + 1 and
+                all(abs(tracker.history[-i-1] - tracker.history[-i-2]) < tracker.threshold
+                    for i in range(tracker.patience))
+            )
             print(f"\n  Round {round_num}: acc={sim_acc:.3f}  "
-                  f"Δ={delta_str}  stable={tracker.stable_count}{mark}")
+                  f"Δ={delta_str}  janela_estável={window_ok}{mark}")
 
         print(f"\n[SERVER] Progressão: {history[0]:.3f} → {history[-1]:.3f}")
         print(f"  converged_round: {tracker.converged_round}")

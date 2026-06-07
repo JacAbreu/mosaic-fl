@@ -3,7 +3,7 @@ mosaicfl — MOSAIC-FL: Predição Clínica Federada com BEHRT + RAG.
 
 Entrypoints (raiz do repositório):
   python run_experiments.py     → mosaicfl.experiments.runner → mosaicfl.v1.*
-  python run_experiments_v2.py  → script na raiz → mosaicfl.v2.*
+  python run_experiments_v2.py  → script na raiz → mosaicfl.core.*
 
 Pacotes:
   mosaicfl.v1  — experimentos sintéticos / validação TCC

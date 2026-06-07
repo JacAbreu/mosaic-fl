@@ -40,22 +40,22 @@ for _p in [str(ROOT), str(SRC)]:
         sys.path.insert(0, _p)
 
 # ── v2 ──────────────────────────────────────────────────────────────────────
-from mosaicfl.v2.config import (
+from mosaicfl.core.config import (
     BATCH_SIZE, CONVERGENCE_PATIENCE, CONVERGENCE_THRESHOLD,
     DEVICE, EMBED_DIM, LR, MAX_SEQ_LEN, NUM_CLASSES,
     NUM_HEADS, NUM_LAYERS, PROXIMAL_MU, VOCAB_SIZE,
 )
-from mosaicfl.v2.model_v2 import BEHRTEncoderLayer, PositionalEncoding, SimplifiedBEHRT
-from mosaicfl.v2.server_v2 import ConvergenceTracker, get_evaluate_fn, start_server, weighted_average
-from mosaicfl.v2.client_v2 import FedProxClient, create_client_fn
-from mosaicfl.v2.preprocess_v2 import EHRPreprocessor, split_by_institution
+from mosaicfl.core.model_v2 import BEHRTEncoderLayer, PositionalEncoding, SimplifiedBEHRT
+from mosaicfl.core.convergence import ConvergenceTracker
+from mosaicfl.core.federated import get_evaluate_fn, weighted_average
+from experiments.experiment_server import start_server
+from mosaicfl.core.client_v2 import FedProxClient, create_client_fn
+from mosaicfl.core.preprocess_v2 import EHRPreprocessor, split_by_institution
 
 # ── infrastructure ───────────────────────────────────────────────────────────
 from infrastructure.mosaicfl_scheduler.schedule_state import SchedulerState, DEFAULT_STATE_PATH
 from infrastructure.mosaicfl_scheduler.client_availability_checker import ClientAvailabilityChecker
-from infrastructure.mosaicfl_scheduler.round_training_fl_dispatcher import (
-    RoundDispatcher, CONVERGENCE_THRESHOLD, CONVERGENCE_PATIENCE,
-)
+from infrastructure.mosaicfl_scheduler.round_training_fl_dispatcher import RoundDispatcher
 from infrastructure.mosaicfl_scheduler.scheduler_daemon import FederatedScheduler
 import infrastructure.mosaicfl_client.heartbeat as heartbeat_mod
 
@@ -583,7 +583,10 @@ class TestProductionFedProxStrategy:
         with patch("flwr.server.strategy.FedProx.__init__", return_value=None):
             strategy = ProductionFedProxStrategy.__new__(ProductionFedProxStrategy)
             strategy.global_model = model
-            strategy.tracker = ConvergenceTracker()
+            strategy.tracker = ConvergenceTracker(
+                threshold=CONVERGENCE_THRESHOLD,
+                patience=CONVERGENCE_PATIENCE,
+            )
             strategy.round_counter = 0
             strategy.should_stop = False
             strategy.on_round_complete = None
@@ -815,7 +818,7 @@ class TestConfigLoaderWithStrategy:
         from infrastructure.mosaicfl_server.config_loader import FileConfigLoader
         from infrastructure.mosaicfl_server.strategy import ProductionFedProxStrategy
         from infrastructure.mosaicfl_server.strategy import ConvergenceTracker as ProdTracker
-        from mosaicfl.v2.model_v2 import SimplifiedBEHRT
+        from mosaicfl.core.model_v2 import SimplifiedBEHRT
         from unittest.mock import patch, MagicMock
 
         config_file = tmp_path / "runtime_config.json"
@@ -829,7 +832,10 @@ class TestConfigLoaderWithStrategy:
             strategy.on_round_start = None
             strategy.proximal_mu = 0.01
             strategy.should_stop = False
-            strategy.tracker = ProdTracker()
+            strategy.tracker = ProdTracker(
+                threshold=CONVERGENCE_THRESHOLD,
+                patience=CONVERGENCE_PATIENCE,
+            )
             strategy.round_counter = 0
             (tmp_path / "checkpoints").mkdir()
             (tmp_path / "logs").mkdir()

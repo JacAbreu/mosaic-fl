@@ -6,9 +6,9 @@ from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.config import VOCAB_SIZE, NUM_CLASSES
-from mosaicfl.v2.model_v2 import SimplifiedBEHRT
-from mosaicfl.v2.server_v2 import get_evaluate_fn
+from mosaicfl.core.config import VOCAB_SIZE, NUM_CLASSES
+from mosaicfl.core.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.federated import get_evaluate_fn
 
 
 class TestGetEvaluateFn:

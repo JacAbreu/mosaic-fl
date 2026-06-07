@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.config import VOCAB_SIZE, NUM_CLASSES, EMBED_DIM, NUM_LAYERS, NUM_HEADS, MAX_SEQ_LEN
+from mosaicfl.core.config import VOCAB_SIZE, NUM_CLASSES, EMBED_DIM, NUM_LAYERS, NUM_HEADS, MAX_SEQ_LEN
 
 
 class TestModelConfig:
@@ -29,14 +29,14 @@ class TestModelConfig:
         assert EMBED_DIM % NUM_HEADS == 0
 
     def test_frozen_raises_on_mutation(self):
-        from mosaicfl.v2.config import ModelConfig
+        from mosaicfl.core.config import ModelConfig
         from dataclasses import FrozenInstanceError
         cfg = ModelConfig()
         with pytest.raises(FrozenInstanceError):
             cfg.vocab_size = 999
 
     def test_custom_instance(self):
-        from mosaicfl.v2.config import ModelConfig
+        from mosaicfl.core.config import ModelConfig
         cfg = ModelConfig(vocab_size=5000, num_classes=3)
         assert cfg.vocab_size == 5000
         assert cfg.num_classes == 3

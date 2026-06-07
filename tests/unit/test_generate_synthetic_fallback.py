@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.data_loader import _generate_synthetic_fallback
+from mosaicfl.core.data_loader import _generate_synthetic_fallback
 
 
 class TestGenerateSyntheticFallback:

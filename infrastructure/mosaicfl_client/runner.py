@@ -19,12 +19,12 @@ import flwr as fl
 import torch
 from torch.utils.data import DataLoader, random_split
 
-from mosaicfl.v2.client_v2 import FedProxClient
-from mosaicfl.v2.config import FED_CFG, RUNTIME_CFG
+from mosaicfl.core.client_v2 import FedProxClient
+from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
 
 from .datasource import DataSourceFactory
 from .heartbeat import write_heartbeat
-from infrastructure.health_server import HealthServer
+from infrastructure.shared.health_server import HealthServer
 
 SERVER_ADDRESS = os.getenv("FL_SERVER_ADDRESS", "localhost:8080")
 CLIENT_ID = os.getenv("FL_CLIENT_ID", "client_0")
@@ -158,7 +158,7 @@ class ProductionClient:
                 flower_client = self._build_flower_client()
                 logger.info("Conectando ao servidor %s...", self.server_address)
                 _health.set_status("connecting", client_id=self.client_id, server=self.server_address)
-                from infrastructure.tls import get_client_root_cert, tls_enabled
+                from infrastructure.shared.tls import get_client_root_cert, tls_enabled
                 root_cert = get_client_root_cert()
                 logger.info("client_tls", extra={"enabled": tls_enabled()})
                 fl.client.start_client(

@@ -11,8 +11,8 @@ from unittest.mock import patch
 
 import pytest
 
-from infrastructure.health_server import HealthServer
-from infrastructure.metrics import (
+from infrastructure.shared.health_server import HealthServer
+from infrastructure.shared.metrics import (
     REGISTRY,
     fl_rounds_total,
     fl_round_accuracy,
@@ -102,13 +102,13 @@ class TestPushMetrics:
 
     def test_push_skips_without_env(self, monkeypatch):
         monkeypatch.delenv("FL_PUSHGATEWAY_URL", raising=False)
-        from infrastructure.metrics import push_metrics
+        from infrastructure.shared.metrics import push_metrics
         push_metrics(job="test")  # não deve levantar
 
     def test_push_calls_push_to_gateway_when_url_set(self, monkeypatch):
         monkeypatch.setenv("FL_PUSHGATEWAY_URL", "http://fake-gw:9091")
         with patch("prometheus_client.push_to_gateway") as mock_push:
-            from infrastructure.metrics import push_metrics
+            from infrastructure.shared.metrics import push_metrics
             push_metrics(job="test-job")
             mock_push.assert_called_once()
             call_kwargs = mock_push.call_args
@@ -118,5 +118,5 @@ class TestPushMetrics:
     def test_push_gateway_failure_does_not_raise(self, monkeypatch):
         monkeypatch.setenv("FL_PUSHGATEWAY_URL", "http://fake-gw:9091")
         with patch("prometheus_client.push_to_gateway", side_effect=OSError("connection refused")):
-            from infrastructure.metrics import push_metrics
+            from infrastructure.shared.metrics import push_metrics
             push_metrics(job="test-job")  # deve engolir o erro com warning

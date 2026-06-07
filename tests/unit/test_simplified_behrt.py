@@ -5,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from mosaicfl.v2.config import EMBED_DIM, NUM_CLASSES, NUM_HEADS, NUM_LAYERS, VOCAB_SIZE, MAX_SEQ_LEN
-from mosaicfl.v2.model_v2 import SimplifiedBEHRT
+from mosaicfl.core.config import EMBED_DIM, NUM_CLASSES, NUM_HEADS, NUM_LAYERS, VOCAB_SIZE, MAX_SEQ_LEN
+from mosaicfl.core.model_v2 import SimplifiedBEHRT
 
 
 class TestSimplifiedBEHRT:

@@ -61,7 +61,7 @@ line-length = 100
 select = ["E", "F", "W", "I"]
 
 [tool.coverage.run]
-source = ["src/mosaicfl/v2", "infrastructure"]
+source = ["src/mosaicfl/core", "infrastructure", "experiments"]
 omit = [
     # legado sem testes
     "src/mosaicfl/v1/*",
@@ -76,7 +76,7 @@ omit = [
     "*/infrastructure/mosaicfl_server/runner.py",
     "*/infrastructure/mosaicfl_client/runner.py",
     # conectores de banco que exigem infraestrutura real
-    "src/mosaicfl/v2/data_loader.py",
+    "src/mosaicfl/core/data_loader.py",
     "*/infrastructure/mosaicfl_client/datasource.py",
 ]
 
