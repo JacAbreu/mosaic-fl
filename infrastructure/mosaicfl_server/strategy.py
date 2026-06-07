@@ -26,7 +26,7 @@ LOG_DIR = Path(os.getenv("FL_LOG_DIR", "logs"))
 logger = logging.getLogger(__name__)
 
 
-from mosaicfl.core.convergence import ConvergenceTracker  # noqa: F401 — re-exportado para adapters
+from mosaicfl.core.convergence import ConvergenceTracker
 
 
 class ProductionFedProxStrategy(fl.server.strategy.FedProx):

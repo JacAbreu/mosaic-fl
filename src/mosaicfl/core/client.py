@@ -50,10 +50,10 @@ class FedProxClient(fl.client.NumPyClient):
 
     def get_parameters(self, config: Dict) -> List[np.ndarray]:
         """
-        Retorna apenas os parâmetros treináveis (não buffers).
-        Reduz tráfego de rede e evita inconsistências no servidor.
+        Retorna state_dict completo: parâmetros treináveis + buffers (ex: running_mean do BatchNorm).
+        Buffers devem ser sincronizados entre clientes para evitar divergência silenciosa na inferência.
+        `.copy()` garante array independente — evita aliasing com a memória dos tensores do modelo.
         """
-        #return [p.detach().cpu().numpy() for p in self.model.parameters()]
         return [v.cpu().detach().numpy().copy() for v in self.model.state_dict().values()]
 
     def _proximal_loss(self, loss: torch.Tensor, proximal_mu: float) -> torch.Tensor:

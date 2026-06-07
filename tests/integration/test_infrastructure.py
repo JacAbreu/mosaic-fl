@@ -532,8 +532,8 @@ class TestProductionConvergenceTracker:
 
     @pytest.fixture
     def tracker(self):
-        from infrastructure.mosaicfl_server.strategy import ConvergenceTracker as ProdTracker
-        return ProdTracker(threshold=0.005, patience=3)
+        from mosaicfl.core.convergence import ConvergenceTracker
+        return ConvergenceTracker(threshold=0.005, patience=3)
 
     def test_not_enough_history(self, tracker):
         assert not tracker.check(0.70)
@@ -824,7 +824,7 @@ class TestConfigLoaderWithStrategy:
     def strategy_with_file_loader(self, tmp_path):
         from infrastructure.mosaicfl_server.config_loader import FileConfigLoader
         from infrastructure.mosaicfl_server.strategy import ProductionFedProxStrategy
-        from infrastructure.mosaicfl_server.strategy import ConvergenceTracker as ProdTracker
+        from mosaicfl.core.convergence import ConvergenceTracker as ProdTracker
         from mosaicfl.core.model import SimplifiedBEHRT
         from unittest.mock import patch, MagicMock
 
