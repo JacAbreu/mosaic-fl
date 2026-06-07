@@ -2,7 +2,16 @@
 runner.py
 Orquestrador do servidor Flower de produção (mosaicfl.v2).
 
-Entrypoint único: main() — usado por __main__.py e server_daemon.py.
+Dois modos de execução:
+
+  SuperLink (produção):
+      flower-superlink ...         # infraestrutura persistente
+      flwr run . local             # dispara ServerApp via SuperLink
+    Expõe: app = ServerApp(server_fn=_make_server_components)
+
+  Legado (desenvolvimento local):
+      python -m infrastructure.mosaicfl_server --port 8080
+    Usa: FederatedServer + fl.server.start_server
 """
 import argparse
 import json
@@ -13,16 +22,19 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import flwr as fl
 import torch
+from flwr.common import Context
+from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 
 from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
 from mosaicfl.core.model import SimplifiedBEHRT
 from mosaicfl.core.federated import get_evaluate_fn, weighted_average_accuracy, weighted_average_loss
 
 from .config_loader import get_config_loader
+from .state_store import TrainingStateStore
 from .strategy import ProductionFedProxStrategy
 from infrastructure.shared.logging_setup import setup_logging as _setup_logging
 from infrastructure.shared.health_server import HealthServer
@@ -59,6 +71,99 @@ def write_health_status(status: str, round_num: int = 0, clients: int = 0):
             json.dump(state, f, indent=2)
     except Exception as e:
         logger.debug("Erro health check: %s", e)
+
+
+def _make_server_components(context: Context) -> ServerAppComponents:
+    """
+    Factory chamada pelo SuperLink a cada execução de ServerApp.
+
+    Lê run_config (pyproject.toml / --run-config), recupera estado da sessão
+    anterior (se houver) e reconstrói a estratégia FedProx com tracker restaurado
+    e pesos do último checkpoint carregados como initial_parameters.
+
+    TLS é responsabilidade do flower-superlink — não é configurado aqui.
+    """
+    num_rounds = int(context.run_config.get("num-rounds", FED_CFG.num_rounds))
+    min_clients = int(context.run_config.get("min-clients", FED_CFG.min_available_clients))
+    proximal_mu = float(context.run_config.get("proximal-mu", FED_CFG.proximal_mu))
+    local_epochs = int(context.run_config.get("local-epochs", FED_CFG.local_epochs))
+    round_timeout = int(context.run_config.get("round-timeout-seconds", 300))
+
+    # ── Recovery de estado ───────────────────────────────────────────────────
+    state_path = LOG_DIR / "training_state.json"
+    state_store = TrainingStateStore(state_path)
+    previous_state = state_store.load()
+
+    # Marca nova sessão como "running" imediatamente — se crashar, próximo load detecta
+    previous_state.status = "running"
+    state_store.save(previous_state)
+
+    # ── Modelo: carrega checkpoint da sessão anterior se disponível ──────────
+    model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
+    initial_parameters: Optional[fl.common.Parameters] = None
+
+    if previous_state.last_checkpoint:
+        ckpt_path = Path(previous_state.last_checkpoint)
+        if ckpt_path.exists():
+            try:
+                sd = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+                model.load_state_dict(sd, strict=False)
+                initial_parameters = fl.common.ndarrays_to_parameters(
+                    [v.cpu().detach().numpy().copy() for v in sd.values()]
+                )
+                logger.info(
+                    "checkpoint_loaded_for_recovery",
+                    extra={"checkpoint": str(ckpt_path), "last_round": previous_state.last_round},
+                )
+            except Exception as exc:
+                logger.warning("checkpoint_load_error", extra={"error": str(exc)})
+
+    config_loader = get_config_loader()
+    _health.start()
+
+    strategy = ProductionFedProxStrategy(
+        global_model=model,
+        config_loader=config_loader,
+        state_store=state_store,
+        round_timeout=round_timeout,
+        on_round_start=lambda rnd, cfg: write_health_status("running", round_num=rnd),
+        on_round_complete=lambda rnd, metrics: _health.set_round_metrics(rnd, metrics),
+        proximal_mu=proximal_mu,
+        fraction_fit=1.0,
+        fraction_evaluate=1.0,
+        min_fit_clients=min_clients,
+        min_evaluate_clients=min_clients,
+        min_available_clients=min_clients,
+        initial_parameters=initial_parameters,
+        evaluate_metrics_aggregation_fn=weighted_average_accuracy,
+        fit_metrics_aggregation_fn=weighted_average_loss,
+        on_fit_config_fn=lambda rnd: {
+            "proximal_mu": proximal_mu,
+            "local_epochs": local_epochs,
+            "round": rnd,
+        },
+    )
+
+    write_health_status("starting")
+    logger.info(
+        "server_startup_superlink",
+        extra={
+            "rounds": num_rounds,
+            "min_clients": min_clients,
+            "proximal_mu": proximal_mu,
+            "round_timeout": round_timeout,
+            "previous_status": previous_state.status,
+            "recovered_from_round": previous_state.last_round,
+        },
+    )
+    return ServerAppComponents(
+        strategy=strategy,
+        config=ServerConfig(num_rounds=num_rounds),
+    )
+
+
+# Entry point para: flwr run . <federation>
+app = ServerApp(server_fn=_make_server_components)
 
 
 class FederatedServer:

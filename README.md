@@ -27,7 +27,6 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 
 | Item | Por quê está fora do escopo |
 |---|---|
-| mTLS / TLS entre cliente e servidor Flower | Desnecessário em rede local; item de roadmap documentado no `TODO.md` |
 | Kubernetes Secrets para credenciais | Não há cluster K8s ativo; infra é preparatória |
 | Deploy automatizado no CI/CD | Pipeline de CD está scaffolded, não operacional |
 | Prometheus / Grafana / audit trail LGPD | Roadmap de produção, documentado no `TODO.md` |
@@ -39,7 +38,7 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 - **Qualidade do código Python:** type hints, design patterns, structured logging, separação de responsabilidades, ausência de anti-patterns
 - **Arquitetura:** estrutura inspirada na arquitetura hexagonal — `mosaicfl.core` (domínio puro) isolado de `infrastructure/` (adapters de produção) e `experiments/` (adapter de pesquisa); Strategy pattern, Single Responsibility
 - **Testes:** cobertura, organização (um arquivo por classe), contratos de API, testes explicativos
-- **Corretude funcional:** implementação de FedProx, BEHRT, RAG, convergência, persistência de estado
+- **Corretude funcional:** implementação de FedProx, BEHRT, RAG, convergência, persistência de estado, recovery de sessão
 - **Documentação:** README, CHANGELOG, CONTRIBUTING, TODO rastreável
 - **Observabilidade:** structured logging JSON, health endpoints, separação liveness/readiness
 
@@ -50,10 +49,10 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 1. [Arquitetura](#arquitetura)
 2. [Estrutura do Projeto](#estrutura-do-projeto)
 3. [Instalação](#instalação)
-4. [Execução Experimentos para Desenvolvimento do Mosaic-FL](#execução-experimentos-para-desenvolvimento-do-mosaic-fl)
+4. [Execução de Experimentos](#execução-de-experimentos)
 5. [Testes](#testes)
-6. [Rodando Localmente](#rodando-localmente-scheduler--servidor--cliente)
-7. [Infraestrutura de Produção](#infraestrutura-de-produção)
+6. [Rodando Localmente](#rodando-localmente)
+7. [Infraestrutura de Produção (SuperLink)](#infraestrutura-de-produção-superlink)
 8. [Docker](#docker)
 9. [Kubernetes (Helm)](#kubernetes-helm)
 10. [Experimentos](#experimentos)
@@ -65,7 +64,7 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 
 ## Arquitetura
 
-### Simulação Local (este repositório)
+### Simulação Local (experimentos de desenvolvimento)
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -85,38 +84,66 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 └─────────────────────────────────────────────┘
 ```
 
-### Arquitetura de Produção
+### Arquitetura de Produção — Flower SuperLink
+
+O deployment de produção usa o **Flower SuperLink** (disponível a partir da versão 1.8), que elimina o single point of failure do modelo anterior onde servidor FL e lógica de agregação rodavam no mesmo processo.
 
 ```
-                    Internet / VPN
-┌───────────────┐  gRPC sobre TLS (8080)  ┌───────────────┐
-│    SERVIDOR   │◄───────────────────────►│   HOSPITAL A  │
-│ (server_      │                         │ (client_      │
-│  daemon.py)   │  • Fica escutando       │  daemon.py)   │
-│               │  • Agenda rounds        │               │
-│ • Agrega pesos│◄───────────────────────►│ • Lê EHR local│
-│ • Checkpoints │                         │ • Treina local│
-│ • Exporta     │◄───────────────────────►│ • Devolve     │
-│   métricas    │                         │   só pesos    │
-└───────┬───────┘                         └───────────────┘
-        │
-        ▼
-┌───────────────┐
-│   SCHEDULER   │ ← Opcional: só inicia rodadas
-│ (APScheduler) │   em janelas de manutenção
-│ • 2h-4h manhã │   (ex: madrugada)
-└───────────────┘
+                    Internet / VPN + TLS obrigatório
+
+  ┌─────────────────────────────────────────────────────┐
+  │                flower-superlink                     │
+  │   (processo de infraestrutura — raramente cai)      │
+  │                                                     │
+  │   Fleet API  :9091  ◄── SuperNodes (hospitais)      │
+  │   AppIo API  :9092  ◄── ServerApp (lógica FL)       │
+  │   SQLite     state  ← persistência de rounds        │
+  └──────────────────┬──────────────────────────────────┘
+                     │
+          ┌──────────┴──────────┐
+          │                     │
+  ┌───────▼──────┐    ┌─────────▼──────────┐
+  │  ServerApp   │    │  flower-supernode   │ × N hospitais
+  │  (flwr run)  │    │  (por hospital)     │
+  │              │    │                     │
+  │ • FedProx    │    │ • FedProxClient     │
+  │ • Checkpoint │    │ • DataSourceFactory │
+  │ • Convergên- │    │ • Reconexão auto    │
+  │   cia        │    │   (--max-retries)   │
+  │ • Recovery   │    └─────────────────────┘
+  │   de estado  │
+  └──────────────┘
 
 [AVISO]  PRONTUÁRIOS NUNCA SAEM DOS HOSPITAIS — apenas os pesos do modelo trafegam.
 ```
 
+**Vantagem sobre o modelo anterior:** se o `ServerApp` cair durante o round 8 de 10, o `flower-superlink` permanece vivo. Os SuperNodes continuam conectados e tentando reconectar. Ao reiniciar `flwr run`, o ServerApp recarrega o checkpoint do round 7 e restaura o estado do `ConvergenceTracker` — sem perda de histórico de treinamento.
+
 ### Como funciona o Federated Learning
 
-1. **Servidor inicia** — envia o modelo global (pesos iniciais) para cada hospital
+1. **Servidor inicia** — envia o modelo global (pesos iniciais ou do último checkpoint) para cada hospital
 2. **Hospital treina localmente** com seus próprios prontuários (dados nunca saem)
 3. **Hospital devolve apenas os pesos** — nunca os dados brutos
 4. **Servidor agrega** via FedProx (média ponderada) e envia novo modelo global
-5. **Repete por N rodadas** até convergência (Δacurácia < threshold por patience rodadas)
+5. **Repete por N rodadas** até convergência (Δacurácia < threshold por `patience` rodadas)
+
+### Recovery de Sessão
+
+O estado de treinamento é persistido em `logs/training_state.json` após cada round:
+
+```json
+{
+  "status": "running",
+  "last_round": 7,
+  "convergence_history": [0.61, 0.67, 0.71, 0.74, 0.76, 0.77, 0.77],
+  "converged_round": null,
+  "last_checkpoint": "checkpoints/round_7.pt",
+  "timed_out_rounds": [],
+  "updated_at": "2026-06-07T03:14:22"
+}
+```
+
+Se o processo for interrompido com `status="running"`, o próximo `flwr run` detecta a interrupção, carrega o checkpoint `round_7.pt` como `initial_parameters` e restaura o `ConvergenceTracker` com o histórico completo — o treinamento continua de onde parou sem reiniciar a contagem de convergência.
 
 ---
 
@@ -130,41 +157,37 @@ mosaic-fl/
 ├── src/                                ← pacote instalável (pip install -e .)
 │   └── mosaicfl/
 │       ├── __init__.py
-│       ├── core/                       ← domínio puro — sem dependência de deploy
-│       │   ├── config.py               # Hiperparâmetros (hardware-aware, frozen dataclass)
-│       │   ├── model_v2.py             # BEHRT simplificado (CLS token pooling)
-│       │   ├── client_v2.py            # FedProxClient (state_dict completo)
-│       │   ├── preprocess_v2.py        # Preprocessador EHR (unidades médicas)
-│       │   ├── rag_system_v2.py        # RAG type-safe (ChromaDB + DistilGPT-2)
-│       │   ├── data_loader.py          # Strategy: SGBD → CSV → sintético
-│       │   ├── convergence.py          # ConvergenceTracker — fonte única da verdade
-│       │   ├── federated.py            # weighted_average_*, get_evaluate_fn
-│       │   └── interpretability.py     # BEHRTPatternExtractor (atenção → padrões RAG)
-│       ├── v1/                         ← protótipo inicial (legado — dados sintéticos)
-│       │   └── ...
-│       └── experiments/
-│           └── runner.py               # Orquestrador dos experimentos v1 (legado)
+│       └── core/                       ← domínio puro — sem dependência de deploy
+│           ├── config.py               # Hiperparâmetros (hardware-aware, frozen dataclass)
+│           ├── model.py                # BEHRT simplificado (CLS token pooling)
+│           ├── client.py               # FedProxClient (NumPyClient + proximal term)
+│           ├── preprocessor.py         # Preprocessador EHR (unidades médicas)
+│           ├── rag.py                  # RAG type-safe (ChromaDB + DistilGPT-2)
+│           ├── data_loader.py          # Strategy: SGBD → CSV → sintético
+│           ├── convergence.py          # ConvergenceTracker — janela deslizante
+│           ├── federated.py            # weighted_average_*, get_evaluate_fn
+│           └── interpretability.py     # BEHRTPatternExtractor (atenção → padrões RAG)
 │
 ├── infrastructure/                     ← adapters de produção (deployáveis como serviços independentes)
 │   ├── shared/                         ← concerns transversais (usados por todos os adapters)
 │   │   ├── health_server.py            # HTTP health/readiness + /metrics Prometheus (porta 8081)
 │   │   ├── metrics.py                  # Registry Prometheus isolado (CollectorRegistry)
 │   │   ├── logging_setup.py            # Logging JSON estruturado
-│   │   └── tls.py                      # Carga de certificados mTLS
-│   ├── mosaicfl_server/                ← adapter: servidor Flower gRPC
-│   │   ├── server_daemon.py            # Processo 24/7
-│   │   ├── strategy.py                 # ProductionFedProxStrategy: FedProx + checkpoint + convergência
+│   │   └── tls.py                      # Carga de certificados TLS (obrigatório — raises EnvironmentError)
+│   ├── mosaicfl_server/                ← adapter: servidor Flower (ServerApp)
+│   │   ├── runner.py                   # app = ServerApp(...) + FederatedServer (legado)
+│   │   ├── strategy.py                 # ProductionFedProxStrategy: FedProx + checkpoint + watchdog
+│   │   ├── state_store.py              # TrainingState + TrainingStateStore (recovery entre sessões)
 │   │   ├── config_loader.py            # Config de runtime: ChromaDB | arquivo (FL_CONFIG_BACKEND)
-│   │   ├── runner.py                   # Entrypoint
+│   │   ├── server_daemon.py            # Entrypoint legado (python -m)
 │   │   ├── __init__.py
-│   │   └── __main__.py                 # python -m mosaicfl_server
-│   ├── mosaicfl_client/                ← adapter: cliente Flower (hospital)
-│   │   ├── client_daemon.py            # Processo 24/7
-│   │   ├── datasource.py               # Adaptador de dados do hospital
+│   │   └── __main__.py
+│   ├── mosaicfl_client/                ← adapter: cliente Flower (SuperNode / hospital)
+│   │   ├── runner.py                   # app = ClientApp(...) + ProductionClient (legado)
+│   │   ├── datasource.py               # DataSourceFactory: simulated | sgbd | csv
 │   │   ├── heartbeat.py                # Registry JSON de status
-│   │   ├── runner.py                   # Entrypoint
 │   │   ├── __init__.py
-│   │   └── __main__.py                 # python -m mosaicfl_client
+│   │   └── __main__.py
 │   ├── mosaicfl_scheduler/             ← adapter: orquestrador de rounds
 │   │   ├── scheduler_daemon.py         # FederatedScheduler (APScheduler)
 │   │   ├── scheduler_cli.py            # Entrypoint CLI (cron/systemd)
@@ -173,7 +196,7 @@ mosaic-fl/
 │   │   ├── round_training_fl_dispatcher.py  # RoundDispatcher: dispara e monitora rounds
 │   │   ├── client_availability_checker.py   # Verifica quórum de hospitais online
 │   │   ├── __init__.py
-│   │   └── __main__.py                 # python -m mosaicfl_scheduler
+│   │   └── __main__.py
 │   └── mosaicfl_api/                   ← adapter: REST API de inferência
 │       ├── service.py                  # FastAPI: /predict, /health, /ready
 │       ├── inference_engine.py         # Carrega checkpoint e expõe predict()
@@ -181,117 +204,69 @@ mosaic-fl/
 │       ├── runner.py                   # Entrypoint (uvicorn)
 │       ├── static/index.html           # UI minimalista
 │       ├── __init__.py
-│       └── __main__.py                 # python -m mosaicfl_api
+│       └── __main__.py
 │
 ├── experiments/                        ← adapter de pesquisa (não deployável)
 │   ├── experiment_server.py            # CustomFedProxStrategy + start_server (simulação local)
-│   ├── run_experiments_v2.py           # Orquestrador dos 5 experimentos do TCC
-│   ├── data/                           # Históricos de experimentos (history_*.json, rag_*.json)
-│   └── logs/                           # Logs de execução (run_*.log)
+│   └── run_experiments_v2.py           # Orquestrador dos 5 experimentos do TCC
 │
 ├── tests/
 │   ├── test_fl_cycle_explained.py      # Documentação executável do ciclo FL completo
 │   ├── unit/                           # Testes unitários (um arquivo por classe)
 │   │   ├── test_simplified_behrt.py
-│   │   ├── test_behrt_encoder_layer.py
-│   │   ├── test_positional_encoding.py
 │   │   ├── test_fedprox_client.py
-│   │   ├── test_custom_fedprox_strategy.py
 │   │   ├── test_convergence_tracker.py
 │   │   ├── test_weighted_average.py
-│   │   ├── test_weighted_average_loss.py
-│   │   ├── test_ehr_preprocessor.py
-│   │   ├── test_clinical_rag.py
-│   │   ├── test_data_source_factory.py
-│   │   ├── test_file_data_source.py
-│   │   ├── test_database_data_source.py
-│   │   ├── test_load_with_fallback.py
-│   │   ├── test_generate_synthetic_fallback.py
-│   │   ├── test_chromadb_config_loader.py
-│   │   ├── test_file_config_loader.py
-│   │   ├── test_get_config_loader.py
-│   │   ├── test_model_config.py
-│   │   ├── test_runtime_config.py
-│   │   ├── test_fed_config.py
-│   │   ├── test_start_server.py
-│   │   ├── test_get_evaluate_fn.py
-│   │   ├── test_round_dispatcher.py
-│   │   ├── test_prometheus_metrics.py
-│   │   ├── test_map_columns.py
-│   │   ├── test_convert_desfecho.py
-│   │   ├── test_split_by_institution.py
-│   │   └── test_data_load_error.py
-│   └── integration/
-│       ├── test_infrastructure.py      # Scheduler, servidor, cliente, dispatcher (com mocks)
-│       ├── test_mosaicfl_api.py        # FastAPI /predict e /health (TestClient)
-│       └── test_clinicalpath_exporter.py
+│   │   ├── test_tls_loader.py
+│   │   ├── test_training_state_store.py
+│   │   ├── test_production_client_datasource.py
+│   │   └── ...                         # demais testes unitários por classe
+│   ├── integration/
+│   │   ├── test_infrastructure.py      # Scheduler, servidor, cliente, dispatcher
+│   │   ├── test_mosaicfl_api.py        # FastAPI /predict e /health (TestClient)
+│   │   └── test_clinicalpath_exporter.py
+│   └── e2e/
+│       └── test_real_fl_cycle.py       # Ciclo FL real sem mocks (make test-e2e)
+│
+├── scripts/
+│   ├── gen_certs.sh                    # Gera certificados TLS de desenvolvimento
+│   ├── start_superlink.sh              # Inicia flower-superlink com TLS
+│   └── start_supernode.sh              # Inicia flower-supernode (cliente/hospital)
 │
 ├── ci_cd/
 │   ├── ci-cd-github-actions.yml        # GitHub Actions CI/CD
 │   └── helm/                           # Kubernetes Helm Chart (preparatório)
-│       ├── Chart.yaml
-│       ├── values.yaml
-│       ├── _helpers.tpl
-│       ├── server-deployment.yaml
-│       ├── client-deployment.yaml
-│       ├── scheduler-cronjob.yaml
-│       ├── network-policies.yaml       # NetworkPolicies (isolamento de pods)
-│       ├── pvcs.yaml
-│       ├── serviceaccount.yaml
-│       └── README_HELM.md
 │
 ├── wire-production/                    ← ambiente de homologação wire-protocol
 │   ├── docker-compose.yml
 │   ├── .env.example
 │   └── seed/generate_data.py
 │
-├── run_experiments.py                  # Experimentos v1 (sintético — legado)
 ├── benchmark.py                        # Benchmark de performance (tempo, RAM, CPU, tráfego)
-├── datasource.py                       # Strategy Pattern standalone (demo)
-│
-├── Dockerfile.server                   # Imagem Docker do servidor
-├── Dockerfile.client                   # Imagem Docker do cliente
-├── Dockerfile.wire                     # Imagem Docker wire-protocol
-├── docker-compose.yml                  # Stack local completo
-├── .env.example                        # Variáveis de ambiente de referência
-│
-├── pyproject.toml                      # Pacote mosaicfl + dependências + configuração pytest/ruff
-├── Makefile                            # Atalhos: make setup / test / test-cov / run / clean
-├── setup.sh                            # Setup Linux/macOS (cria venv + instala [dev])
-├── setup.bat                           # Setup Windows
-├── install.sh                          # Script de instalação alternativo
-│
-├── README.md                           # Este arquivo
-├── README_DOCKER.md                    # Guia Docker detalhado
-├── README_INFRASTRUCTURE.md            # Guia de infraestrutura
-├── README_SCHEDULER.md                 # Guia do scheduler
-├── CHANGELOG.md                        # Histórico de versões
-├── CONTRIBUTING.md                     # Guia de contribuição
-├── TODO.md                             # Roadmap rastreável
-└── db_setup_guide.md                   # Guia de conexão com SGBD real
+├── Dockerfile.server
+├── Dockerfile.client
+├── docker-compose.yml
+├── .env.example
+├── pyproject.toml                      # Pacote + deps + pytest + [tool.flwr.app]
+├── Makefile
+├── setup.sh / setup.bat
+└── README.md
 ```
 
 ---
 
 ## Instalação
 
-### Passo a passo (Linux / macOS)
+### Linux / macOS
 
 ```bash
-# 1. Clone o repositório
 git clone https://github.com/JacAbreu/mosaic-fl.git
 cd mosaic-fl
-
-# 2. Execute o setup — cria .venv e instala tudo (inclusive pytest e ferramentas de dev)
 bash setup.sh
-
-# 3. Ative o ambiente virtual
 source .venv/bin/activate
 ```
 
-> **Importante:** o `setup.sh` executa `pip install -e ".[dev]"` — isso instala o pacote em modo editável e todas as dependências de desenvolvimento (pytest, pytest-cov, ruff, httpx). Se em algum momento o venv perder as dependências dev, rode manualmente: `pip install -e ".[dev]"`
-
-O modo editável (`-e`) significa que qualquer edição em `src/` tem efeito imediato sem precisar reinstalar.
+`setup.sh` executa `pip install -e ".[dev]"` — modo editável, efeito imediato ao editar `src/`.
 
 ### Windows
 
@@ -302,16 +277,20 @@ setup.bat
 .venv\Scripts\activate
 ```
 
----
+### Certificados TLS (obrigatório para produção)
 
-## Execução Experimentos para desenvolvimento do Mosaic-FL
-
-### Experimentos v1 — sintéticos (Utilizado para desenvolver o mosaic-fl)
+TLS é **obrigatório** no MOSAIC-FL. Para desenvolvimento local, gere certificados auto-assinados:
 
 ```bash
-source .venv/bin/activate
-python run_experiments.py
+bash scripts/gen_certs.sh certs/
+export FL_TLS_CERT_DIR=$(pwd)/certs
 ```
+
+A variável `FL_TLS_CERT_DIR` deve apontar para um diretório com `ca.crt`, `server.crt` e `server.key`. Ausência da variável lança `EnvironmentError` ao iniciar o servidor ou o cliente.
+
+---
+
+## Execução de Experimentos
 
 ### Experimentos v2 — dados reais / fallback sintético
 
@@ -326,33 +305,21 @@ Se nenhuma fonte real estiver disponível, usa dados sintéticos com aviso expl�
 Para conectar ao PostgreSQL:
 ```bash
 export MOSAICFL_DB_URL="postgresql://user:pass@localhost:5432/mosaicfl"
-python run_experiments_v2.py
+python experiments/run_experiments_v2.py
 ```
 
-Para forçar um CSV específico:
+### Simulação FL local (sem SuperLink)
+
 ```bash
-python -c "
-from mosaicfl.core.data_loader import load_with_fallback
-df = load_with_fallback(csv_path='data/minha_base.csv', allow_synthetic=False)
-print(df.shape)
-"
+# Roda run_simulation com 3 supernodes virtuais — sem rede, sem TLS
+make sim
+# ou
+.venv/bin/flwr run . local-sim
 ```
 
 ### Benchmark de performance
 
-O `benchmark.py` mede o custo computacional de uma simulação FL completa com dados sintéticos — útil para estimar viabilidade em hardware diferente antes de rodar os experimentos reais.
-
-**O que é medido por rodada:**
-- Tempo de treino + agregação
-- Uso de RAM (antes, depois e pico)
-- Uso de CPU (%)
-- Tráfego de rede estimado (tamanho real do state_dict × número de clientes)
-- Throughput (amostras/segundo)
-- Acurácia global (quando `evaluate_fn` está ativa)
-
 ```bash
-source .venv/bin/activate
-
 # Configuração padrão: 1000 amostras, 10 rodadas, 5 clientes
 python benchmark.py
 
@@ -360,227 +327,146 @@ python benchmark.py
 python benchmark.py --samples 2000 --rounds 5 --clients 3 --output meus_resultados
 ```
 
-**Artefatos gerados em `benchmark_results/`:**
-- `benchmark_<timestamp>.json` — métricas por rodada e resumo estatístico
-- `benchmark_<timestamp>.png` — 6 gráficos: tempo, RAM, CPU, tráfego, acurácia, throughput
-
-### Makefile
-
-```bash
-make setup   # cria venv e instala dependências
-make run     # executa experimentos v1
-make test    # roda testes unitários
-make clean   # remove venv e caches
-```
+Artefatos gerados em `benchmark_results/`: métricas JSON por rodada + 6 gráficos PNG.
 
 ---
 
 ## Testes
 
-### Pré-requisitos
-
-O venv precisa ter as dependências de desenvolvimento instaladas. Se você rodou `bash setup.sh`, elas já estão lá. Para verificar:
+### Rodar a suite
 
 ```bash
 source .venv/bin/activate
-python -m pytest --version   # deve imprimir algo como "pytest 9.x.x"
+
+make test          # unitários + integração (padrão)
+make test-cov      # idem com relatório de cobertura
+make test-e2e      # ciclo FL real, sem mocks (mais lento)
+make test-all      # tudo: unit + integration + e2e
 ```
 
-Se aparecer `No module named pytest`, instale as dependências dev:
+Ou via pytest diretamente:
 
 ```bash
-pip install -e ".[dev]"
-```
-
----
-
-### Como rodar os testes — passo a passo
-
-**Opção A — via Make (recomendado):**
-
-```bash
-# Ative o venv
-source .venv/bin/activate
-
-# Todos os testes
-make test
-
-# Todos os testes com cobertura
-make test-cov
-```
-
-**Opção B — via pytest diretamente:**
-
-```bash
-# Ative o venv
-source .venv/bin/activate
-
-# Todos os testes
-python -m pytest tests/ -v --tb=short
-
-# Com cobertura
-python -m pytest tests/ -v --tb=short --cov --cov-report=term-missing
-
-# Suite completa silenciosa (saída resumida)
-python -m pytest tests/ -q
-```
-
-**Opção C — subconjunto por arquivo:**
-
-```bash
-# Só testes unitários
-python -m pytest tests/unit/ -v
-
-# Só testes de integração
-python -m pytest tests/integration/ -v
+# Suite padrão
+.venv/bin/pytest -v --tb=short
 
 # Arquivo específico
-python -m pytest tests/integration/test_infrastructure.py -v
+.venv/bin/pytest tests/unit/test_training_state_store.py -v
 
-# Classe específica
-python -m pytest tests/integration/test_infrastructure.py::TestSchedulerIntegration -v
-
-# Teste específico
-python -m pytest tests/integration/test_infrastructure.py::TestSchedulerIntegration::test_full_round_cycle_updates_state -v
+# Ciclo FL explicado (imprime logs do protocolo)
+.venv/bin/pytest tests/test_fl_cycle_explained.py -v -s
 ```
 
-**Resultado esperado (suite completa):**
+**Resultado esperado (suite padrão):**
 
 ```
-468 passed, 1 warning in ~10s
+487 passed, 6 deselected, 1 warning in ~10s
 ```
 
----
+Os 6 deselected são os testes `@pytest.mark.e2e` — excluídos por padrão por serem mais lentos. Execute com `make test-e2e` quando precisar validar o ciclo completo.
 
-### Estrutura da suite — 468 testes
+### Estrutura da suite
 
-| Arquivo | Foco | Testes |
+| Diretório / Arquivo | Foco | Testes |
 |---|---|---|
-| `tests/unit/` (26 arquivos) | Um arquivo por classe: modelo, cliente, servidor, convergência, RAG, data loader, config, métricas, dispatcher | ~330 |
-| `tests/integration/test_infrastructure.py` | Scheduler, servidor, cliente, dispatcher (com mocks) | ~70 |
+| `tests/unit/` (28 arquivos) | Um arquivo por classe: modelo, cliente, servidor, convergência, RAG, data loader, config, state store, TLS | ~340 |
+| `tests/integration/test_infrastructure.py` | Scheduler, servidor, cliente, dispatcher (com mocks) | ~75 |
 | `tests/integration/test_mosaicfl_api.py` | FastAPI /predict e /health (TestClient) | ~30 |
 | `tests/test_fl_cycle_explained.py` | Documentação executável do ciclo FL completo | ~35 |
-| `tests/integration/test_clinicalpath_exporter.py` | Exportador ClinicalPath | ~3 |
+| `tests/e2e/test_real_fl_cycle.py` | Ciclo FL real sem mocks (6 testes, `make test-e2e`) | 6 |
 
-### `test_fl_cycle_explained.py` — Documentação executável
+### `test_fl_cycle_explained.py` — documentação executável
 
-Este arquivo é o ponto de entrada para entender **como o MOSAIC-FL funciona na prática**. Cada classe de teste cobre uma fase do ciclo federado e imprime logs detalhados descrevendo quem envia o quê e como os dados fluem.
+Ponto de entrada para entender o protocolo FL na prática. Cada classe cobre uma fase e imprime logs descrevendo quem envia o quê.
 
 ```bash
-# Ver todos os prints do ciclo (recomendado para entender o projeto)
-python -m pytest tests/test_fl_cycle_explained.py -v -s
-
-# Ver só uma fase específica
-python -m pytest tests/test_fl_cycle_explained.py -v -s -k "TestServerAggregates"
+.venv/bin/pytest tests/test_fl_cycle_explained.py -v -s
 ```
 
-**Fases cobertas:**
-
-| Classe | Fase do ciclo | O que demonstra |
+| Classe | Fase | O que demonstra |
 |---|---|---|
-| `TestSchedulerDispatchesFLRound` | 1 — Scheduler | Quórum mínimo, convergência, max_rounds — quando o scheduler dispara ou para |
-| `TestServerSendsModelToClient` | 2 — Servidor → Cliente | `set_parameters()` carrega pesos no modelo local; armazena cópia para termo proximal |
-| `TestClientLocalTraining` | 3 — Treino local | `fit()` retorna `(params, n_samples, {"loss": float})`; FedProx adiciona regularização |
-| `TestClientReturnsWeightsToServer` | 4 — Cliente → Servidor | `get_parameters()` exporta state_dict completo (32 params + 2 buffers = 34 tensores) |
-| `TestServerAggregatesWeights` | 5 — Agregação | `weighted_average()` agrega **métricas** (accuracy); `_fedavg_params()` agrega **pesos** |
-| `TestServerConvergenceTracking` | 6 — Convergência | `ConvergenceTracker` usa **janela deslizante**: converge quando todos os `patience` deltas na janela são < threshold; rounds ruidosos envelhecem e saem — não reiniciam a contagem |
-| `TestFullFLCycle` | 7 — End-to-end | 1 cliente, 3 clientes, 5 rounds com rastreamento de convergência |
-
-**APIs documentadas pelos testes:**
-
-```python
-# Cliente
-FedProxClient(client_id: int, train_loader, val_loader)
-client.fit(global_params, {})       # → (List[np.ndarray], n_samples, {"loss": float})
-client.evaluate(params, {})         # → (loss, n_samples, {"accuracy": float, "client_id": int})
-client.get_parameters({})           # → List[np.ndarray]  (34 tensores: state_dict completo)
-client.set_parameters(params)       # carrega List[np.ndarray] no state_dict
-
-# Servidor
-weighted_average([(n, {"accuracy": v}), ...])   # agrega MÉTRICAS, não pesos
-ConvergenceTracker(threshold, patience).check(accuracy)  # → bool
-```
+| `TestServerSendsModelToClient` | Servidor → Cliente | `set_parameters()` carrega pesos; armazena cópia para termo proximal |
+| `TestClientLocalTraining` | Treino local | `fit()` retorna `(params, n_samples, {"loss": float})`; FedProx adiciona regularização |
+| `TestClientReturnsWeightsToServer` | Cliente → Servidor | `get_parameters()` exporta state_dict completo |
+| `TestServerAggregatesWeights` | Agregação | `weighted_average()` agrega métricas; FedAvg agrega pesos |
+| `TestServerConvergenceTracking` | Convergência | Janela deslizante: converge quando todos `patience` deltas < threshold |
+| `TestFullFLCycle` | End-to-end | 1 cliente, 3 clientes, 5 rounds com rastreamento de convergência |
 
 ---
 
-## Rodando Localmente (scheduler + servidor + cliente)
+## Rodando Localmente
 
 ### Pré-requisitos
 
-1. Ambiente virtual ativado (`source .venv/bin/activate`)
-2. Projeto instalado (`pip install -e ".[dev]"` já feito pelo `bash setup.sh`)
+1. Venv ativado e projeto instalado (`bash setup.sh`)
+2. Certificados TLS gerados: `bash scripts/gen_certs.sh certs/ && export FL_TLS_CERT_DIR=$(pwd)/certs`
 
-### Passo a passo — três terminais na mesma máquina
+### Modo SuperLink (produção local — 3 terminais)
 
-Para observar o ciclo completo de comunicação em uma única máquina, abra **três terminais**:
-
-### Terminal 1 — Servidor Flower
+**Terminal 1 — SuperLink (infraestrutura):**
 
 ```bash
-source .venv/bin/activate
-python infrastructure/mosaicfl_server/server_daemon.py \
-  --address 0.0.0.0:8080 \
-  --min-clients 1 \
-  --rounds 3
+make superlink
+# equivalente a:
+# FL_TLS_CERT_DIR=certs bash scripts/start_superlink.sh
 ```
 
-O servidor fica aguardando conexões de clientes. Quando o quórum (`--min-clients`) é atingido, inicia o round automaticamente.
-
-### Terminal 2 — Cliente (Hospital A)
+**Terminal 2 — ServerApp (lógica FL):**
 
 ```bash
-source .venv/bin/activate
-python infrastructure/mosaicfl_client/client_daemon.py \
-  --server localhost:8080 \
-  --client-id hospital_a
+make server-app
+# equivalente a:
+# .venv/bin/flwr run . production
 ```
 
-O cliente conecta ao servidor, recebe o modelo global, treina localmente com seus dados e devolve apenas os pesos. Os dados nunca saem da máquina.
-
-### Terminal 3 — Scheduler (opcional)
+**Terminal 3 — SuperNode (hospital cliente):**
 
 ```bash
-source .venv/bin/activate
-python infrastructure/mosaicfl_scheduler/scheduler_daemon.py \
-  --interval 1 \
-  --min-clients 1 \
-  --max-rounds 3
+make supernode FL_CLIENT_ID=hospital_a FL_DATA_SOURCE=simulated
+# equivalente a:
+# FL_TLS_CERT_DIR=certs FL_CLIENT_ID=hospital_a bash scripts/start_supernode.sh
 ```
 
-O scheduler monitora a disponibilidade de clientes e o estado de convergência. Com `--interval 1` ele verifica a cada 1 hora; use `--once` para executar um único ciclo de verificação imediatamente.
+Para adicionar mais hospitais, abra terminais adicionais com `FL_CLIENT_ID` diferente:
+```bash
+make supernode FL_CLIENT_ID=hospital_b
+make supernode FL_CLIENT_ID=hospital_c
+```
+
+### Modo legado (desenvolvimento simples — sem SuperLink)
+
+Para testes locais sem infraestrutura de TLS:
+
+```bash
+# Terminal 1 — Servidor
+python -m infrastructure.mosaicfl_server --port 8080 --min-clients 1 --rounds 3
+
+# Terminal 2 — Cliente
+python -m infrastructure.mosaicfl_client --server localhost:8080 --client-id hospital_a
+```
 
 ### Verificando o estado
 
 ```bash
-# Status do servidor
-cat logs/round_1_metrics.json
+# Estado da sessão de treinamento (status, último round, checkpoint)
+cat logs/training_state.json
 
-# Heartbeat dos clientes
-cat logs/client_registry.json
+# Métricas do round N
+cat logs/round_3_metrics.json
 
-# Estado do scheduler (rounds e convergência)
-cat scheduler_state.json
-```
+# Status do servidor (health endpoint)
+curl http://localhost:8081/healthz
 
-### Variáveis de ambiente úteis
-
-```bash
-export FL_SERVER_ADDRESS=0.0.0.0:8080     # endereço do servidor
-export FL_CLIENT_ID=hospital_a            # identificador do cliente
-export FL_SCHEDULER_MIN_CLIENTS=1         # quórum mínimo
-export FL_SCHEDULER_MAX_ROUNDS=3          # limite de rounds
-export FL_SCHEDULER_CONV_THRESHOLD=0.005  # Δacurácia para convergência
-export FL_SCHEDULER_CONV_PATIENCE=3       # rounds estáveis para convergir
-export FL_CONFIG_BACKEND=file             # backend de config de runtime (file | chroma)
+# Métricas de round via health endpoint
+curl http://localhost:8081/metrics?round=3
 ```
 
 ### Alterando configuração em tempo de execução
 
-O servidor lê `FL_CONFIG_BACKEND` para decidir como buscar config antes de cada round — sem necessidade de reiniciar.
+O servidor lê `FL_CONFIG_BACKEND` para decidir como buscar config antes de cada round:
 
 **Backend `file` (desenvolvimento):**
 ```bash
-# Cria ou atualiza logs/runtime_config.json — aplicado no próximo round
 cat > logs/runtime_config.json <<EOF
 {"proximal_mu": 0.005, "pause_seconds": 0, "stop": false}
 EOF
@@ -591,116 +477,130 @@ EOF
 from infrastructure.mosaicfl_server.config_loader import ChromaDBConfigLoader
 loader = ChromaDBConfigLoader()
 
-# Atualiza proximal_mu no próximo round
-loader.write({"proximal_mu": 0.005, "stop": False})
-
-# Para o servidor graciosamente após o round atual
-loader.write({"stop": True})
-
-# Remove config (volta aos defaults do servidor)
-loader.clear()
+loader.write({"proximal_mu": 0.005, "stop": False})  # aplica no próximo round
+loader.write({"stop": True})                          # para após o round atual
+loader.clear()                                        # remove config (usa defaults)
 ```
-
-Chaves suportadas: `proximal_mu` (float), `pause_seconds` (float), `stop` (bool).
 
 ---
 
-## Infraestrutura de Produção
+## Infraestrutura de Produção (SuperLink)
 
-### Servidor (nuvem)
+### Visão geral
 
-```bash
-# Inicia servidor Flower que fica escutando indefinidamente
-python infrastructure/mosaicfl_server/server_daemon.py \
-  --address 0.0.0.0:8080 \
-  --min-clients 3 \
-  --rounds 20
+O modelo de produção usa três componentes independentes que rodam como processos separados — geralmente em máquinas diferentes:
 
-# Variáveis de ambiente equivalentes
-export FL_SERVER_ADDRESS=0.0.0.0:8080
-export FL_MIN_AVAILABLE_CLIENTS=3
-export FL_NUM_ROUNDS=20
-python infrastructure/mosaicfl_server/server_daemon.py
+| Componente | Processo | Responsabilidade |
+|---|---|---|
+| SuperLink | `flower-superlink` | Roteamento gRPC + persistência SQLite de estado |
+| ServerApp | `flwr run . production` | Lógica FL: FedProx, checkpoint, convergência, recovery |
+| SuperNode | `flower-supernode` | Lado do hospital: carrega dados locais, executa `FedProxClient` |
+
+### Configuração via `pyproject.toml`
+
+```toml
+[tool.flwr.app.config]
+num-rounds            = 10
+local-epochs          = 1
+proximal-mu           = 1.0
+min-clients           = 2
+round-timeout-seconds = 300   # watchdog por round — loga warning se ultrapassado
 ```
 
-### Cliente (hospital)
-
+Override em runtime:
 ```bash
-# Inicia cliente que reconecta automaticamente ao servidor
-python infrastructure/mosaicfl_client/client_daemon.py \
-  --server 52.67.123.45:8080 \
-  --client-id hospital_a
-
-# Com dados reais (PostgreSQL local do hospital)
-export FL_SERVER_ADDRESS=52.67.123.45:8080
-export FL_CLIENT_ID=hospital_a
-export MOSAICFL_DB_URL="postgresql://ehr_user:pass@localhost:5432/prontuarios"
-python infrastructure/mosaicfl_client/client_daemon.py
+flwr run . production --run-config "num-rounds=20 proximal-mu=0.5"
 ```
 
-### Scheduler de rounds (APScheduler)
-
-O scheduler verifica periodicamente quais hospitais estão online e, quando o quórum mínimo (`MIN_FIT_CLIENTS`) é atingido, aguarda a conclusão de um round e registra as métricas.
+### SuperLink (servidor de infraestrutura)
 
 ```bash
-# Modo daemon — roda indefinidamente, verifica a cada 6h
-python infrastructure/mosaicfl_scheduler/scheduler_daemon.py \
-  --interval 6 \
-  --min-clients 3 \
-  --max-rounds 20
+# Via script (recomendado — valida FL_TLS_CERT_DIR)
+FL_TLS_CERT_DIR=/certs bash scripts/start_superlink.sh
 
-# Modo one-shot — ideal para cron (executa 1 ciclo e termina)
+# Direto (com SQLite persistente)
+flower-superlink \
+    --ssl-certfile    /certs/server.crt \
+    --ssl-keyfile     /certs/server.key \
+    --ssl-ca-certfile /certs/ca.crt \
+    --database        superlink.db \
+    --fleet-api-address 0.0.0.0:9091
+```
+
+### ServerApp (lógica de federação)
+
+```bash
+# Dispara uma execução de treinamento (conecta ao SuperLink já rodando)
+flwr run . production
+
+# Com parâmetros customizados
+flwr run . production --run-config "num-rounds=20 min-clients=3"
+```
+
+O ServerApp é **stateless entre reinicializações** — o estado (checkpoint, histórico de convergência) é recuperado de `logs/training_state.json`. Se o processo cair no meio do treinamento, reexecute `flwr run` e ele continua de onde parou.
+
+### SuperNode (hospital)
+
+```bash
+# Via script (recomendado)
+FL_TLS_CERT_DIR=/certs \
+FL_CLIENT_ID=hospital_1 \
+FL_DATA_SOURCE=sgbd \
+bash scripts/start_supernode.sh
+
+# Direto
+flower-supernode \
+    --root-certificates /certs/ca.crt \
+    --superlink 52.67.123.45:9091 \
+    --node-config "client-id=hospital_1,data-source=sgbd" \
+    --max-retries 20
+```
+
+`--max-retries 20` garante que o hospital aguarda reconexão em vez de abortar — essencial quando há janelas de manutenção no servidor.
+
+### Fontes de dados (`FL_DATA_SOURCE`)
+
+| Valor | Comportamento |
+|---|---|
+| `simulated` | Dados sintéticos gerados automaticamente (desenvolvimento) |
+| `sgbd` | Lê do banco do hospital via `MOSAICFL_DB_URL` |
+| `csv` | Lê de arquivo CSV via `FL_CSV_PATH` |
+
+**Atenção:** falha na fonte de dados **não tem fallback silencioso**. Se `sgbd` falhar, a exceção propaga e o SuperNode não treina com dados incorretos.
+
+### Scheduler de rounds
+
+O scheduler verifica periodicamente quais hospitais estão online e registra convergência:
+
+```bash
+# Modo daemon — verifica a cada 6h
+python -m infrastructure.mosaicfl_scheduler --interval 6 --min-clients 3 --max-rounds 20
+
+# Modo one-shot (cron)
 python infrastructure/mosaicfl_scheduler/scheduler_cli.py --once
 
-# Via crontab (executa às 2h da manhã todos os dias)
-# crontab -e
+# Via crontab (2h da manhã)
 0 2 * * * /path/to/.venv/bin/python /path/to/infrastructure/mosaicfl_scheduler/scheduler_cli.py --once
 ```
 
-Estado do scheduler persiste em `scheduler_state.json` — reinicializações não perdem histórico de convergência.
+### Variáveis de ambiente
 
-### Fluxo de comunicação scheduler ↔ servidor ↔ cliente
-
-```
-scheduler               server_daemon            client_daemon
-    │                        │                        │
-    │── verifica registry ──►│                        │
-    │                        │◄── heartbeat (60s) ────│
-    │◄── clientes ativos ────│                        │
-    │                        │                        │
-    │── dispatch_round() ───►│                        │
-    │                        │── solicita treino ────►│
-    │                        │                        │── treina local
-    │                        │◄── devolve pesos ──────│
-    │                        │── agrega FedProx        │
-    │                        │── salva checkpoint      │
-    │                        │── escreve métricas JSON │
-    │◄── poll métricas ──────│                        │
-    │── atualiza state ───────────────────────────────►│
-```
-
-### [AVISO] Limitações do Scheduler (Arquitetura Atual)
-
-> **Importante:** O scheduler atual **NÃO dispara rounds ativamente** no servidor Flower. Ele atua como um **supervisor/monitor** que:
-> 
-> 1. Verifica quais clientes estão online (via heartbeat registry)
-> 2. Aguarda o servidor Flower completar rounds naturalmente (quando clientes conectam)
-> 3. Faz polling das métricas em `logs/round_{N}_metrics.json`
-> 4. Detecta convergência e persiste estado
-
-**Pré-requisitos para o funcionamento correto:**
 ```bash
-# 1. Servidor Flower DEVE estar rodando
-python infrastructure/mosaicfl_server/server_daemon.py --port 8080
+# Infraestrutura
+FL_TLS_CERT_DIR=./certs          # OBRIGATÓRIO — diretório com ca.crt, server.crt, server.key
+FL_SERVER_ADDRESS=0.0.0.0:8080   # endereço do servidor (modo legado)
+FL_HEALTH_PORT=8081              # porta do health endpoint
 
-# 2. Clientes DEVEM estar conectados ao servidor
-python infrastructure/mosaicfl_client/client_daemon.py --server localhost:8080 --client-id hospital_a
+# Cliente
+FL_CLIENT_ID=hospital_a          # identificador único do hospital
+FL_DATA_SOURCE=sgbd              # fonte de dados: simulated | sgbd | csv
+MOSAICFL_DB_URL=postgresql://... # URL do banco do hospital (quando FL_DATA_SOURCE=sgbd)
 
-# 3. SÓ ENTÃO o scheduler pode monitorar
-python infrastructure/mosaicfl_scheduler/scheduler_daemon.py --interval 6
+# Servidor
+FL_CHECKPOINT_DIR=./checkpoints  # onde salvar checkpoints por round
+FL_LOG_DIR=./logs                # onde salvar logs e training_state.json
+FL_CONFIG_BACKEND=file           # backend de config de runtime: file | chroma
 ```
-
-**Para produção:** A arquitetura atual é suficiente para a simulação local. Para o funcionamento em ambientes reais, ou seja hospitais, veja [`TODO.md`](TODO.md).
 
 ---
 
@@ -718,8 +618,9 @@ docker-compose up --build
 docker build -f Dockerfile.server -t mosaicfl-server:latest .
 docker run -d \
   -p 8080:8080 \
+  -e FL_TLS_CERT_DIR=/certs \
   -e FL_MIN_AVAILABLE_CLIENTS=3 \
-  -e FL_NUM_ROUNDS=20 \
+  -v $(pwd)/certs:/certs:ro \
   -v $(pwd)/checkpoints:/app/checkpoints \
   -v $(pwd)/logs:/app/logs \
   --name mosaicfl-server \
@@ -731,9 +632,11 @@ docker run -d \
 ```bash
 docker build -f Dockerfile.client -t mosaicfl-client:latest .
 docker run -d \
-  -e FL_SERVER_ADDRESS=52.67.123.45:8080 \
+  -e FL_TLS_CERT_DIR=/certs \
   -e FL_CLIENT_ID=hospital_a \
-  -e MOSAICFL_DB_URL="postgresql://user:pass@db:5432/ehr" \
+  -e FL_DATA_SOURCE=sgbd \
+  -e MOSAICFL_DB_URL="postgresql://ehr_user:pass@db:5432/prontuarios" \
+  -v /hospital/certs:/certs:ro \
   -v /hospital/logs:/app/logs \
   --name mosaicfl-client \
   mosaicfl-client:latest
@@ -744,20 +647,14 @@ docker run -d \
 ## Kubernetes (Helm)
 
 ```bash
-# Instalação padrão
 helm install mosaicfl ./ci_cd/helm
-
-# Com valores de produção
 helm install mosaicfl ./ci_cd/helm -f values-production.yaml
 
-# Verificar pods
 kubectl get pods -l app.kubernetes.io/name=mosaicfl
-
-# Logs do servidor
 kubectl logs -f deployment/mosaicfl-server
 ```
 
-O CronJob do scheduler (`scheduler-cronjob.yaml`) executa por padrão às **2h da manhã** (`0 2 * * *`), configurável em `values.yaml`.
+O CronJob do scheduler executa por padrão às **2h da manhã** (`0 2 * * *`), configurável em `values.yaml`.
 
 ---
 
@@ -765,22 +662,24 @@ O CronJob do scheduler (`scheduler-cronjob.yaml`) executa por padrão às **2h d
 
 | # | Experimento | Componente | Status |
 |---|---|---|---|
-| 1 | Padronização e pré-processamento | `EHRPreprocessor` | [OK] Real |
-| 2 | Efeito equalizador do FL | FedProx + AUC por cliente | [AVISO] Seed fixo |
-| 3 | Impacto heterogeneidade não-IID | Curvas por subgrupo demográfico | [AVISO] Curva aproximada |
-| 4 | RAG e detecção de alucinação | ChromaDB + DistilGPT-2 | [OK] Real |
-| 5 | Eficiência operacional | Convergência vs. comunicação | [OK] Real |
+| 1 | Padronização e pré-processamento | `EHRPreprocessor` | Real |
+| 2 | Efeito equalizador do FL | FedProx + AUC por cliente | Seed fixo |
+| 3 | Impacto heterogeneidade não-IID | Curvas por subgrupo demográfico | Curva aproximada |
+| 4 | RAG e detecção de alucinação | ChromaDB + DistilGPT-2 | Real |
+| 5 | Eficiência operacional | Convergência vs. comunicação | Real |
 
-Resultados salvos em `experiments/data/` após cada execução (`history_*.json`, `rag_*.json`). Logs em `experiments/logs/`.
-
-Para documentação detalhada de cada experimento (hipótese, limitações, caminho para dados reais), veja `EXPERIMENTOS.md`.
+Resultados em `experiments/data/` após cada execução. Documentação detalhada em `EXPERIMENTOS.md`.
 
 ---
 
 ## Solução de Problemas
 
-**`externally-managed-environment` ao rodar `pip install`**
-Use `bash setup.sh` em vez de `pip install` direto — cria um venv isolado automaticamente.
+**`EnvironmentError: FL_TLS_CERT_DIR não definido`**
+TLS é obrigatório. Gere certificados de desenvolvimento e configure a variável:
+```bash
+bash scripts/gen_certs.sh certs/
+export FL_TLS_CERT_DIR=$(pwd)/certs
+```
 
 **`ModuleNotFoundError: No module named 'mosaicfl'`**
 ```bash
@@ -788,20 +687,32 @@ source .venv/bin/activate
 pip install -e . --force-reinstall
 ```
 
-**`ImportError: No module named 'round_dispatcher'`**
-O nome correto é `round_training_fl_dispatcher`. Verifique se está usando a versão mais recente do projeto.
+**`externally-managed-environment` ao rodar `pip install`**
+Use `bash setup.sh` — cria um venv isolado automaticamente.
+
+**ServerApp cai no meio do treinamento**
+O estado é salvo em `logs/training_state.json`. Verifique:
+```bash
+cat logs/training_state.json   # status: "interrupted", last_round: N
+```
+Execute `flwr run . production` — o ServerApp detecta a interrupção, carrega o checkpoint do round N e retoma.
+
+**Round com timeout — treinamento travado**
+Se um round ultrapassar `round-timeout-seconds` (padrão 300s), o watchdog loga um warning e registra o round em `timed_out_rounds`. O treinamento não é abortado — apenas notificado. Ajuste o timeout:
+```bash
+flwr run . production --run-config "round-timeout-seconds=120"
+```
 
 **Cliente não conecta ao servidor**
 ```bash
-nc -zv localhost 8080        # verifica se porta está aberta
-echo $FL_SERVER_ADDRESS      # verifica variável de ambiente
-cat logs/server_health.json  # verifica status do servidor
+nc -zv <superlink-host> 9091     # verifica Fleet API
+curl http://localhost:8081/healthz  # status do servidor
+cat logs/training_state.json        # último estado salvo
 ```
 
 **Scheduler não detecta clientes**
 ```bash
-cat logs/client_registry.json   # verifica heartbeats dos clientes
-# Clientes precisam ter reportado heartbeat nos últimos 10 minutos
+cat logs/client_registry.json   # heartbeats dos clientes (últimos 10 min)
 ```
 
 ---
@@ -831,10 +742,9 @@ A IA funcionou como uma ferramenta de produtividade — equivalente a um compila
 
 ## Referências
 
-
 ### Frameworks e Bibliotecas
 
-- **Flower** — Beutel et al., 2020. *Flower: A Friendly Federated Learning Research Framework*. arXiv:2007.14390.  
+- **Flower** — Beutel et al., 2020. *Flower: A Friendly Federated AI Framework*. arXiv:2007.14390.
   [https://arxiv.org/abs/2007.14390](https://arxiv.org/abs/2007.14390)
 
 ### Algoritmos
@@ -863,5 +773,4 @@ Apache 2.0 — veja `pyproject.toml` para detalhes.
 ---
 
 > **Autora:** Jacqueline Abreu
-> **Instituição:** ICMC/USP — São Carlos  
-
+> **Instituição:** ICMC/USP — São Carlos

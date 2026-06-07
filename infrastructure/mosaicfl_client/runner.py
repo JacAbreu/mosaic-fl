@@ -2,9 +2,16 @@
 runner.py
 Orquestrador do cliente Flower de produção (mosaicfl.v2).
 
-Entrypoint único: main() — usado por __main__.py, client_daemon.py e client_daemon_v2.py.
+Dois modos de execução:
 
-Fontes de dados (FL_DATA_SOURCE): simulated | sgbd | csv — ver datasource.py.
+  SuperNode (produção):
+      flower-supernode --superlink <addr> --root-certificates ca.crt \
+                       --node-config "client-id=hospital_1,data-source=sgbd"
+    Expõe: app = ClientApp(client_fn=_client_fn)
+
+  Legado (desenvolvimento local):
+      python -m infrastructure.mosaicfl_client --client-id hospital_1
+    Usa: ProductionClient + fl.client.start_client
 """
 import argparse
 import logging
@@ -17,6 +24,8 @@ from typing import Optional, Tuple
 
 import flwr as fl
 import torch
+from flwr.client import ClientApp
+from flwr.common import Context
 from torch.utils.data import DataLoader, random_split
 
 from mosaicfl.core.client import FedProxClient
@@ -81,6 +90,39 @@ def _split_loader(loader: DataLoader, val_ratio: float = 0.2) -> Tuple[DataLoade
         DataLoader(train_ds, batch_size=loader.batch_size, shuffle=True),
         DataLoader(val_ds, batch_size=loader.batch_size, shuffle=False),
     )
+
+
+def _client_fn(context: Context) -> fl.client.Client:
+    """
+    Factory chamada pelo SuperNode a cada round.
+
+    Lê node_config (--node-config do flower-supernode) para identificar
+    o hospital e a fonte de dados. TLS é responsabilidade do SuperNode — não
+    é configurado aqui.
+    """
+    client_id_str = str(context.node_config.get("client-id", str(context.node_id)))
+    data_source_type = str(
+        context.node_config.get("data-source", os.getenv("FL_DATA_SOURCE", "simulated"))
+    )
+    client_id_int = parse_client_id(client_id_str)
+
+    logger.info(
+        "client_fn_invoked",
+        extra={"client_id": client_id_str, "data_source": data_source_type},
+    )
+
+    source = DataSourceFactory.create(data_source_type)
+    train_loader, val_loader = _split_loader(source.load())
+
+    return FedProxClient(
+        client_id=client_id_int,
+        train_loader=train_loader,
+        val_loader=val_loader,
+    ).to_client()
+
+
+# Entry point para: flower-supernode ... (SuperNode executa flwr-clientapp internamente)
+app = ClientApp(client_fn=_client_fn)
 
 
 class ProductionClient:

@@ -1,7 +1,15 @@
-PYTHON := .venv/bin/python
-PYTEST  := $(PYTHON) -m pytest
+PYTHON   := .venv/bin/python
+PYTEST   := $(PYTHON) -m pytest
+FLWR     := .venv/bin/flwr
 
-.PHONY: setup test test-integration test-e2e test-all test-cov run clean
+# Configurações do SuperLink (sobrescrevíveis por variável de ambiente)
+FL_TLS_CERT_DIR     ?= certs
+FL_SUPERLINK_ADDRESS ?= localhost:9091
+FL_CLIENT_ID        ?= hospital_dev
+FL_DATA_SOURCE      ?= simulated
+
+.PHONY: setup test test-integration test-e2e test-all test-cov run clean \
+        superlink server-app supernode sim
 
 setup:
 	bash setup.sh
@@ -28,6 +36,29 @@ test-all:
 
 run:
 	$(PYTHON) experiments/run_experiments_v2.py
+
+# ── Flower SuperLink (produção) ────────────────────────────────────────────────
+
+# Inicia o SuperLink com TLS. Requer FL_TLS_CERT_DIR com ca.crt/server.crt/server.key.
+superlink:
+	FL_TLS_CERT_DIR=$(FL_TLS_CERT_DIR) bash scripts/start_superlink.sh
+
+# Dispara ServerApp num SuperLink já em execução (requer flwr run e pyproject.toml).
+server-app:
+	$(FLWR) run . production
+
+# Inicia um SuperNode (cliente) conectando ao SuperLink.
+# Ex: make supernode FL_CLIENT_ID=hospital_1 FL_DATA_SOURCE=sgbd
+supernode:
+	FL_TLS_CERT_DIR=$(FL_TLS_CERT_DIR) \
+	FL_CLIENT_ID=$(FL_CLIENT_ID) \
+	FL_DATA_SOURCE=$(FL_DATA_SOURCE) \
+	FL_SUPERLINK_ADDRESS=$(FL_SUPERLINK_ADDRESS) \
+	bash scripts/start_supernode.sh
+
+# Simulação local com run_simulation (sem SuperLink, sem rede, sem TLS).
+sim:
+	$(FLWR) run . local-sim
 
 clean:
 	rm -rf .venv __pycache__ .pytest_cache .coverage htmlcov

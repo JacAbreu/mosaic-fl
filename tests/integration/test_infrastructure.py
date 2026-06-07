@@ -591,6 +591,13 @@ class TestProductionFedProxStrategy:
             strategy.should_stop = False
             strategy.on_round_complete = None
             strategy.on_round_start = None
+            strategy._state_store = None
+            strategy._round_timeout = 0
+            strategy._round_timer = None
+            strategy._current_state = __import__(
+                "infrastructure.mosaicfl_server.state_store", fromlist=["TrainingState"]
+            ).TrainingState()
+            strategy._last_round_metrics = {}
             strategy.CHECKPOINT_DIR = tmp_path / "checkpoints"
             strategy.LOG_DIR = tmp_path / "logs"
             strategy.CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
@@ -830,6 +837,7 @@ class TestConfigLoaderWithStrategy:
             strategy.global_model = model
             strategy.config_loader = loader
             strategy.on_round_start = None
+            strategy.on_round_complete = None
             strategy.proximal_mu = 0.01
             strategy.should_stop = False
             strategy.tracker = ProdTracker(
@@ -837,6 +845,13 @@ class TestConfigLoaderWithStrategy:
                 patience=CONVERGENCE_PATIENCE,
             )
             strategy.round_counter = 0
+            strategy._state_store = None
+            strategy._round_timeout = 0
+            strategy._round_timer = None
+            strategy._current_state = __import__(
+                "infrastructure.mosaicfl_server.state_store", fromlist=["TrainingState"]
+            ).TrainingState()
+            strategy._last_round_metrics = {}
             (tmp_path / "checkpoints").mkdir()
             (tmp_path / "logs").mkdir()
 

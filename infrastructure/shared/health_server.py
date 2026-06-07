@@ -73,7 +73,9 @@ class HealthServer:
             return self._round_metrics.get(round_num)
 
     def start(self) -> None:
-        """Inicia o servidor HTTP em thread daemon. Silencia erros de porta ocupada."""
+        """Inicia o servidor HTTP em thread daemon. Idempotente e silencia porta ocupada."""
+        if self._server is not None:
+            return
         try:
             self._server = HTTPServer(("0.0.0.0", self._port), self._make_handler())
             thread = threading.Thread(

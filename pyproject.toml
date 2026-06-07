@@ -26,7 +26,7 @@ classifiers = [
 dependencies = [
     "torch>=2.0.0",
     "transformers>=4.30.0",
-    "flwr>=1.5.0",
+    "flwr>=1.8.0",
     "chromadb>=0.4.0",
     "sentence-transformers>=2.2.0",
     "pandas>=2.0.0",
@@ -56,6 +56,30 @@ markers = [
     "e2e: ciclo FL real sem mocks — requer apenas Python e dependências do projeto",
 ]
 addopts = "-m 'not e2e'"
+
+# ── Flower App (flwr run) ──────────────────────────────────────────────────────
+[tool.flwr.app]
+publisher = "mosaic-fl"
+
+[tool.flwr.app.components]
+serverapp = "infrastructure.mosaicfl_server.runner:app"
+clientapp = "infrastructure.mosaicfl_client.runner:app"
+
+[tool.flwr.app.config]
+num-rounds            = 10
+local-epochs          = 1
+proximal-mu           = 1.0
+min-clients           = 2
+round-timeout-seconds = 300
+
+# Federação local para desenvolvimento (sem SuperLink externo)
+[tool.flwr.federations.local-sim]
+options.num-supernodes = 3
+
+# Federação de produção (requer flower-superlink rodando)
+[tool.flwr.federations.production]
+address = "superlink:9093"
+insecure = false
 
 [tool.black]
 line-length = 100

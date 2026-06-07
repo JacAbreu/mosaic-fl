@@ -5,6 +5,7 @@ Estratégia FedProx de produção (mosaicfl.v2) com checkpoint e convergência.
 import json
 import logging
 import os
+import threading
 import time
 from collections import OrderedDict
 from datetime import datetime
@@ -17,6 +18,7 @@ import torch
 from mosaicfl.core.config import FED_CFG
 from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_loss
 from .config_loader import ConfigLoader, get_config_loader
+from .state_store import TrainingState, TrainingStateStore
 
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
 LOG_DIR = Path(os.getenv("FL_LOG_DIR", "logs"))
@@ -42,6 +44,8 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         config_loader: Optional[ConfigLoader] = None,
         on_round_start: Optional[Callable[[int, Dict], None]] = None,
         on_round_complete: Optional[Callable[[int, Dict], None]] = None,
+        state_store: Optional[TrainingStateStore] = None,
+        round_timeout: int = 300,
         *args,
         **kwargs,
     ):
@@ -58,8 +62,71 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         )
         self.round_counter = 0
         self.should_stop = False
+
+        self._state_store = state_store
+        self._round_timeout = round_timeout
+        self._round_timer: Optional[threading.Timer] = None
+        self._current_state = TrainingState()
+        self._last_round_metrics: Dict = {}
+
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+        if state_store is not None:
+            self._restore_from_state(state_store.load())
+
+    def _restore_from_state(self, state: TrainingState) -> None:
+        """Restaura ConvergenceTracker e estado interno a partir do estado salvo."""
+        self.tracker.history = list(state.convergence_history)
+        self.tracker.converged_round = state.converged_round
+        self.round_counter = state.last_round
+        self._current_state = state
+        logger.info(
+            "strategy_state_restored",
+            extra={
+                "previous_status": state.status,
+                "last_round": state.last_round,
+                "history_length": len(state.convergence_history),
+                "converged_round": state.converged_round,
+                "last_checkpoint": state.last_checkpoint,
+            },
+        )
+
+    def _save_state(self, server_round: int) -> None:
+        """Persiste estado atual no TrainingStateStore."""
+        if self._state_store is None:
+            return
+        self._current_state.last_round = server_round
+        self._current_state.convergence_history = list(self.tracker.history)
+        self._current_state.converged_round = self.tracker.converged_round
+        self._current_state.last_metrics = self._last_round_metrics
+        self._current_state.last_checkpoint = str(CHECKPOINT_DIR / f"round_{server_round}.pt")
+        self._state_store.save(self._current_state)
+
+    def _start_round_watchdog(self, server_round: int) -> None:
+        """Inicia timer que dispara se aggregate_fit não for chamado em _round_timeout s."""
+        if self._round_timeout <= 0:
+            return
+        if self._round_timer is not None:
+            self._round_timer.cancel()
+
+        def _on_timeout() -> None:
+            logger.warning(
+                "round_timeout",
+                extra={"round": server_round, "timeout_seconds": self._round_timeout},
+            )
+            self._current_state.timed_out_rounds.append(server_round)
+            self._current_state.status = "running"
+            self._save_state(server_round)
+
+        self._round_timer = threading.Timer(self._round_timeout, _on_timeout)
+        self._round_timer.daemon = True
+        self._round_timer.start()
+
+    def _cancel_round_watchdog(self) -> None:
+        if self._round_timer is not None:
+            self._round_timer.cancel()
+            self._round_timer = None
 
     def configure_fit(
         self, server_round: int, parameters, client_manager
@@ -97,6 +164,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
             except Exception as e:
                 logger.warning("round_start_callback_error", extra={"round": server_round, "error": str(e)})
 
+        self._start_round_watchdog(server_round)
         return super().configure_fit(server_round, parameters, client_manager)
 
     def _load_global_weights(self, parameters) -> None:
@@ -114,7 +182,8 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
             logger.debug("Checkpoint: chaves inesperadas: %s", unexpected)
 
     def aggregate_fit(self, server_round, results, failures):
-        """Agrega pesos e salva checkpoint."""
+        """Agrega pesos e salva checkpoint. Cancela watchdog do round."""
+        self._cancel_round_watchdog()
         aggregated_parameters, aggregated_metrics = super().aggregate_fit(
             server_round, results, failures
         )
@@ -137,14 +206,16 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         self.tracker.check(accuracy)
         self.round_counter = server_round
 
+        converged = self.tracker.converged_round is not None
         round_metrics = {
             "round": server_round,
             "loss": aggregated_loss,
             "accuracy": accuracy,
             "timestamp": datetime.now().isoformat(),
-            "converged": self.tracker.converged_round is not None,
+            "converged": converged,
             "convergence_round": self.tracker.converged_round,
         }
+        self._last_round_metrics = round_metrics
 
         metrics_file = LOG_DIR / f"round_{server_round}_metrics.json"
         try:
@@ -152,6 +223,10 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
                 json.dump(round_metrics, f, indent=2)
         except Exception as e:
             logger.warning("metrics_write_error", extra={"round": server_round, "error": str(e)})
+
+        # Persiste estado após cada round — permite recovery exato no próximo restart
+        self._current_state.status = "completed" if converged else "running"
+        self._save_state(server_round)
 
         if self.on_round_complete is not None:
             try:
@@ -162,7 +237,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
                     extra={"round": server_round, "error": str(e)},
                 )
 
-        if self.tracker.converged_round is not None:
+        if converged:
             self.should_stop = True
             logger.info(
                 "convergence_detected",
