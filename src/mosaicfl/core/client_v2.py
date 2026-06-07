@@ -54,7 +54,7 @@ class FedProxClient(fl.client.NumPyClient):
         Reduz tráfego de rede e evita inconsistências no servidor.
         """
         #return [p.detach().cpu().numpy() for p in self.model.parameters()]
-        return [v.cpu().numpy() for v in self.model.state_dict().values()]        
+        return [v.cpu().detach().numpy().copy() for v in self.model.state_dict().values()]
 
     def _proximal_loss(self, loss: torch.Tensor) -> torch.Tensor:
         """Adiciona termo proximal do FedProx."""

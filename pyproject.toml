@@ -51,6 +51,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+markers = [
+    "e2e: ciclo FL real sem mocks — requer apenas Python e dependências do projeto",
+]
+addopts = "-m 'not e2e'"
 
 [tool.black]
 line-length = 100
