@@ -173,8 +173,9 @@ class TestPredictEndpoint:
         client, _, _ = client_state
         r = client.post("/api/predict", json={
             "patient_id": "P001",
-            "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.5, "phase": "IN"}],
-        })
+            "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.5, "phase": "IN"}]},
+            headers={"X-API-Key": "secret123"},
+        )
         assert r.status_code == 200
 
     def test_response_structure(self, client_state):
@@ -182,7 +183,7 @@ class TestPredictEndpoint:
         data = client.post("/api/predict", json={
             "patient_id": "P001",
             "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.5, "phase": "IN"}],
-        }).json()
+        }, headers={"X-API-Key": "secret123"},).json()
         assert {"risk_score", "patient_id", "risk_date"}.issubset(data)
 
     def test_risk_score_is_float(self, client_state):
@@ -190,12 +191,12 @@ class TestPredictEndpoint:
         data = client.post("/api/predict", json={
             "patient_id": "P001",
             "exams": [{"exam_name": "Hb", "date": "2020-03-01", "value": 12.0, "phase": "IN"}],
-        }).json()
+        }, headers={"X-API-Key": "secret123"},).json()
         assert isinstance(data["risk_score"], float)
 
     def test_empty_exams_returns_422(self, client_state):
         client, _, _ = client_state
-        r = client.post("/api/predict", json={"patient_id": "P001", "exams": []})
+        r = client.post("/api/predict", json={"patient_id": "P001", "exams": []}, headers={"X-API-Key": "secret123"},)
         assert r.status_code == 422
 
     def test_engine_called(self, client_state):
@@ -204,7 +205,7 @@ class TestPredictEndpoint:
         client.post("/api/predict", json={
             "patient_id": "P002",
             "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}],
-        })
+        }, headers={"X-API-Key": "secret123"},)
         engine.predict.assert_called_once()
 
 
@@ -217,7 +218,7 @@ class TestIngestEndpoint:
             "age": 55.0,
             "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.5, "phase": "IN"}],
             "output_dir": str(tmp_path),
-        })
+        }, headers={"X-API-Key": "secret123"},)
         assert r.status_code == 200
 
     def test_response_has_risk_and_path(self, client_state, tmp_path):
@@ -226,7 +227,7 @@ class TestIngestEndpoint:
             "patient_id": "PI_002",
             "exams": [{"exam_name": "Hb", "date": "2020-03-02", "value": 13.0, "phase": "IN"}],
             "output_dir": str(tmp_path),
-        }).json()
+        }, headers={"X-API-Key": "secret123"},).json()
         assert "export_path" in data
         assert "risk_score" in data
 
@@ -236,7 +237,7 @@ class TestIngestEndpoint:
             "patient_id": "PI_FILES",
             "exams": [{"exam_name": "CRP", "date": "2020-03-01", "value": 45.0, "phase": "IN"}],
             "output_dir": str(tmp_path),
-        })
+        }, headers={"X-API-Key": "secret123"},)
         patient_dir = tmp_path / "Patients" / "PI_FILES"
         assert patient_dir.exists()
         for fname in ["exam-id.txt", "timestamp_to_date.txt", "node-inline-time-complete.txt"]:
@@ -244,7 +245,7 @@ class TestIngestEndpoint:
 
     def test_empty_exams_returns_422(self, client_state):
         client, _, _ = client_state
-        r = client.post("/api/exams/ingest", json={"patient_id": "P099", "exams": []})
+        r = client.post("/api/exams/ingest", json={"patient_id": "P099", "exams": []}, headers={"X-API-Key": "secret123"},)
         assert r.status_code == 422
 
     def test_history_persists_in_db(self, client_state, tmp_path):
@@ -255,7 +256,7 @@ class TestIngestEndpoint:
                 "patient_id": pid,
                 "exams": [{"exam_name": "WBC", "date": d, "value": 8.0, "phase": "IN"}],
                 "output_dir": str(tmp_path),
-            })
+            }, headers={"X-API-Key": "secret123"},)
         hist = svc._db.get_risk_history(pid)
         assert len(hist) == 2
 
@@ -263,7 +264,7 @@ class TestIngestEndpoint:
 class TestPatientsEndpoint:
     def test_returns_list(self, client_state):
         client, _, _ = client_state
-        r = client.get("/api/patients")
+        r = client.get("/api/patients", headers={"X-API-Key": "secret123"},)
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 
@@ -274,8 +275,8 @@ class TestPatientsEndpoint:
             "patient_id": pid,
             "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}],
             "output_dir": str(tmp_path),
-        })
-        ids = [p["patient_id"] for p in client.get("/api/patients").json()]
+        }, headers={"X-API-Key": "test-token"})
+        ids = [p["patient_id"] for p in client.get("/api/patients", headers={"X-API-Key": "test-token"}).json()]
         assert pid in ids
 
     def test_summary_has_required_fields(self, client_state, tmp_path):
@@ -285,8 +286,8 @@ class TestPatientsEndpoint:
             "patient_id": pid, "sex": "F", "age": 30.0,
             "exams": [{"exam_name": "Hb", "date": "2020-03-01", "value": 12.0, "phase": "IN"}],
             "output_dir": str(tmp_path),
-        })
-        summaries = {p["patient_id"]: p for p in client.get("/api/patients").json()}
+        }, headers={"X-API-Key": "test-token"})
+        summaries = {p["patient_id"]: p for p in client.get("/api/patients", headers={"X-API-Key": "test-token"}).json()}
         s = summaries[pid]
         assert all(k in s for k in ("latest_risk", "latest_date", "sex", "age"))
 
@@ -294,7 +295,7 @@ class TestPatientsEndpoint:
 class TestPatientDetailEndpoint:
     def test_404_for_unknown(self, client_state):
         client, _, _ = client_state
-        assert client.get("/api/patients/NAOEXISTE_XYZ").status_code == 404
+        assert client.get("/api/patients/NAOEXISTE_XYZ", headers={"X-API-Key": "test-token"}).status_code == 404
 
     def test_risk_history_returned(self, client_state, tmp_path):
         client, _, _ = client_state
@@ -303,8 +304,8 @@ class TestPatientDetailEndpoint:
             "patient_id": pid,
             "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}],
             "output_dir": str(tmp_path),
-        })
-        data = client.get(f"/api/patients/{pid}").json()
+        }, headers={"X-API-Key": "test-token"})
+        data = client.get(f"/api/patients/{pid}", headers={"X-API-Key": "test-token"}).json()
         assert len(data["risk_history"]) >= 1
         assert all(k in data["risk_history"][0] for k in ("risk_score", "date"))
 
@@ -318,8 +319,8 @@ class TestPatientDetailEndpoint:
                 {"exam_name": "Hb",  "date": "2020-03-01", "value": 12.0, "phase": "IN"},
             ],
             "output_dir": str(tmp_path),
-        })
-        assert client.get(f"/api/patients/{pid}").json()["exam_count"] == 2
+        }, headers={"X-API-Key": "test-token"})
+        assert client.get(f"/api/patients/{pid}", headers={"X-API-Key": "test-token"}).json()["exam_count"] == 2
 
 
 class TestFLStatusEndpoint:
@@ -358,46 +359,33 @@ class TestFLStatusEndpoint:
 
 
 class TestAuthentication:
-    def test_no_auth_required_when_key_not_set(self, client_state):
-        """Sem FL_API_KEY configurada, todos os requests passam."""
-        client, _, svc = client_state
-        r = client.post("/api/predict", json={
-            "patient_id": "P001",
-            "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}],
-        })
+    _EXAM = {"patient_id": "P001", "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}]}
+
+    def test_any_key_accepted(self, client_state):
+        """Qualquer token presente é aceito — validação de identidade é upstream."""
+        client, _, _ = client_state
+        r = client.post("/api/predict", json=self._EXAM, headers={"X-API-Key": "qualquer-valor"})
         assert r.status_code == 200
 
-    def test_valid_key_accepted(self, client_state, monkeypatch):
-        client, _, svc = client_state
-        monkeypatch.setattr(svc, "_API_KEY", "secret123")
-        r = client.post(
-            "/api/predict",
-            json={"patient_id": "P001",
-                  "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}]},
-            headers={"X-API-Key": "secret123"},
-        )
+    def test_bearer_token_accepted(self, client_state):
+        """Authorization: Bearer também é aceito como alternativa ao X-API-Key."""
+        client, _, _ = client_state
+        r = client.post("/api/predict", json=self._EXAM,
+                        headers={"Authorization": "Bearer meu-token-hospitalar"})
         assert r.status_code == 200
 
-    def test_invalid_key_returns_403(self, client_state, monkeypatch):
-        client, _, svc = client_state
-        monkeypatch.setattr(svc, "_API_KEY", "secret123")
-        r = client.post(
-            "/api/predict",
-            json={"patient_id": "P001",
-                  "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}]},
-            headers={"X-API-Key": "wrong"},
-        )
+    def test_missing_token_returns_403(self, client_state):
+        """Sem token e FL_AUTH_REQUIRED=true (padrão) → 403."""
+        client, _, _ = client_state
+        r = client.post("/api/predict", json=self._EXAM)
         assert r.status_code == 403
 
-    def test_missing_key_returns_403(self, client_state, monkeypatch):
+    def test_no_auth_when_disabled(self, client_state, monkeypatch):
+        """FL_AUTH_REQUIRED=false → request sem token é aceito."""
         client, _, svc = client_state
-        monkeypatch.setattr(svc, "_API_KEY", "secret123")
-        r = client.post(
-            "/api/predict",
-            json={"patient_id": "P001",
-                  "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}]},
-        )
-        assert r.status_code == 403
+        monkeypatch.setattr(svc, "_AUTH_REQUIRED", False)
+        r = client.post("/api/predict", json=self._EXAM)
+        assert r.status_code == 200
 
 
 # ---------------------------------------------------------------------------
