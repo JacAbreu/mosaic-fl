@@ -13,7 +13,8 @@ Autenticação: aceita qualquer token presente no header X-API-Key ou
 
 CORS: configurado via FL_CORS_ORIGINS (padrão: * para desenvolvimento).
 
-Persistência: SQLite via db.PatientDB — histórico de pacientes sobrevive a reinicios.
+Persistência: PatientDB (SQLAlchemy) — PostgreSQL em produção, SQLite em dev/testes.
+              Configurar FL_DB_URL para apontar ao PostgreSQL antes de dados reais.
 
 Auditoria: todo acesso a dado de paciente é registrado em logs/audit.log
            com patient_id pseudonimizado e fingerprint do token.
@@ -247,7 +248,7 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
         all_records = [
             ExamRecord(
                 exam_name=r["exam_name"],
-                date=date.fromisoformat(r["date"]),
+                date=r["date"],
                 value=r["value"],
                 phase=ClinicalPhase.from_str(r["phase"]),
                 ref_low=r["ref_low"],
@@ -266,7 +267,7 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
             age=patient_row["age"],
             exam_records=all_records,
             risk_predictions=[
-                RiskPrediction(date=date.fromisoformat(h["date"]), risk_score=h["risk_score"])
+                RiskPrediction(date=h["date"], risk_score=h["risk_score"])
                 for h in all_risk_rows
             ],
         )
@@ -347,7 +348,10 @@ async def list_patients(fingerprint: str = Depends(_get_token_fingerprint)):
             sex=r["sex"],
             age=r["age"],
             latest_risk=round(r["latest_risk"], 4) if r["latest_risk"] is not None else None,
-            latest_date=date.fromisoformat(r["latest_date"]) if r["latest_date"] else None,
+            latest_date=(
+                r["latest_date"] if isinstance(r["latest_date"], date)
+                else date.fromisoformat(r["latest_date"])
+            ) if r["latest_date"] else None,
         )
         for r in rows
     ]
@@ -370,7 +374,7 @@ async def get_patient(
         sex=p["sex"],
         age=p["age"],
         risk_history=[
-            RiskEntry(date=date.fromisoformat(h["date"]), risk_score=h["risk_score"])
+            RiskEntry(date=h["date"], risk_score=h["risk_score"])
             for h in risk_history
         ],
         exam_count=_db.exam_count(patient_id),

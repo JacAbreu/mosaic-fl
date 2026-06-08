@@ -35,7 +35,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
       - Checkpoint do modelo global a cada rodada
       - Exporta métricas para JSON (consumidas pelo scheduler)
       - Rastreia convergência
-      - Lê config de runtime do ChromaDB (ou arquivo) antes de cada round
+      - Lê config de runtime do PostgreSQL (ou arquivo) antes de cada round
     """
 
     def __init__(
@@ -134,7 +134,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         """
         Chamado pelo Flower antes de cada round de treino.
 
-        Lê config dinâmica do ChromaDB (ou fallback arquivo) e aplica antes
+        Lê config dinâmica do PostgreSQL (ou fallback arquivo) e aplica antes
         de delegar a seleção de clientes ao FedProx padrão.
         """
         runtime = self.config_loader.load(server_round)

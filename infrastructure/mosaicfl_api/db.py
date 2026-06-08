@@ -15,6 +15,7 @@ O construtor aceita Path para compatibilidade retroativa:
 """
 import logging
 import os
+from datetime import date as _date
 from pathlib import Path
 from typing import Optional, Union
 
@@ -60,7 +61,7 @@ def _build_tables(is_pg: bool):
         "risk_history", meta,
         sa.Column("id",         sa.Integer, primary_key=True, autoincrement=True),
         sa.Column("patient_id", sa.Text,  nullable=False),
-        sa.Column("date",       sa.Text,  nullable=False),
+        sa.Column("date",       sa.Date,  nullable=False),
         sa.Column("risk_score", sa.Float, nullable=False),
         schema=metrics,
     )
@@ -69,7 +70,7 @@ def _build_tables(is_pg: bool):
         sa.Column("id",           sa.Integer, primary_key=True, autoincrement=True),
         sa.Column("patient_id",   sa.Text,  nullable=False),
         sa.Column("exam_name",    sa.Text,  nullable=False),
-        sa.Column("date",         sa.Text,  nullable=False),
+        sa.Column("date",         sa.Date,  nullable=False),
         sa.Column("value",        sa.Float, nullable=False),
         sa.Column("phase",        sa.Text,  nullable=False),
         sa.Column("ref_low",      sa.Float, server_default=sa.text("0.0")),
@@ -177,11 +178,12 @@ class PatientDB:
 
     # ── histórico de risco ─────────────────────────────────────────────────
 
-    def add_risk(self, patient_id: str, date_str: str, risk_score: float) -> None:
+    def add_risk(self, patient_id: str, date_val: "str | _date", risk_score: float) -> None:
+        d = date_val if isinstance(date_val, _date) else _date.fromisoformat(date_val)
         with self._engine.begin() as conn:
             conn.execute(
                 insert(self._risk).values(
-                    patient_id=patient_id, date=date_str, risk_score=risk_score
+                    patient_id=patient_id, date=d, risk_score=risk_score
                 )
             )
 
@@ -192,7 +194,12 @@ class PatientDB:
             .order_by(self._risk.c.date, self._risk.c.id)
         )
         with self._engine.connect() as conn:
-            return [dict(row) for row in conn.execute(stmt).mappings()]
+            rows = conn.execute(stmt).mappings()
+            return [
+                {"date": r["date"] if isinstance(r["date"], _date) else _date.fromisoformat(r["date"]),
+                 "risk_score": r["risk_score"]}
+                for r in rows
+            ]
 
     # ── exames ─────────────────────────────────────────────────────────────
 
@@ -201,7 +208,7 @@ class PatientDB:
             {
                 "patient_id":   patient_id,
                 "exam_name":    e["exam_name"],
-                "date":         e["date"],
+                "date":         e["date"] if isinstance(e["date"], _date) else _date.fromisoformat(e["date"]),
                 "value":        e["value"],
                 "phase":        e["phase"],
                 "ref_low":      e.get("ref_low",      0.0),
@@ -230,7 +237,11 @@ class PatientDB:
             .order_by(self._exams.c.date, self._exams.c.id)
         )
         with self._engine.connect() as conn:
-            return [dict(row) for row in conn.execute(stmt).mappings()]
+            rows = conn.execute(stmt).mappings()
+            return [
+                dict(r) | {"date": r["date"] if isinstance(r["date"], _date) else _date.fromisoformat(r["date"])}
+                for r in rows
+            ]
 
     def exam_count(self, patient_id: str) -> int:
         stmt = (
