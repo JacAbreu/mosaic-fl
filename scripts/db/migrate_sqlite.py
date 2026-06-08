@@ -55,11 +55,17 @@ def migrate(sqlite_path: str, pg_url: str) -> None:
         dst.add_risk(r["patient_id"], r["date"], r["risk_score"])
 
     # 3. Exames (em batch por paciente)
+    # SQLite legado pode ter coluna exam_name; mapeia para analyte no destino.
     exams = src.execute("SELECT * FROM exam_records ORDER BY id").fetchall()
     log.info(f"  exam_records:   {len(exams)}")
     by_patient: dict = defaultdict(list)
     for e in exams:
-        by_patient[e["patient_id"]].append(dict(e))
+        row = dict(e)
+        if "exam_name" in row and "analyte" not in row:
+            row["analyte"] = row.pop("exam_name")
+        row.pop("sex_ref_low",  None)
+        row.pop("sex_ref_high", None)
+        by_patient[row["patient_id"]].append(row)
     for patient_id, batch in by_patient.items():
         dst.add_exams(patient_id, batch)
 

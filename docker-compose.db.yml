@@ -12,6 +12,7 @@ services:
     volumes:
       - db_data:/home/postgres/pgdata/data
       - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    shm_size: 512m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mosaicfl -d mosaicfl"]
       interval: 10s

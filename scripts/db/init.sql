@@ -1,7 +1,13 @@
--- init.sql
--- Executado automaticamente na primeira inicialização do container.
--- Cria extensões, schemas e tabelas estáticas.
--- Tabelas gerenciadas pela aplicação (SQLAlchemy) são criadas em runtime.
+-- init.sql  (migration 001)
+-- Executed automatically on first container start.
+-- Creates extensions, schemas, and base tables.
+--
+-- Migration sequence (run in order for existing databases):
+--   001  init.sql                     — base schema (this file)
+--   002  002_extend_patients.sql      — birth_year, state_code, hospital_id
+--   003  003_create_attendances.sql   — clinical.attendances
+--   004  004_extend_exam_records.sql  — analyte, exam_group, value_text, unit, attendance_id
+--   005  005_create_clinical_outcomes.sql — metrics.clinical_outcomes
 
 -- ---------------------------------------------------------------------------
 -- Extensões

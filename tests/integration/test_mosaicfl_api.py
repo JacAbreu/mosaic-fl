@@ -105,9 +105,8 @@ class TestPatientDB:
     def test_add_and_count_exams(self, db):
         db.upsert_patient("P004", "M", 50.0)
         db.add_exams("P004", [
-            {"exam_name": "WBC", "date": "2020-03-01", "value": 8.5,
-             "phase": "IN", "ref_low": 4.0, "ref_high": 11.0,
-             "sex_ref_low": 4.0, "sex_ref_high": 11.0},
+            {"analyte": "WBC", "date": "2020-03-01", "value": 8.5,
+             "phase": "IN", "ref_low": 4.0, "ref_high": 11.0},
         ])
         assert db.exam_count("P004") == 1
 

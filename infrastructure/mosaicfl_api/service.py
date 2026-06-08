@@ -151,8 +151,11 @@ class ExamInput(BaseModel):
     phase: str = Field("IN", description="AB | EX | IN | OBITO | P_ALTA")
     ref_low: float = 0.0
     ref_high: float = 0.0
-    sex_ref_low: float = 0.0
-    sex_ref_high: float = 0.0
+    origin: Optional[str] = None
+    exam_group: Optional[str] = None
+    value_text: Optional[str] = None
+    unit: Optional[str] = None
+    attendance_id: Optional[str] = None
 
 
 class PredictRequest(BaseModel):
@@ -225,8 +228,6 @@ def _to_record(e: ExamInput) -> ExamRecord:
         phase=phase,
         ref_low=e.ref_low,
         ref_high=e.ref_high,
-        sex_ref_low=e.sex_ref_low,
-        sex_ref_high=e.sex_ref_high,
     )
 
 
@@ -239,7 +240,22 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
 
     async with _ingest_lock:
         _db.upsert_patient(request.patient_id, request.sex, request.age)
-        _db.add_exams(request.patient_id, [e.model_dump() | {"date": str(e.date)} for e in request.exams])
+        _db.add_exams(request.patient_id, [
+            {
+                "analyte":       e.exam_name,
+                "date":          str(e.date),
+                "value":         e.value,
+                "phase":         e.phase,
+                "ref_low":       e.ref_low,
+                "ref_high":      e.ref_high,
+                "origin":        e.origin,
+                "exam_group":    e.exam_group,
+                "value_text":    e.value_text,
+                "unit":          e.unit,
+                "attendance_id": e.attendance_id,
+            }
+            for e in request.exams
+        ])
         _db.add_risk(request.patient_id, today.isoformat(), risk_score)
 
         all_exam_rows = _db.get_exams(request.patient_id)
@@ -247,14 +263,12 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
 
         all_records = [
             ExamRecord(
-                exam_name=r["exam_name"],
+                exam_name=r["analyte"],
                 date=r["date"],
                 value=r["value"],
                 phase=ClinicalPhase.from_str(r["phase"]),
                 ref_low=r["ref_low"],
                 ref_high=r["ref_high"],
-                sex_ref_low=r["sex_ref_low"],
-                sex_ref_high=r["sex_ref_high"],
             )
             for r in all_exam_rows
         ]
