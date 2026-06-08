@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# start_supernode.sh — Inicia um flower-supernode (cliente FL) para um hospital.
+# iniciar_cliente_fl.sh — Inicia um no cliente do aprendizado federado (hospital) conectando ao servidor.
 #
-# Variáveis de ambiente:
-#   FL_TLS_CERT_DIR       Diretório com ca.crt  (obrigatório)
-#   FL_CLIENT_ID          ID único deste hospital, ex: hospital_1  (obrigatório)
+# Variaveis de ambiente:
+#   FL_TLS_CERT_DIR       Diretorio com ca.crt  (obrigatorio)
+#   FL_CLIENT_ID          ID unico deste hospital, ex: hospital_1  (obrigatorio)
 #   FL_DATA_SOURCE        Fonte de dados: simulated | sgbd | csv  (default: simulated)
-#   FL_SUPERLINK_ADDRESS  Endereço Fleet API do SuperLink  (default: localhost:9091)
-#   FL_MAX_RETRIES        Tentativas de reconexão (default: 20, vazio = infinito)
+#   FL_SUPERLINK_ADDRESS  Endereco do servidor FL  (default: localhost:9091)
+#   FL_MAX_RETRIES        Tentativas de reconexao (default: 20, vazio = infinito)
 #
 # Uso:
 #   FL_TLS_CERT_DIR=/certs FL_CLIENT_ID=hospital_1 FL_DATA_SOURCE=sgbd \
-#       ./scripts/start_supernode.sh
+#       bash scripts/iniciar_cliente_fl.sh
+#   ou: make supernode FL_CLIENT_ID=hospital_1
 set -euo pipefail
 
-: "${FL_TLS_CERT_DIR:?FL_TLS_CERT_DIR não definido. Execute scripts/gen_certs.sh primeiro.}"
+: "${FL_TLS_CERT_DIR:?FL_TLS_CERT_DIR nao definido. Execute: bash scripts/gerar_certs_tls.sh}"
 : "${FL_CLIENT_ID:?FL_CLIENT_ID não definido. Ex: FL_CLIENT_ID=hospital_1}"
 
 FL_DATA_SOURCE="${FL_DATA_SOURCE:-simulated}"

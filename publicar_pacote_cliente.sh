@@ -1,14 +1,14 @@
 #!/bin/bash
-# publish-server.sh
-# Cria e publica o pacote mosaicfl-server no PyPI (ou servidor privado).
+# publicar_pacote_cliente.sh
+# Cria e publica o pacote mosaicfl-client no PyPI (ou servidor privado).
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVER_DIR="$SCRIPT_DIR/infrastructure/server"
+CLIENT_DIR="$SCRIPT_DIR/infrastructure/client"
 
-echo "Publicando mosaicfl-server..."
-cd "$SERVER_DIR"
+echo "Publicando mosaicfl-client..."
+cd "$CLIENT_DIR"
 
 # Limpa builds antigos
 rm -rf build dist *.egg-info
@@ -25,7 +25,7 @@ python -m build
 # Ou instala localmente para teste
 pip install -e .
 
-echo "mosaicfl-server publicado/instalado!"
+echo "mosaicfl-client publicado/instalado!"
 echo ""
 echo "Uso:"
-echo "  mosaicfl-server --port 8080 --min-clients 3"
+echo "  mosaicfl-client --server 192.168.1.100:8080 --client-id hospital_a"

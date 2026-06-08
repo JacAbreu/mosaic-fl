@@ -17,7 +17,7 @@ Imagens Docker plug-and-play para deploy do MOSAIC-FL em produção.
 | `Dockerfile.client` | Imagem do cliente |
 | `docker-compose.yml` | Orquestra servidor + 3 clientes para teste |
 | `.dockerignore` | Exclui arquivos desnecessários do build |
-| `build-and-push.sh` | Build e push para registry |
+| `docker_build_push.sh` | Build e push para registry |
 
 ## Uso Rápido
 
@@ -135,7 +135,7 @@ export DOCKER_REGISTRY=jacabreu
 export VERSION=0.2.0
 
 # Build e push
-./build-and-push.sh
+./docker_build_push.sh
 ```
 
 ## Otimizações Futuras

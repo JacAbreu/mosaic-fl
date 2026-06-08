@@ -1,9 +1,9 @@
 #!/bin/bash
-# gen_certs.sh — Gera certificados TLS autoassinados para desenvolvimento/rede local
+# gerar_certs_tls.sh — Gera certificados TLS autoassinados para desenvolvimento/rede local
 #
 # Uso:
-#   bash scripts/gen_certs.sh              # gera em ./certs/
-#   bash scripts/gen_certs.sh /tmp/mycerts # gera no diretório especificado
+#   bash scripts/gerar_certs_tls.sh              # gera em ./certs/
+#   bash scripts/gerar_certs_tls.sh /tmp/mycerts # gera no diretorio especificado
 #
 # Saída:
 #   $OUT_DIR/ca.crt        ← CA raiz (distribuir para todos os clientes)

@@ -41,7 +41,7 @@ experiment:
 
 # Inicia o SuperLink com TLS. Requer FL_TLS_CERT_DIR com ca.crt/server.crt/server.key.
 superlink:
-	FL_TLS_CERT_DIR=$(FL_TLS_CERT_DIR) bash scripts/start_superlink.sh
+	FL_TLS_CERT_DIR=$(FL_TLS_CERT_DIR) bash scripts/iniciar_servidor_fl.sh
 
 # Dispara ServerApp num SuperLink já em execução (requer flwr run e pyproject.toml).
 server-app:
@@ -54,7 +54,7 @@ supernode:
 	FL_CLIENT_ID=$(FL_CLIENT_ID) \
 	FL_DATA_SOURCE=$(FL_DATA_SOURCE) \
 	FL_SUPERLINK_ADDRESS=$(FL_SUPERLINK_ADDRESS) \
-	bash scripts/start_supernode.sh
+	bash scripts/iniciar_cliente_fl.sh
 
 # Simulação local com run_simulation (sem SuperLink, sem rede, sem TLS).
 sim:

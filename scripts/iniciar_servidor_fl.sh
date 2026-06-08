@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# start_superlink.sh — Inicia o flower-superlink com TLS obrigatório.
+# iniciar_servidor_fl.sh — Inicia o coordenador central do aprendizado federado (flower-superlink) com TLS.
 #
-# Variáveis de ambiente:
-#   FL_TLS_CERT_DIR   Diretório com ca.crt, server.crt, server.key  (obrigatório)
-#   FL_FLEET_API      Endereço da Fleet API (default: 0.0.0.0:9091)
-#   FL_APPIO_API      Endereço da ServerApp I/O API (default: 0.0.0.0:9092)
+# Variaveis de ambiente:
+#   FL_TLS_CERT_DIR   Diretorio com ca.crt, server.crt, server.key  (obrigatorio)
+#   FL_FLEET_API      Endereco da Fleet API (default: 0.0.0.0:9091)
+#   FL_APPIO_API      Endereco da ServerApp I/O API (default: 0.0.0.0:9092)
 #   FL_SUPERLINK_DB   Caminho do banco SQLite de estado (default: superlink.db)
 #
 # Uso:
-#   FL_TLS_CERT_DIR=/certs ./scripts/start_superlink.sh
+#   FL_TLS_CERT_DIR=/certs bash scripts/iniciar_servidor_fl.sh
+#   ou: make superlink
 set -euo pipefail
 
-: "${FL_TLS_CERT_DIR:?FL_TLS_CERT_DIR não definido. Execute scripts/gen_certs.sh primeiro.}"
+: "${FL_TLS_CERT_DIR:?FL_TLS_CERT_DIR nao definido. Execute: bash scripts/gerar_certs_tls.sh}"
 
 FL_FLEET_API="${FL_FLEET_API:-0.0.0.0:9091}"
 FL_APPIO_API="${FL_APPIO_API:-0.0.0.0:9092}"

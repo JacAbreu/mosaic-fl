@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-and-push.sh
+# docker_build_push.sh
 # Build e push das imagens Docker para registry.
 
 set -e

@@ -43,9 +43,9 @@ mosaic-fl/                          ← repositório GitHub único
 │           ├── heartbeat.py        ← escreve client_registry.json
 │           └── runner.py           ← orquestrador do cliente
 │
-├── publish-server.sh               ← build + publish mosaicfl-server
-├── publish-client.sh               ← build + publish mosaicfl-client
-├── install.sh                      ← instala tudo localmente (dev)
+├── publicar_pacote_servidor.sh     ← build + publish mosaicfl-server
+├── publicar_pacote_cliente.sh      ← build + publish mosaicfl-client
+├── setup.sh                        ← instala tudo localmente (dev)
 ├── pyproject.toml                  ← pacote core: mosaicfl
 ├── run_v2_unified.py               ← experimento TCC
 └── ...
@@ -58,7 +58,7 @@ mosaic-fl/                          ← repositório GitHub único
 ```bash
 git clone https://github.com/JacAbreu/mosaic-fl.git
 cd mosaic-fl
-./install.sh
+bash setup.sh
 ```
 
 Isso instala:
@@ -97,7 +97,7 @@ mosaicfl-client --server 52.67.123.45:8080 --client-id hospital_a
 ### Publicar server
 
 ```bash
-./publish-server.sh
+bash publicar_pacote_servidor.sh
 ```
 
 O script:
@@ -109,7 +109,7 @@ O script:
 ### Publicar client
 
 ```bash
-./publish-client.sh
+bash publicar_pacote_cliente.sh
 ```
 
 Mesmo processo para o pacote cliente.

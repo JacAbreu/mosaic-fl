@@ -229,9 +229,9 @@ mosaic-fl/
 │       └── test_real_fl_cycle.py       # Ciclo FL real sem mocks (make test-e2e)
 │
 ├── scripts/
-│   ├── gen_certs.sh                    # Gera certificados TLS de desenvolvimento
-│   ├── start_superlink.sh              # Inicia flower-superlink com TLS
-│   └── start_supernode.sh              # Inicia flower-supernode (cliente/hospital)
+│   ├── gerar_certs_tls.sh              # Gera certificados TLS de desenvolvimento
+│   ├── iniciar_servidor_fl.sh          # Inicia o coordenador FL (flower-superlink) com TLS
+│   └── iniciar_cliente_fl.sh           # Inicia um no cliente FL (hospital)
 │
 ├── ci_cd/
 │   ├── ci-cd-github-actions.yml        # GitHub Actions CI/CD
@@ -266,7 +266,7 @@ bash setup.sh
 source .venv/bin/activate
 ```
 
-`setup.sh` executa `pip install -e ".[dev]"` — modo editável, efeito imediato ao editar `src/`.
+`setup.sh` instala o pacote core, extras de desenvolvimento (pytest, ruff) e todos os subpacotes de infraestrutura em modo editável.
 
 ### Windows
 
@@ -282,7 +282,7 @@ setup.bat
 TLS é **obrigatório** no MOSAIC-FL. Para desenvolvimento local, gere certificados auto-assinados:
 
 ```bash
-bash scripts/gen_certs.sh certs/
+bash scripts/gerar_certs_tls.sh certs/
 export FL_TLS_CERT_DIR=$(pwd)/certs
 ```
 
@@ -399,7 +399,7 @@ Ponto de entrada para entender o protocolo FL na prática. Cada classe cobre uma
 ### Pré-requisitos
 
 1. Venv ativado e projeto instalado (`bash setup.sh`)
-2. Certificados TLS gerados: `bash scripts/gen_certs.sh certs/ && export FL_TLS_CERT_DIR=$(pwd)/certs`
+2. Certificados TLS gerados: `bash scripts/gerar_certs_tls.sh certs/ && export FL_TLS_CERT_DIR=$(pwd)/certs`
 
 ### Modo SuperLink (produção local — 3 terminais)
 
@@ -408,7 +408,7 @@ Ponto de entrada para entender o protocolo FL na prática. Cada classe cobre uma
 ```bash
 make superlink
 # equivalente a:
-# FL_TLS_CERT_DIR=certs bash scripts/start_superlink.sh
+# FL_TLS_CERT_DIR=certs bash scripts/iniciar_servidor_fl.sh
 ```
 
 **Terminal 2 — ServerApp (lógica FL):**
@@ -424,7 +424,7 @@ make server-app
 ```bash
 make supernode FL_CLIENT_ID=hospital_a FL_DATA_SOURCE=simulated
 # equivalente a:
-# FL_TLS_CERT_DIR=certs FL_CLIENT_ID=hospital_a bash scripts/start_supernode.sh
+# FL_TLS_CERT_DIR=certs FL_CLIENT_ID=hospital_a bash scripts/iniciar_cliente_fl.sh
 ```
 
 Para adicionar mais hospitais, abra terminais adicionais com `FL_CLIENT_ID` diferente:
@@ -516,7 +516,7 @@ flwr run . production --run-config "num-rounds=20 proximal-mu=0.5"
 
 ```bash
 # Via script (recomendado — valida FL_TLS_CERT_DIR)
-FL_TLS_CERT_DIR=/certs bash scripts/start_superlink.sh
+FL_TLS_CERT_DIR=/certs bash scripts/iniciar_servidor_fl.sh
 
 # Direto (com SQLite persistente)
 flower-superlink \
@@ -546,7 +546,7 @@ O ServerApp é **stateless entre reinicializações** — o estado (checkpoint, 
 FL_TLS_CERT_DIR=/certs \
 FL_CLIENT_ID=hospital_1 \
 FL_DATA_SOURCE=sgbd \
-bash scripts/start_supernode.sh
+bash scripts/iniciar_cliente_fl.sh
 
 # Direto
 flower-supernode \
@@ -677,7 +677,7 @@ Resultados em `experiments/data/` após cada execução. Documentação detalhad
 **`EnvironmentError: FL_TLS_CERT_DIR não definido`**
 TLS é obrigatório. Gere certificados de desenvolvimento e configure a variável:
 ```bash
-bash scripts/gen_certs.sh certs/
+bash scripts/gerar_certs_tls.sh certs/
 export FL_TLS_CERT_DIR=$(pwd)/certs
 ```
 
