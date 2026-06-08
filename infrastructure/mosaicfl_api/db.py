@@ -1,182 +1,255 @@
 """
 db.py
-Persistência SQLite para o mosaicfl_api.
+Persistência para o mosaicfl_api.
 
-Pacientes, histórico de risco e exames sobrevivem a reinicios do serviço.
-Usa sqlite3 (stdlib) com WAL mode para suportar leituras concorrentes.
+Schemas:
+  clinical  — cadastro de pacientes e export_paths (PostgreSQL puro)
+  metrics   — risk_history e exam_records como hypertables TimescaleDB
 
-Localização padrão: FL_DB_PATH (env) ou data/mosaicfl_api.db
+Backend selecionado por FL_DB_URL:
+  postgresql://mosaicfl:senha@localhost:5432/mosaicfl  → PostgreSQL
+  sqlite:///data/mosaicfl_api.db                       → SQLite (dev/testes)
+
+O construtor aceita Path para compatibilidade retroativa:
+  PatientDB(Path("foo.db"))  →  SQLite em foo.db
 """
+import logging
 import os
-import sqlite3
-import threading
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
-_DB_PATH = Path(os.getenv("FL_DB_PATH", "data/mosaicfl_api.db"))
+import sqlalchemy as sa
+from sqlalchemy import func, insert, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-_SCHEMA = """
-PRAGMA journal_mode=WAL;
+logger = logging.getLogger(__name__)
 
-CREATE TABLE IF NOT EXISTS patients (
-    patient_id  TEXT PRIMARY KEY,
-    sex         TEXT NOT NULL DEFAULT 'M',
-    age         REAL NOT NULL DEFAULT 0.0
-);
+_DEFAULT_URL = os.getenv("FL_DB_URL", "sqlite:///data/mosaicfl_api.db")
 
-CREATE TABLE IF NOT EXISTS risk_history (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    patient_id  TEXT    NOT NULL,
-    date        TEXT    NOT NULL,
-    risk_score  REAL    NOT NULL,
-    FOREIGN KEY (patient_id) REFERENCES patients(patient_id)
-);
 
-CREATE TABLE IF NOT EXISTS exam_records (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    patient_id  TEXT    NOT NULL,
-    exam_name   TEXT    NOT NULL,
-    date        TEXT    NOT NULL,
-    value       REAL    NOT NULL,
-    phase       TEXT    NOT NULL,
-    ref_low     REAL    DEFAULT 0.0,
-    ref_high    REAL    DEFAULT 0.0,
-    sex_ref_low REAL    DEFAULT 0.0,
-    sex_ref_high REAL   DEFAULT 0.0
-);
+# ---------------------------------------------------------------------------
+# Definição de tabelas
+# ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS export_paths (
-    patient_id   TEXT PRIMARY KEY,
-    export_path  TEXT NOT NULL
-);
-"""
+def _build_tables(is_pg: bool):
+    """
+    Retorna MetaData + tabelas com schemas corretos por backend.
 
+    PostgreSQL: clinical.patients, metrics.risk_history, metrics.exam_records, clinical.export_paths
+    SQLite:     sem schema (SQLite não suporta schemas PostgreSQL)
+    """
+    clinical = "clinical" if is_pg else None
+    metrics  = "metrics"  if is_pg else None
+
+    meta = sa.MetaData()
+
+    patients = sa.Table(
+        "patients", meta,
+        sa.Column("patient_id", sa.Text,  primary_key=True),
+        sa.Column("sex",        sa.Text,  nullable=False, server_default=sa.text("'M'")),
+        sa.Column("age",        sa.Float, nullable=False, server_default=sa.text("0.0")),
+        schema=clinical,
+    )
+    export_paths = sa.Table(
+        "export_paths", meta,
+        sa.Column("patient_id",  sa.Text, primary_key=True),
+        sa.Column("export_path", sa.Text, nullable=False),
+        schema=clinical,
+    )
+    risk_history = sa.Table(
+        "risk_history", meta,
+        sa.Column("id",         sa.Integer, primary_key=True, autoincrement=True),
+        sa.Column("patient_id", sa.Text,  nullable=False),
+        sa.Column("date",       sa.Text,  nullable=False),
+        sa.Column("risk_score", sa.Float, nullable=False),
+        schema=metrics,
+    )
+    exam_records = sa.Table(
+        "exam_records", meta,
+        sa.Column("id",           sa.Integer, primary_key=True, autoincrement=True),
+        sa.Column("patient_id",   sa.Text,  nullable=False),
+        sa.Column("exam_name",    sa.Text,  nullable=False),
+        sa.Column("date",         sa.Text,  nullable=False),
+        sa.Column("value",        sa.Float, nullable=False),
+        sa.Column("phase",        sa.Text,  nullable=False),
+        sa.Column("ref_low",      sa.Float, server_default=sa.text("0.0")),
+        sa.Column("ref_high",     sa.Float, server_default=sa.text("0.0")),
+        sa.Column("sex_ref_low",  sa.Float, server_default=sa.text("0.0")),
+        sa.Column("sex_ref_high", sa.Float, server_default=sa.text("0.0")),
+        schema=metrics,
+    )
+
+    return meta, patients, export_paths, risk_history, exam_records
+
+
+# ---------------------------------------------------------------------------
+# Engine factory
+# ---------------------------------------------------------------------------
+
+def _make_engine(url: str) -> sa.Engine:
+    if url.startswith("postgresql"):
+        return sa.create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=10)
+    from sqlalchemy.pool import StaticPool
+    return sa.create_engine(
+        url,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PatientDB
+# ---------------------------------------------------------------------------
 
 class PatientDB:
-    """Thread-safe wrapper sobre SQLite para o estado de pacientes."""
+    """
+    Acesso a dados de pacientes.
 
-    def __init__(self, db_path: Path = _DB_PATH):
-        self._path = Path(db_path)
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.Lock()
-        self._init()
+    PostgreSQL: cadastro em schema clinical, séries temporais em schema metrics.
+    SQLite:     todas as tabelas sem schema (dev/testes — interface idêntica).
+    """
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._path), check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def __init__(self, db_url: Union[str, Path] = _DEFAULT_URL):
+        if isinstance(db_url, Path):
+            db_url = f"sqlite:///{db_url}"
+        url = str(db_url)
+        self._is_pg = url.startswith("postgresql")
+        self._engine = _make_engine(url)
+        self._meta, self._patients, self._exports, self._risk, self._exams = _build_tables(self._is_pg)
 
-    def _init(self) -> None:
-        with self._lock, self._connect() as conn:
-            conn.executescript(_SCHEMA)
+        if not self._is_pg:
+            # SQLite: cria tabelas automaticamente (PostgreSQL usa init.sql)
+            self._meta.create_all(self._engine)
+
+        logger.info("db_initialized", extra={"backend": "postgresql" if self._is_pg else "sqlite"})
+
+    # ── helpers de upsert (dialect-aware) ─────────────────────────────────
+
+    def _stmt_upsert_patient(self, patient_id: str, sex: str, age: float):
+        vals = {"patient_id": patient_id, "sex": sex, "age": age}
+        if self._is_pg:
+            return pg_insert(self._patients).values(**vals).on_conflict_do_nothing(
+                index_elements=["patient_id"]
+            )
+        return insert(self._patients).prefix_with("OR IGNORE").values(**vals)
+
+    def _stmt_upsert_export(self, patient_id: str, path: str):
+        vals = {"patient_id": patient_id, "export_path": path}
+        if self._is_pg:
+            return pg_insert(self._exports).values(**vals).on_conflict_do_update(
+                index_elements=["patient_id"],
+                set_={"export_path": path},
+            )
+        return insert(self._exports).prefix_with("OR REPLACE").values(**vals)
 
     # ── pacientes ──────────────────────────────────────────────────────────
 
     def upsert_patient(self, patient_id: str, sex: str, age: float) -> None:
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                "INSERT OR IGNORE INTO patients (patient_id, sex, age) VALUES (?, ?, ?)",
-                (patient_id, sex, age),
-            )
+        with self._engine.begin() as conn:
+            conn.execute(self._stmt_upsert_patient(patient_id, sex, age))
+
+    def patient_exists(self, patient_id: str) -> bool:
+        stmt = select(self._patients.c.patient_id).where(
+            self._patients.c.patient_id == patient_id
+        )
+        with self._engine.connect() as conn:
+            return conn.execute(stmt).first() is not None
 
     def list_patients(self) -> list[dict]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
+        p_ref  = f"clinical.patients"     if self._is_pg else "patients"
+        rh_ref = f"metrics.risk_history"  if self._is_pg else "risk_history"
+        with self._engine.connect() as conn:
+            rows = conn.execute(text(f"""
                 SELECT p.patient_id, p.sex, p.age,
                        r.risk_score AS latest_risk,
                        r.date       AS latest_date
-                FROM patients p
-                LEFT JOIN risk_history r
+                FROM {p_ref} p
+                LEFT JOIN {rh_ref} r
                     ON r.id = (
-                        SELECT id FROM risk_history
+                        SELECT id FROM {rh_ref}
                         WHERE patient_id = p.patient_id
                         ORDER BY date DESC, id DESC
                         LIMIT 1
                     )
                 ORDER BY p.patient_id
-                """
-            ).fetchall()
-        return [dict(r) for r in rows]
+            """)).mappings().all()
+        return [dict(row) for row in rows]
 
     # ── histórico de risco ─────────────────────────────────────────────────
 
     def add_risk(self, patient_id: str, date_str: str, risk_score: float) -> None:
-        with self._lock, self._connect() as conn:
+        with self._engine.begin() as conn:
             conn.execute(
-                "INSERT INTO risk_history (patient_id, date, risk_score) VALUES (?, ?, ?)",
-                (patient_id, date_str, risk_score),
+                insert(self._risk).values(
+                    patient_id=patient_id, date=date_str, risk_score=risk_score
+                )
             )
 
     def get_risk_history(self, patient_id: str) -> list[dict]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT date, risk_score FROM risk_history WHERE patient_id = ? ORDER BY date, id",
-                (patient_id,),
-            ).fetchall()
-        return [dict(r) for r in rows]
+        stmt = (
+            select(self._risk.c.date, self._risk.c.risk_score)
+            .where(self._risk.c.patient_id == patient_id)
+            .order_by(self._risk.c.date, self._risk.c.id)
+        )
+        with self._engine.connect() as conn:
+            return [dict(row) for row in conn.execute(stmt).mappings()]
 
     # ── exames ─────────────────────────────────────────────────────────────
 
     def add_exams(self, patient_id: str, exams: list[dict]) -> None:
-        with self._lock, self._connect() as conn:
-            conn.executemany(
-                """
-                INSERT INTO exam_records
-                    (patient_id, exam_name, date, value, phase,
-                     ref_low, ref_high, sex_ref_low, sex_ref_high)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        patient_id,
-                        e["exam_name"],
-                        e["date"],
-                        e["value"],
-                        e["phase"],
-                        e.get("ref_low", 0.0),
-                        e.get("ref_high", 0.0),
-                        e.get("sex_ref_low", 0.0),
-                        e.get("sex_ref_high", 0.0),
-                    )
-                    for e in exams
-                ],
-            )
+        rows = [
+            {
+                "patient_id":   patient_id,
+                "exam_name":    e["exam_name"],
+                "date":         e["date"],
+                "value":        e["value"],
+                "phase":        e["phase"],
+                "ref_low":      e.get("ref_low",      0.0),
+                "ref_high":     e.get("ref_high",     0.0),
+                "sex_ref_low":  e.get("sex_ref_low",  0.0),
+                "sex_ref_high": e.get("sex_ref_high", 0.0),
+            }
+            for e in exams
+        ]
+        with self._engine.begin() as conn:
+            conn.execute(insert(self._exams), rows)
 
     def get_exams(self, patient_id: str) -> list[dict]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                """SELECT exam_name, date, value, phase,
-                          ref_low, ref_high, sex_ref_low, sex_ref_high
-                   FROM exam_records WHERE patient_id = ? ORDER BY date, id""",
-                (patient_id,),
-            ).fetchall()
-        return [dict(r) for r in rows]
+        stmt = (
+            select(
+                self._exams.c.exam_name,
+                self._exams.c.date,
+                self._exams.c.value,
+                self._exams.c.phase,
+                self._exams.c.ref_low,
+                self._exams.c.ref_high,
+                self._exams.c.sex_ref_low,
+                self._exams.c.sex_ref_high,
+            )
+            .where(self._exams.c.patient_id == patient_id)
+            .order_by(self._exams.c.date, self._exams.c.id)
+        )
+        with self._engine.connect() as conn:
+            return [dict(row) for row in conn.execute(stmt).mappings()]
 
     def exam_count(self, patient_id: str) -> int:
-        with self._connect() as conn:
-            return conn.execute(
-                "SELECT COUNT(*) FROM exam_records WHERE patient_id = ?", (patient_id,)
-            ).fetchone()[0]
+        stmt = (
+            select(func.count())
+            .select_from(self._exams)
+            .where(self._exams.c.patient_id == patient_id)
+        )
+        with self._engine.connect() as conn:
+            return conn.execute(stmt).scalar_one()
 
     # ── caminhos de exportação ─────────────────────────────────────────────
 
     def set_export_path(self, patient_id: str, path: str) -> None:
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO export_paths (patient_id, export_path) VALUES (?, ?)",
-                (patient_id, path),
-            )
+        with self._engine.begin() as conn:
+            conn.execute(self._stmt_upsert_export(patient_id, path))
 
     def get_export_path(self, patient_id: str) -> Optional[str]:
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT export_path FROM export_paths WHERE patient_id = ?", (patient_id,)
-            ).fetchone()
-        return row["export_path"] if row else None
-
-    def patient_exists(self, patient_id: str) -> bool:
-        with self._connect() as conn:
-            return conn.execute(
-                "SELECT 1 FROM patients WHERE patient_id = ?", (patient_id,)
-            ).fetchone() is not None
+        stmt = select(self._exports.c.export_path).where(
+            self._exports.c.patient_id == patient_id
+        )
+        with self._engine.connect() as conn:
+            return conn.execute(stmt).scalar_one_or_none()

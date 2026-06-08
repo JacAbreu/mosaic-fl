@@ -18,8 +18,7 @@ class TestClinicalRAG:
         from mosaicfl.core.rag import ClinicalRAG
 
         mock_collection = MagicMock()
-        mock_chroma = MagicMock()
-        mock_chroma.get_or_create_collection.return_value = mock_collection
+        mock_engine = MagicMock()
 
         mock_embedder = MagicMock()
         mock_embedder.encode.return_value = np.random.rand(3, 384).astype(np.float32)
@@ -33,12 +32,12 @@ class TestClinicalRAG:
         mock_llm = MagicMock()
         mock_generator = MagicMock(return_value=[{"generated_text": "Diagnóstico provável: covid19."}])
 
-        with patch("mosaicfl.core.rag.chromadb.PersistentClient", return_value=mock_chroma), \
+        with patch("mosaicfl.core.rag.sa.create_engine", return_value=mock_engine), \
              patch("mosaicfl.core.rag.SentenceTransformer", return_value=mock_embedder), \
              patch("mosaicfl.core.rag.AutoTokenizer.from_pretrained", return_value=mock_tokenizer), \
              patch("mosaicfl.core.rag.AutoModelForCausalLM.from_pretrained", return_value=mock_llm), \
              patch("mosaicfl.core.rag.pipeline", return_value=mock_generator):
-            rag = ClinicalRAG()
+            rag = ClinicalRAG("postgresql://test/test")
 
         rag.embedder = mock_embedder
         rag.collection = mock_collection

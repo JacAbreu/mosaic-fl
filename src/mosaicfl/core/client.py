@@ -85,17 +85,16 @@ class FedProxClient(fl.client.NumPyClient):
                     loss = self._proximal_loss(loss, proximal_mu)
                     loss.backward()
                     self.optimizer.step()
-                    # Normaliza pelo número real de amostras no batch
                     running_loss += loss.item() * batch_y.size(0)
                     total_samples += batch_y.size(0)
                 except Exception as e:
-                    print(f"[Cliente {self.client_id}] Erro no batch: {e}")
-                    continue  # pula batch problemático, não quebra o cliente
+                    logger.error("batch_failed", extra={"client_id": self.client_id, "error": str(e)})
+                    raise
 
             epoch_loss = running_loss / total_samples if total_samples > 0 else 0.0
             epoch_losses.append(epoch_loss)
 
-        return self.get_parameters(config), len(self.train_loader.dataset), {"loss": sum(epoch_losses)/len(epoch_losses)}
+        return self.get_parameters(config), total_samples, {"loss": sum(epoch_losses) / len(epoch_losses)}
 
     def evaluate(self, parameters: List[np.ndarray], config: Dict) -> Tuple[float, int, Dict]:
         self.set_parameters(parameters)

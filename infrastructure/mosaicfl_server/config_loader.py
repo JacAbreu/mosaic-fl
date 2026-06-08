@@ -8,8 +8,9 @@ Uso:
     # config: {"proximal_mu": 0.01, "pause_seconds": 0.0, "stop": False}
 
 Backends suportados (FL_CONFIG_BACKEND):
-    chroma  — ChromaDB (padrão; já usado pelo RAG do projeto)
-    file    — JSON local em logs/runtime_config.json (fallback dev)
+    postgres — PostgreSQL, tabela clinical.fl_orchestration_config (padrão)
+    file     — JSON local em logs/runtime_config.json (dev sem banco)
+    chroma   — ChromaDB (legado; mantido para compatibilidade)
 
 Para escrever uma nova config via ChromaDB:
     loader = ChromaDBConfigLoader()
@@ -144,16 +145,90 @@ class FileConfigLoader:
         self._path.unlink(missing_ok=True)
 
 
-def get_config_loader() -> ChromaDBConfigLoader | FileConfigLoader:
+class PostgreSQLConfigLoader:
+    """
+    Lê e escreve config de runtime em clinical.fl_orchestration_config.
+
+    A tabela é criada pelo scripts/db/init.sql e sempre contém uma linha
+    com id='current'. Escrita via write(); leitura via load().
+    """
+
+    def __init__(self, db_url: str | None = None) -> None:
+        import sqlalchemy as sa
+        url = db_url or os.getenv("FL_DB_URL", "")
+        self._engine = sa.create_engine(url, pool_pre_ping=True)
+
+    def load(self, round_num: int) -> Dict:
+        from sqlalchemy import text
+        try:
+            with self._engine.connect() as conn:
+                row = conn.execute(text(
+                    "SELECT proximal_mu, pause_seconds, stop "
+                    "FROM clinical.fl_orchestration_config WHERE id = 'current'"
+                )).mappings().first()
+            if not row:
+                return {}
+            result: Dict = {
+                "pause_seconds": float(row["pause_seconds"]),
+                "stop":          bool(row["stop"]),
+            }
+            if row["proximal_mu"] is not None:
+                result["proximal_mu"] = float(row["proximal_mu"])
+            return result
+        except Exception as e:
+            logger.warning("config_load_error", extra={"backend": "postgres", "round": round_num, "error": str(e)})
+            return {}
+
+    def write(self, config: Dict) -> None:
+        from sqlalchemy import text
+        try:
+            with self._engine.begin() as conn:
+                conn.execute(text("""
+                    INSERT INTO clinical.fl_orchestration_config
+                        (id, proximal_mu, pause_seconds, stop, updated_at)
+                    VALUES ('current', :proximal_mu, :pause_seconds, :stop, now())
+                    ON CONFLICT (id) DO UPDATE SET
+                        proximal_mu   = EXCLUDED.proximal_mu,
+                        pause_seconds = EXCLUDED.pause_seconds,
+                        stop          = EXCLUDED.stop,
+                        updated_at    = now()
+                """), {
+                    "proximal_mu":   config.get("proximal_mu"),
+                    "pause_seconds": float(config.get("pause_seconds", 0.0)),
+                    "stop":          bool(config.get("stop", False)),
+                })
+            logger.info("config_written", extra={"backend": "postgres", "keys": list(config.keys())})
+        except Exception as e:
+            logger.error("config_write_error", extra={"backend": "postgres", "error": str(e)})
+
+    def clear(self) -> None:
+        from sqlalchemy import text
+        try:
+            with self._engine.begin() as conn:
+                conn.execute(text("""
+                    UPDATE clinical.fl_orchestration_config
+                    SET proximal_mu = NULL, pause_seconds = 0.0, stop = FALSE, updated_at = now()
+                    WHERE id = 'current'
+                """))
+            logger.info("config_cleared", extra={"backend": "postgres"})
+        except Exception as e:
+            logger.warning("config_clear_error", extra={"backend": "postgres", "error": str(e)})
+
+
+def get_config_loader() -> PostgreSQLConfigLoader | FileConfigLoader | ChromaDBConfigLoader:
     """
     Instancia o loader correto baseado em FL_CONFIG_BACKEND.
 
-    FL_CONFIG_BACKEND=chroma  → ChromaDBConfigLoader (padrão)
-    FL_CONFIG_BACKEND=file    → FileConfigLoader
+    FL_CONFIG_BACKEND=postgres → PostgreSQLConfigLoader (padrão)
+    FL_CONFIG_BACKEND=file     → FileConfigLoader
+    FL_CONFIG_BACKEND=chroma   → ChromaDBConfigLoader (legado)
     """
-    backend = os.getenv("FL_CONFIG_BACKEND", "chroma").lower()
+    backend = os.getenv("FL_CONFIG_BACKEND", "postgres").lower()
     if backend == "file":
         logger.info("config_loader_selected", extra={"backend": "file"})
         return FileConfigLoader()
-    logger.info("config_loader_selected", extra={"backend": "chroma", "db_path": _CHROMA_PATH})
-    return ChromaDBConfigLoader()
+    if backend == "chroma":
+        logger.info("config_loader_selected", extra={"backend": "chroma", "db_path": _CHROMA_PATH})
+        return ChromaDBConfigLoader()
+    logger.info("config_loader_selected", extra={"backend": "postgres"})
+    return PostgreSQLConfigLoader()
