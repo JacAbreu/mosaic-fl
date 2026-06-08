@@ -738,6 +738,8 @@ O uso de IA neste projeto segue as diretrizes éticas do MBA USP/Esalq e as boas
 
 A IA funcionou como uma ferramenta de produtividade — equivalente a um compilador ou uma IDE avançada — e não como substituta do raciocínio, julgamento ou criatividade da autora.
 
+temp: https://drive.usercontent.google.com/download?id=1CwUMQuS-aBs3as_KMxED2gRWS1MOw-Fp&export=download&authuser=0
+
 ---
 
 ## Referências
