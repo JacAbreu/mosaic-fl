@@ -386,6 +386,13 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 from datetime import datetime
 
+# Garante que a raiz do projeto está no sys.path, independente de onde o script é chamado.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+if str(_PROJECT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+
 import numpy as np
 import pandas as pd
 import torch

@@ -60,6 +60,7 @@ ON CONFLICT DO NOTHING;
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS metrics.risk_history (
+    id          SERIAL,
     patient_id  TEXT NOT NULL,
     date        DATE NOT NULL,
     risk_score  REAL NOT NULL
@@ -70,6 +71,7 @@ SELECT create_hypertable(
 );
 
 CREATE TABLE IF NOT EXISTS metrics.exam_records (
+    id            BIGSERIAL,
     patient_id    TEXT NOT NULL,
     exam_name     TEXT NOT NULL,
     date          DATE NOT NULL,

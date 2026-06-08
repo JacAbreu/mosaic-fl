@@ -8,7 +8,7 @@ FL_SUPERLINK_ADDRESS ?= localhost:9091
 FL_CLIENT_ID        ?= hospital_dev
 FL_DATA_SOURCE      ?= simulated
 
-.PHONY: setup test test-integration test-e2e test-all test-cov run clean \
+.PHONY: setup test test-integration test-e2e test-all test-cov experiment clean \
         superlink server-app supernode sim
 
 setup:
@@ -34,7 +34,7 @@ test-e2e:
 test-all:
 	$(PYTEST) tests/ -v --tb=short -m ""
 
-run:
+experiment:
 	$(PYTHON) experiments/run_experiments_v2.py
 
 # ── Flower SuperLink (produção) ────────────────────────────────────────────────
