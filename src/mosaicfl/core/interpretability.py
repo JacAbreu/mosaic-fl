@@ -24,8 +24,10 @@ class BEHRTPatternExtractor:
     Args:
         model:     instância de nn.Module com pesos já carregados.
                    Deve expor forward(x, mask, return_attention=True).
-        vocab_map: dicionário {token: int} produzido por EHRPreprocessor.vocab_map
-                   após chamar preprocessor.process() ou preprocessor.build_vocabulary().
+        vocab_map: dicionário {token: int}. Pode vir de:
+                   • SequencePipeline.build() ou build_per_hospital() — tokens no formato
+                     '{analyte}_{baixo|normal|alto}' (modo banco de dados, recomendado).
+                   • EHRPreprocessor.vocab_map após preprocessor.process() (modo CSV).
     """
 
     def __init__(self, model: nn.Module, vocab_map: Dict[str, int]):

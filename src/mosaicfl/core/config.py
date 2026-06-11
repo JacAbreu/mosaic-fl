@@ -45,7 +45,7 @@ class ModelConfig:
     num_layers:  int   = 2
     num_heads:   int   = 4
     ff_dim:      int   = 128
-    num_classes: int   = 2
+    num_classes: int   = 5   # faixas de duração: curta/média/longa/muito longa/prolongada
     dropout:     float = 0.1
 
 
@@ -79,6 +79,10 @@ class RuntimeConfig:
     embedding_model: str    = field(default_factory=lambda: os.getenv("FL_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"))
     llm_model:       str    = field(default_factory=lambda: os.getenv("FL_LLM_MODEL", "distilgpt2"))
     use_ray:         bool   = field(default_factory=lambda: os.getenv("FL_USE_RAY", "false").lower() == "true")
+    db_url:          str    = field(default_factory=lambda: os.getenv("FL_DB_URL", ""))
+    # "production" exige FL_DB_URL e rejeita dados sintéticos.
+    # "development" (padrão) permite fallback para sintético quando FL_DB_URL não está configurado.
+    env:             str    = field(default_factory=lambda: os.getenv("FL_ENV", "development").lower())
 
 
 MODEL_CFG   = ModelConfig()
@@ -118,3 +122,5 @@ CHROMA_DB_PATH        = str(RUNTIME_CFG.chroma_path)
 EMBEDDING_MODEL       = RUNTIME_CFG.embedding_model
 LLM_MODEL             = RUNTIME_CFG.llm_model
 USE_RAY               = RUNTIME_CFG.use_ray
+FL_DB_URL             = RUNTIME_CFG.db_url
+FL_ENV                = RUNTIME_CFG.env

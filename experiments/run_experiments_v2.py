@@ -407,7 +407,7 @@ import flwr as fl
 # ─── Imports do projeto — v2 ───────────────────────────────────────────────
 from mosaicfl.core.config import *
 from mosaicfl.core.data_loader import load_clinical_dataset, diagnose_dataset, load_with_fallback
-from mosaicfl.core.preprocessor import EHRPreprocessor, split_by_institution
+from mosaicfl.core.preprocessor import EHRPreprocessor, split_by_institution, SequencePipeline
 from mosaicfl.core.model import SimplifiedBEHRT
 from mosaicfl.core.client import FedProxClient
 from experiments.experiment_server import start_server
@@ -504,6 +504,83 @@ def prepare_dataloaders(
     return client_loaders, test_loader, preprocessor.vocab_map, total_train_samples
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PREPARAÇÃO DOS DATALOADERS — MODO BANCO DE DADOS (TENSORES REAIS)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def prepare_dataloaders_from_db(
+    db_url: str,
+    batch_size: int = BATCH_SIZE,
+) -> Tuple[Dict, DataLoader, Dict, int]:
+    """
+    Constrói DataLoaders para FL a partir dos tensores reais do SequencePipeline.
+
+    Executa uma única query via build_per_hospital() e divide os resultados por
+    hospital: cada hospital vira um cliente FL. Em produção, cada cliente FL
+    usaria SequencePipeline(hospital_id=...).build() contra seu banco local.
+
+    Returns:
+        client_loaders: {client_id: (train_loader, val_loader)}
+        test_loader:    DataLoader global (holdout de 10% de cada hospital)
+        vocab:          Dict {token: id} do vocabulário global
+        total_train_samples: total de amostras de treino (para ponderação FL)
+    """
+    logger.info("[db] Iniciando carregamento via SequencePipeline...")
+    pipeline = SequencePipeline(connection_string=db_url, max_seq_len=MAX_SEQ_LEN)
+    hospital_data = pipeline.build_per_hospital()
+
+    if not hospital_data:
+        raise RuntimeError("build_per_hospital() retornou vazio — sem dados na base.")
+
+    # Vocabulário é global (mesma construção para todos os hospitais)
+    vocab = next(iter(hospital_data.values()))[2]
+
+    rng = torch.Generator()
+    rng.manual_seed(RANDOM_SEED)
+
+    client_loaders: Dict = {}
+    test_seqs_list, test_lbls_list = [], []
+    total_train_samples = 0
+
+    for cid, (hospital_id, (seqs, labels, _)) in enumerate(hospital_data.items()):
+        n = len(seqs)
+        if n < 10:
+            logger.warning(f"[db] Hospital {hospital_id}: apenas {n} amostras — pulando.")
+            continue
+
+        # Embaralha e divide 80% treino / 10% validação / 10% teste global
+        perm = torch.randperm(n, generator=rng)
+        n_train = int(0.8 * n)
+        n_val   = int(0.1 * n)
+
+        train_seqs = seqs[perm[:n_train]]
+        train_lbls = labels[perm[:n_train]]
+        val_seqs   = seqs[perm[n_train:n_train + n_val]]
+        val_lbls   = labels[perm[n_train:n_train + n_val]]
+        test_seqs_list.append(seqs[perm[n_train + n_val:]])
+        test_lbls_list.append(labels[perm[n_train + n_val:]])
+
+        client_loaders[cid] = (
+            DataLoader(TensorDataset(train_seqs, train_lbls), batch_size=batch_size, shuffle=True),
+            DataLoader(TensorDataset(val_seqs, val_lbls), batch_size=batch_size),
+        )
+        total_train_samples += len(train_seqs)
+        logger.info(
+            f"[db] Hospital {hospital_id} → cliente {cid}: "
+            f"{len(train_seqs)} treino | {len(val_seqs)} val"
+        )
+
+    if not client_loaders:
+        raise RuntimeError("Nenhum cliente válido criado a partir dos dados reais.")
+
+    test_seqs  = torch.cat(test_seqs_list, dim=0)
+    test_lbls  = torch.cat(test_lbls_list, dim=0)
+    test_loader = DataLoader(TensorDataset(test_seqs, test_lbls), batch_size=batch_size)
+    logger.info(f"[db] Teste global: {len(test_seqs)} amostras | {len(client_loaders)} clientes FL")
+
+    return client_loaders, test_loader, vocab, total_train_samples
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -867,55 +944,81 @@ def main():
     logger.info("Autora: Jacqueline Abreu | ICMC/USP")
     logger.info("=" * 60)
 
-    #use_ray = getattr(sys.modules['src.config'], 'USE_RAY', False)
     use_ray = bool(USE_RAY)
-    logger.info(f"Modo de execução: {'Ray (paralelo)' if use_ray else 'Manual sequencial (sem Ray)'}")
-    if not use_ray:
-        logger.info("Dica: para ativar Ray, edite USE_RAY = True em src/config.py")
-        logger.info("      e execute: pip install -U 'flwr[simulation]'")
+    logger.info(f"Modo FL:    {'Ray (paralelo)' if use_ray else 'Manual sequencial (sem Ray)'}")
+    logger.info(f"Ambiente:   {FL_ENV}")
+    logger.info(f"Banco:      {'configurado' if FL_DB_URL else 'não configurado'}")
 
-
-    # 1. Carrega dados
-    logger.info("[1/4] Carregando dataset...")
-    try:
-        #df_raw = load_clinical_dataset() para rodar com a base de dados no sgbd
-        df_raw = load_with_fallback(allow_synthetic=True) #para rodar com a base de dados sintética
-    except FileNotFoundError as e:
-        logger.error(f"Dataset não encontrado: {e}")
-        logger.error("Coloque o CSV em data/ ou configure MOSAICFL_DB_URL")
-        logger.error("Diagnóstico: python -c \"from mosaicfl.core.data_loader import diagnose_dataset; diagnose_dataset()\"")
-        sys.exit(1)
-    except ValueError as e:
-        logger.error(f"Schema inválido: {e}")
-        logger.error("Edite mosaicfl/v2/data_loader.py → COLUMN_MAPPING")
+    # ── Guarda de produção ────────────────────────────────────────────────────
+    # Em produção FL_DB_URL é obrigatório — sem dados reais não há experimento.
+    if FL_ENV == "production" and not FL_DB_URL:
+        logger.error("=" * 60)
+        logger.error("ERRO: FL_ENV=production requer FL_DB_URL")
+        logger.error("Configure: export FL_DB_URL='postgresql://user:pass@host:5432/db'")
+        logger.error("=" * 60)
         sys.exit(1)
 
-    logger.info(f"      {len(df_raw)} registros | {df_raw['instituicao'].nunique()} instituicoes")
+    # ── 1. Carregamento ───────────────────────────────────────────────────────
+    df_raw = None          # só disponível no modo CSV/sintético
+    loaded_from_db = False
 
-    # 2. Pré-processamento
-    logger.info("[2/4] Pré-processando...")
-    preprocessor = EHRPreprocessor()
-    client_loaders, test_loader, vocab_map, total = prepare_dataloaders(df_raw, preprocessor)
+    if FL_DB_URL:
+        logger.info("[1/4] Carregando dados do banco (SequencePipeline)...")
+        try:
+            client_loaders, test_loader, vocab_map, total = prepare_dataloaders_from_db(FL_DB_URL)
+            loaded_from_db = True
+        except Exception as e:
+            logger.error(f"Falha ao carregar dados do banco: {e}")
+            if FL_ENV == "production":
+                logger.error("Abortando — FL_ENV=production não permite fallback.")
+                sys.exit(1)
+            logger.warning("Tentando fallback para CSV/sintético (FL_ENV=development)...")
+
+    if not loaded_from_db:
+        logger.info("[1/4] Carregando dataset (CSV ou sintético)...")
+        try:
+            df_raw = load_with_fallback(allow_synthetic=(FL_ENV != "production"))
+        except RuntimeError as e:
+            logger.error(str(e))
+            sys.exit(1)
+        except FileNotFoundError as e:
+            logger.error(f"Dataset não encontrado: {e}")
+            sys.exit(1)
+        except ValueError as e:
+            logger.error(f"Schema inválido: {e}")
+            sys.exit(1)
+
+        logger.info(f"      {len(df_raw)} registros | {df_raw['instituicao'].nunique()} instituicoes")
+        logger.info("[2/4] Pré-processando...")
+        preprocessor = EHRPreprocessor()
+        client_loaders, test_loader, vocab_map, total = prepare_dataloaders(df_raw, preprocessor)
+    else:
+        logger.info("[2/4] Pré-processamento integrado ao SequencePipeline — etapa ignorada.")
+
     logger.info(f"      {len(client_loaders)} clientes | {total} amostras de treino")
 
-    # 3. Aprendizado Federado
+    # ── 3. Aprendizado Federado ───────────────────────────────────────────────
     logger.info("[3/4] Aprendizado Federado...")
     history, global_model = run_federated_learning(client_loaders, test_loader, total)
 
-    # 4. RAG
+    # ── 4. RAG ────────────────────────────────────────────────────────────────
     logger.info("[4/4] Pipeline RAG...")
-    try:
-        rag_result = run_rag_pipeline(global_model, vocab_map, test_loader, df_raw)
-    except Exception as e:
-        logger.error(f"Erro no RAG: {e}")
-        rag_result = {"erro": str(e)}
+    if df_raw is not None:
+        try:
+            rag_result = run_rag_pipeline(global_model, vocab_map, test_loader, df_raw)
+        except Exception as e:
+            logger.error(f"Erro no RAG: {e}")
+            rag_result = {"erro": str(e)}
+    else:
+        logger.info("      RAG ignorado no modo banco — df_raw não disponível para exemplos.")
+        rag_result = {"skipped": True, "reason": "modo banco de dados"}
 
-    # Resumo
+    # ── Resumo ────────────────────────────────────────────────────────────────
     logger.info("=" * 60)
     logger.info("CONCLUÍDO")
-    logger.info(f"  Registros:      {len(df_raw)}")
+    logger.info(f"  Modo dados:     {'banco (SequencePipeline)' if loaded_from_db else 'CSV/sintético'}")
     logger.info(f"  Clientes FL:    {len(client_loaders)}")
-    logger.info(f"  RAG confiável:  {rag_result.get('confiavel', False)}")
+    logger.info(f"  RAG confiável:  {rag_result.get('confiavel', rag_result.get('skipped', False))}")
     logger.info(f"  Logs em:        {log_file}")
     logger.info("=" * 60)
 

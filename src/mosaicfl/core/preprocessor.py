@@ -15,6 +15,8 @@ import logging
 from typing import Tuple, Dict, List, Optional
 from pathlib import Path
 
+import torch
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -267,3 +269,432 @@ def split_by_institution(
             logger.info(f"Cliente {i} ({inst}): {len(subset)} registros")
 
     return clients
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PIPELINES DE SÉRIE TEMPORAL PARA BEHRT
+# ─────────────────────────────────────────────────────────────────────────────
+
+from .config import MODEL_CFG
+
+
+# Mapeamento de duração em dias → classe (para SequencePipeline).
+# Internações < 1 dia são descartadas (entrada e saída no mesmo dia calendário).
+_DURATION_BINS: List[Tuple[int, int, int]] = [
+    (1,  3,  0),   # curta
+    (4,  7,  1),   # média
+    (8,  14, 2),   # longa
+    (15, 30, 3),   # muito longa
+]
+_LABEL_PROLONGADA = 4   # > 30 dias
+
+
+def _bin_duration(days: int) -> int:
+    for lo, hi, label in _DURATION_BINS:
+        if lo <= days <= hi:
+            return label
+    if days > 30:
+        return _LABEL_PROLONGADA
+    return -1   # < 1 dia — inválido, será descartado
+
+
+def _make_token(analyte: str, value: float, ref_low: float, ref_high: float) -> str:
+    """Gera token semântico combinando nome do analito com bucket de valor.
+
+    Quando não há referência (ref_low == ref_high == 0), retorna só o nome.
+    Caso contrário, sufixo é _baixo / _normal / _alto conforme valores de referência.
+    """
+    name = analyte.lower().strip()
+    if ref_low == 0.0 and ref_high == 0.0:
+        return name
+    if value < ref_low:
+        return f"{name}_baixo"
+    if value > ref_high:
+        return f"{name}_alto"
+    return f"{name}_normal"
+
+
+_SQL_INTERNADOS = """
+SELECT
+    a.patient_id,
+    a.attendance_id,
+    a.hospital_id,
+    (co.outcome_at - a.attended_at)     AS duration_days,
+    e.analyte,
+    e.value,
+    e.ref_low,
+    e.ref_high,
+    GREATEST(0, e.date - a.attended_at) AS dia_relativo
+FROM  clinical.attendances         a
+JOIN  metrics.clinical_outcomes    co ON co.attendance_id = a.attendance_id
+JOIN  metrics.exam_records         e  ON e.attendance_id  = a.attendance_id
+WHERE a.attendance_type   = 'Internado'
+  AND co.outcome_class NOT IN (2, 3)
+  AND a.hospital_id IN ('HSL', 'BPSP')
+  AND e.analyte IS NOT NULL
+  AND (co.outcome_at - a.attended_at) >= 1
+ORDER BY a.patient_id, a.attendance_id, dia_relativo, e.analyte
+"""
+
+
+class SequencePipelineInicial:
+    """
+    Abordagem inicial para construção de sequências clínicas — preservada como referência.
+
+    Contexto histórico
+    ------------------
+    Primeira tentativa de estruturar os dados FAPESP como entrada para o BEHRT.
+    O label binário (desfecho 0=alta / 1=outro) foi a hipótese natural de partida,
+    mas revelou-se inviável pelos seguintes motivos:
+
+    1. A base FAPESP não registra óbito como outcome_class distinto — os desfechos
+       disponíveis são tipos de saída hospitalar (alta, administrativa, transferência,
+       evasão), sem discriminar morte do paciente.
+    2. A abordagem não aproveitava a dimensão temporal dos exames: a sequência era
+       a concatenação plana dos tokens disponíveis para o paciente, sem âncora de
+       tempo relativo à admissão (dia_relativo).
+    3. Sem filtro por tipo de atendimento: ambulatorial e internados eram misturados,
+       criando distribuições incomparáveis entre hospitais.
+
+    Por que foi substituída
+    -----------------------
+    Essas limitações levaram à abordagem de faixas de tempo de internação
+    (ver SequencePipeline), onde o label reflete complexidade clínica real e a
+    sequência é ancorada temporalmente na data de admissão.
+
+    Interface
+    ---------
+    Recebe um DataFrame já pré-processado pelo EHRPreprocessor, com:
+    - coluna ``exame_encoded`` (int): token ID do exame, gerado por build_vocabulary()
+    - coluna ``desfecho`` (int): label binário 0/1
+    - coluna identificadora de paciente (padrão: ``patient_id``)
+
+    Uso::
+
+        preprocessor = EHRPreprocessor()
+        df, _ = preprocessor.process(raw_df, text_cols=["exame"])
+        pipeline = SequencePipelineInicial()
+        sequences, labels = pipeline.build(df)
+        # sequences: torch.LongTensor (n_pacientes, max_seq_len)
+        # labels:    torch.LongTensor (n_pacientes,)  — 0 ou 1
+    """
+
+    def __init__(
+        self,
+        patient_col: str = "patient_id",
+        max_seq_len: int = MODEL_CFG.max_seq_len,
+    ):
+        self.patient_col = patient_col
+        self.max_seq_len = max_seq_len
+
+    def build(self, df: pd.DataFrame) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Constrói tensores de sequência e label a partir de um DataFrame pré-processado."""
+        if self.patient_col not in df.columns:
+            logger.warning(
+                "Coluna '%s' ausente — tratando o DataFrame inteiro como um único paciente.",
+                self.patient_col,
+            )
+            tokens = df["exame_encoded"].dropna().astype(int).tolist()
+            label = int(df["desfecho"].iloc[0]) if "desfecho" in df.columns else 0
+            return (
+                torch.tensor([self._pad(tokens)], dtype=torch.long),
+                torch.tensor([label], dtype=torch.long),
+            )
+
+        sequences: List[List[int]] = []
+        labels: List[int] = []
+        for _, group in df.groupby(self.patient_col):
+            tokens = group["exame_encoded"].dropna().astype(int).tolist()
+            sequences.append(self._pad(tokens))
+            labels.append(int(group["desfecho"].iloc[0]) if "desfecho" in group.columns else 0)
+
+        return (
+            torch.tensor(sequences, dtype=torch.long),
+            torch.tensor(labels, dtype=torch.long),
+        )
+
+    def _pad(self, tokens: List[int]) -> List[int]:
+        tokens = tokens[: self.max_seq_len]
+        return tokens + [0] * (self.max_seq_len - len(tokens))
+
+
+class SequencePipeline:
+    """
+    Pipeline de série temporal clínica para BEHRT — Abordagem de Tempo de Internação.
+
+    Motivação
+    ---------
+    A base FAPESP COVID-19 não contém códigos diagnósticos (ICD-10) por decisão de
+    privacidade (LGPD). Na ausência de diagnóstico como label, o tempo de internação
+    é utilizado como proxy da complexidade clínica: pacientes mais graves apresentam
+    alteração persistente dos marcadores laboratoriais, resultando em internações mais
+    longas. A sequência temporal dos exames captura a trajetória de estabilização
+    (ou agravamento) desses marcadores ao longo dos dias de internação.
+
+    O aprendizado federado (FL) viabiliza compartilhar esse padrão entre hospitais
+    sem expor dados individuais, permitindo que instituições menores se beneficiem
+    de casos raros observados por parceiros da rede.
+
+    População-alvo
+    --------------
+    - Hospitais: HSL e BPSP — únicos com vínculo ``attendance_id`` nos exames
+      (HEI: 0 % de vinculação; HFL/HCSP: sem exames vinculados a atendimentos).
+    - Tipo de atendimento: ``attendance_type = 'Internado'``
+    - Exclusões: ``outcome_class IN (2, 3)``
+        • 2 = alta administrativa (saída burocrática, sem relação com evolução clínica)
+        • 3 = transferência (desfecho clínico desconhecido — paciente continua em outro serviço)
+    - Duração mínima: ≥ 1 dia (exclui entradas e saídas no mesmo dia calendário)
+
+    Label — faixas de duração de internação (5 classes)
+    -----------------------------------------------------
+    +--------+----------------+-------------+
+    | Classe | Faixa          | Nome        |
+    +--------+----------------+-------------+
+    |   0    | 1–3 dias       | curta       |
+    |   1    | 4–7 dias       | média       |
+    |   2    | 8–14 dias      | longa       |
+    |   3    | 15–30 dias     | muito longa |
+    |   4    | > 30 dias      | prolongada  |
+    +--------+----------------+-------------+
+
+    Atenção: o modelo BEHRT usa ``MODEL_CFG.num_classes`` para dimensionar o
+    classificador. Para usar este pipeline, configure ``num_classes = 5`` antes
+    de instanciar ``SimplifiedBEHRT``.
+
+    Sequência temporal
+    ------------------
+    - Âncora: ``attended_at`` (data de admissão do atendimento)
+    - ``dia_relativo = exam_date − attended_at`` (dias desde admissão; ≥ 0)
+    - Token: ``{analyte}_{bucket}`` onde bucket ∈ {baixo, normal, alto} conforme
+      os campos ``ref_low`` / ``ref_high`` do próprio exame. Quando não há referência
+      disponível (ref_low = ref_high = 0), usa apenas o nome do analito.
+    - Ordem: cronológica (dia_relativo ASC), desempate por nome do analito.
+    - Vocabulário especial: PAD=0, UNK=1, CLS=2.
+      O token ``<CLS>`` é inserido pelo modelo (``SimplifiedBEHRT``), não pelo pipeline.
+    - Padding / truncamento: todas as sequências ajustadas para ``max_seq_len`` com PAD (id=0).
+
+    Fontes de dados (PostgreSQL)
+    ----------------------------
+    - ``clinical.attendances``       — admissões e tipo de atendimento
+    - ``metrics.clinical_outcomes``  — desfecho e data de saída
+    - ``metrics.exam_records``       — analitos, valores e datas dos exames
+
+    Uso::
+
+        pipeline = SequencePipeline(
+            connection_string="postgresql://user:pass@localhost:5432/mosaicfl"
+        )
+        sequences, labels, vocab = pipeline.build()
+        # sequences: torch.LongTensor (n_pacientes, max_seq_len)
+        # labels:    torch.LongTensor (n_pacientes,) — classes 0..4
+        # vocab:     Dict[str, int] para reutilizar em inferência e no RAG
+    """
+
+    _SPECIAL: Dict[str, int] = {"<PAD>": 0, "<UNK>": 1, "<CLS>": 2}
+
+    def __init__(
+        self,
+        connection_string: str,
+        max_seq_len: int = MODEL_CFG.max_seq_len,
+        max_vocab_size: int = MODEL_CFG.vocab_size,
+        hospital_id: Optional[str] = None,
+    ):
+        """
+        Args:
+            hospital_id: Se especificado, filtra apenas esse hospital.
+                         Modo produção: cada cliente FL passa seu próprio hospital_id.
+                         Modo simulação: deixar None e usar build_per_hospital().
+        """
+        self.connection_string = connection_string
+        self.max_seq_len = max_seq_len
+        self.max_vocab_size = max_vocab_size
+        self.hospital_id = hospital_id
+
+    def build(self) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, int]]:
+        """
+        Constrói tensores de sequência, labels e vocabulário a partir da base PostgreSQL.
+
+        Se ``hospital_id`` foi definido no construtor, filtra apenas esse hospital.
+
+        Returns:
+            sequences: torch.LongTensor shape (n_pacientes, max_seq_len)
+            labels:    torch.LongTensor shape (n_pacientes,) — classes 0..4
+            vocab:     Dict {token: id} para reutilização em inferência e RAG
+        """
+        import time
+
+        def _log(msg: str) -> None:
+            logger.info(msg)
+            print(msg, flush=True)
+
+        t0 = time.time()
+        df = self._load_dataframe()
+
+        if self.hospital_id:
+            df = df[df["hospital_id"] == self.hospital_id].copy()
+            if df.empty:
+                raise RuntimeError(
+                    f"Nenhum registro para hospital_id='{self.hospital_id}'. "
+                    "Verifique se o hospital existe na base."
+                )
+            _log(f"[pipeline] filtrado para hospital_id='{self.hospital_id}' — {len(df):,} linhas")
+
+        n_atendimentos = df.groupby(["patient_id", "attendance_id"]).ngroups
+        _log(f"[pipeline] {n_atendimentos:,} atendimentos únicos encontrados")
+
+        _log("[pipeline] construindo vocabulário...")
+        t_v = time.time()
+        vocab = self._build_vocab(df)
+        _log(f"[pipeline] vocabulário pronto em {time.time() - t_v:.1f}s — {len(vocab):,} tokens")
+
+        _log(f"[pipeline] construindo tensores para {n_atendimentos:,} sequências...")
+        t_t = time.time()
+        sequences, labels, _ = self._build_tensors(df, vocab)
+        _log(f"[pipeline] tensores prontos em {time.time() - t_t:.1f}s")
+
+        label_dist = {i: int((labels == i).sum()) for i in range(5)}
+        _log(
+            f"[pipeline] concluído em {time.time() - t0:.1f}s total — "
+            f"{len(sequences):,} pacientes | dist={label_dist}"
+        )
+        return sequences, labels, vocab
+
+    def build_per_hospital(self) -> Dict[str, Tuple[torch.Tensor, torch.Tensor, Dict[str, int]]]:
+        """
+        Executa uma única query e divide os resultados por hospital.
+
+        Uso exclusivo em modo de simulação FL (todos os dados em um único banco).
+        Em produção, cada cliente FL instancia ``SequencePipeline(hospital_id=...)``
+        e chama ``build()`` separadamente — o isolamento é garantido pelo banco local.
+
+        Returns:
+            Dict {hospital_id: (sequences, labels, vocab)}
+            O vocabulário é global (construído com todos os hospitais) para garantir
+            consistência entre clientes durante a simulação.
+        """
+        import time
+
+        def _log(msg: str) -> None:
+            logger.info(msg)
+            print(msg, flush=True)
+
+        t0 = time.time()
+        df = self._load_dataframe()
+
+        hospitals = sorted(df["hospital_id"].dropna().unique().tolist())
+        _log(f"[pipeline/per_hospital] hospitais encontrados: {hospitals}")
+
+        _log("[pipeline/per_hospital] construindo vocabulário global...")
+        t_v = time.time()
+        vocab = self._build_vocab(df)
+        _log(f"[pipeline/per_hospital] vocabulário: {len(vocab):,} tokens em {time.time() - t_v:.1f}s")
+
+        result: Dict[str, Tuple[torch.Tensor, torch.Tensor, Dict[str, int]]] = {}
+        for hosp in hospitals:
+            df_h = df[df["hospital_id"] == hosp].copy()
+            n = df_h.groupby(["patient_id", "attendance_id"]).ngroups
+            _log(f"[pipeline/per_hospital] {hosp}: construindo tensores ({n:,} atendimentos)...")
+            t_h = time.time()
+            seqs, lbls, _ = self._build_tensors(df_h, vocab)
+            dist = {i: int((lbls == i).sum()) for i in range(5)}
+            _log(
+                f"[pipeline/per_hospital] {hosp}: {len(seqs):,} sequências "
+                f"em {time.time() - t_h:.1f}s | dist={dist}"
+            )
+            result[hosp] = (seqs, lbls, vocab)
+
+        _log(f"[pipeline/per_hospital] concluído em {time.time() - t0:.1f}s total")
+        return result
+
+    def _load_dataframe(self) -> pd.DataFrame:
+        """Conecta ao banco, executa a query principal e retorna o DataFrame bruto."""
+        import time
+        from sqlalchemy import create_engine, text
+
+        def _log(msg: str) -> None:
+            logger.info(msg)
+            print(msg, flush=True)
+
+        _log(f"[pipeline] conectando ao banco: {self.connection_string[:50]}...")
+        engine = create_engine(self.connection_string)
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            _log("[pipeline] conexão OK")
+        except Exception as e:
+            raise RuntimeError(f"[pipeline] falha na conexão com o banco: {e}") from e
+
+        _log("[pipeline] executando query (JOIN de 3 tabelas — pode levar alguns minutos)...")
+        t_q = time.time()
+        with engine.connect() as conn:
+            df = pd.read_sql(text(_SQL_INTERNADOS), conn)
+        _log(f"[pipeline] query concluída em {time.time() - t_q:.1f}s — {len(df):,} linhas")
+
+        if df.empty:
+            raise RuntimeError(
+                "Nenhum registro retornado. Verifique connection_string e o schema do banco."
+            )
+        return df
+
+    def _build_vocab(self, df: pd.DataFrame) -> Dict[str, int]:
+        token_series = df.apply(
+            lambda r: _make_token(r["analyte"], r["value"], r["ref_low"], r["ref_high"]),
+            axis=1,
+        )
+        available = self.max_vocab_size - len(self._SPECIAL)
+        top_tokens = token_series.value_counts().index[:available].tolist()
+
+        vocab = dict(self._SPECIAL)
+        for i, tok in enumerate(top_tokens):
+            vocab[tok] = len(self._SPECIAL) + i
+
+        logger.info("vocab_built tokens=%d total=%d", len(top_tokens), len(vocab))
+        return vocab
+
+    def _build_tensors(
+        self, df: pd.DataFrame, vocab: Dict[str, int]
+    ) -> Tuple[torch.Tensor, torch.Tensor, List[str]]:
+        """Retorna (sequences, labels, hospital_ids) onde hospital_ids[i] é o hospital
+        do i-ésimo paciente — necessário para build_per_hospital() e rastreabilidade."""
+        unk_id = self._SPECIAL["<UNK>"]
+        sequences: List[List[int]] = []
+        labels: List[int] = []
+        hospital_ids: List[str] = []
+
+        groups = list(df.groupby(["patient_id", "attendance_id"], sort=False))
+        total = len(groups)
+        checkpoint = max(1, total // 10)
+
+        for idx, ((_, _att_id), group) in enumerate(groups):
+            duration = int(group["duration_days"].iloc[0])
+            label = _bin_duration(duration)
+            if label < 0:
+                continue
+
+            group = group.sort_values(["dia_relativo", "analyte"])
+            tokens = [
+                vocab.get(
+                    _make_token(r["analyte"], r["value"], r["ref_low"], r["ref_high"]),
+                    unk_id,
+                )
+                for _, r in group.iterrows()
+            ]
+            sequences.append(self._pad(tokens))
+            labels.append(label)
+            hospital_ids.append(str(group["hospital_id"].iloc[0]))
+
+            if (idx + 1) % checkpoint == 0:
+                pct = (idx + 1) / total * 100
+                msg = f"[pipeline] tensores: {idx + 1:,}/{total:,} ({pct:.0f}%)"
+                logger.info(msg)
+                print(msg, flush=True)
+
+        return (
+            torch.tensor(sequences, dtype=torch.long),
+            torch.tensor(labels, dtype=torch.long),
+            hospital_ids,
+        )
+
+    def _pad(self, tokens: List[int]) -> List[int]:
+        tokens = tokens[: self.max_seq_len]
+        return tokens + [0] * (self.max_seq_len - len(tokens))

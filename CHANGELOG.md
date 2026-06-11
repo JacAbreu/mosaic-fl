@@ -5,25 +5,37 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 ## [Unreleased]
 
 ### Adicionado
+- `SequencePipeline` em `preprocessor.py` — pipeline temporal para dados reais do PostgreSQL:
+  - `build()` — query + tokenização + tensores para um hospital (ou todos se `hospital_id=None`)
+  - `build_per_hospital()` — query única, divide tensores por hospital (simulação FL)
+  - `_load_dataframe()` — conexão/query extraída para reutilização sem duplicação
+  - Parâmetro `hospital_id: Optional[str]` — modo produção (cliente FL real) vs simulação
+- `SequencePipelineInicial` preservada como referência histórica da abordagem binária
+- `prepare_dataloaders_from_db()` em `run_experiments_v2.py` — cria DataLoaders FL diretamente do banco via `build_per_hospital()`
+- `FL_DB_URL` e `FL_ENV` como variáveis de ambiente e aliases em `config.py` (via `RuntimeConfig`)
+- Guarda de produção em `load_with_fallback()`: `FL_ENV=production` bloqueia sintético e exige `FL_DB_URL`
+- Migration `006_extend_patients_attendances` — formaliza `municipality`, `cep_prefix` (patients), `clinic_id` (attendances)
+- Migration `007_add_diagnosis_to_attendances` — adiciona `suspected_diagnosis TEXT` e `confirmed_diagnosis TEXT` a `clinical.attendances`, com índice parcial
+- Mapeamentos semânticos para `suspected_diagnosis` e `confirmed_diagnosis` em `integration/column_resolver.py`
+- Extração de `suspected_diagnosis` e `confirmed_diagnosis` em `integration/fapesp/outcomes_extract.py`
+- `docs/FLUXO_APRENDIZADO_FEDERADO.md` — documento técnico com diagramas Mermaid do pipeline completo, série temporal BEHRT, rodadas federadas e RAG
 - `test_fl_cycle_explained.py` — documentação executável do ciclo FL completo (29 testes)
 - `test_infrastructure.py` — cobertura dos daemons de produção com mocks (61 testes)
 - `.env.example` — referência de variáveis de ambiente necessárias
 - `.pre-commit-config.yaml` — hooks de lint e formatação automáticos
-- `CHANGELOG.md` — este arquivo
-- `TODO.md` — roadmap de qualidade profissional e produção
-- Seções de Testes, Rodando Localmente e Benchmark no README
-- `make lint` e `make fmt` no Makefile
 
 ### Corrigido
+- `MODEL_CFG.num_classes`: 2 → 5 (faixas de duração de internação como label, não binário)
+- `set_parameters` em `client.py`: docstring corrigida — usa `state_dict()` (treináveis + buffers), não `model.parameters()`
 - `preprocess_v2.py`: `select_dtypes(include=['object'])` → `['object', 'str']` (Pandas4Warning)
 - `preprocess_v2.py`: `normalize_units` cast explícito para float antes de multiplicação
 - `data_loader.py`: `_convert_desfecho` usa `pd.api.types.is_numeric_dtype()` em vez de comparação com `object`
 - `benchmark.py`: reescrito completamente para usar imports v2; corrigidos SyntaxError em strings literais e `monitor.stop()` duplo
-- `test_v2_core.py`: buffers Long clampados ao range válido do vocab em `test_fedavg_aggregation_preserves_shape` (eliminava falha dependente de ordem de execução dos testes)
-- `infrastructure/mosaicfl_client/heartbeat.py`: recuperação de JSON corrompido usa `json.dumps` correto
 - Nomes de diretório na documentação: `infrastructure/server/` → `infrastructure/mosaicfl_server/`
 
 ### Alterado
+- `run_experiments_v2.py`: usa `FL_DB_URL` para carregar tensores reais quando configurado; fallback para CSV/sintético apenas em `FL_ENV=development`
+- `_build_tensors()` em `SequencePipeline`: retorna `(sequences, labels, hospital_ids)` — rastreia hospital por sequência
 - Licença corrigida de MIT para Apache 2.0 em `pyproject.toml` e README
 - Roadmap de produção movido do README para `TODO.md`
 

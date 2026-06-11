@@ -1,14 +1,21 @@
 """
-Modelo BEHRT simplificado para sequencias clinicas (SimplifiedBEHRT).
+Modelo BEHRT simplificado para sequências temporais de exames clínicos (SimplifiedBEHRT).
 
-Arquitetura: embedding de tokens clinicos + PositionalEncoding sinusoidal +
-N camadas BEHRTEncoderLayer (Transformer com atencao multi-cabeca) + classificador linear.
+Arquitetura: embedding de tokens clínicos + PositionalEncoding sinusoidal +
+N camadas BEHRTEncoderLayer (Transformer com atenção multi-cabeça) + classificador linear.
+
+Tarefa: classificação multiclasse de duração de internação em 5 faixas (MODEL_CFG.num_classes=5):
+  0 = curta (1–3 d)  |  1 = média (4–7 d)  |  2 = longa (8–14 d)
+  3 = muito longa (15–30 d)  |  4 = prolongada (>30 d)
+
+Tokens de entrada: sequência temporal de analitos laboratoriais gerada pelo SequencePipeline.
+  PAD=0 (padding)  |  UNK=1  |  CLS=2  |  vocab de analitos: ids 3 em diante
 
 BEHRTEncoderLayer substitui nn.TransformerEncoderLayer para expor os pesos de
-atencao por cabeca (need_weights=True, average_attn_weights=False), permitindo
-analise de interpretabilidade via BEHRTPatternExtractor sem impacto no treino normal.
+atenção por cabeça (need_weights=True, average_attn_weights=False), permitindo
+análise de interpretabilidade via BEHRTPatternExtractor sem impacto no treino normal.
 
-Pooling: CLS token (use_cls_token=True) ou masked mean sobre tokens nao-PAD.
+Pooling: CLS token (use_cls_token=True, padrão) ou masked mean sobre tokens não-PAD.
 """
 import torch
 import torch.nn as nn

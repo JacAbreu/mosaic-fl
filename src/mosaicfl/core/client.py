@@ -1,9 +1,16 @@
 """
 Cliente Flower com FedProx para treinamento local federado (FedProxClient).
 
-Recebe pesos globais do servidor, treina localmente com dados EHR do hospital,
+Recebe pesos globais do servidor, treina localmente com DataLoaders de um único hospital,
 e devolve apenas os pesos atualizados — nunca os dados brutos.
-Usa state_dict() para sincronizar todos os tensores (treinaveis + buffers).
+
+No modo de simulação, os DataLoaders vêm de prepare_dataloaders_from_db() via
+SequencePipeline.build_per_hospital() — um cliente por hospital (HSL, BPSP).
+No modo de produção (deploy real), cada instância rodaria em um hospital distinto
+com SequencePipeline(hospital_id=FL_CLIENT_ID).build() contra o banco local.
+
+Usa state_dict() para sincronizar todos os tensores (treináveis + buffers de normalização).
+A loss local é CrossEntropy + termo proximal FedProx: (μ/2)·‖w_local − w_global‖².
 """
 import logging
 import numpy as np
@@ -31,9 +38,8 @@ class FedProxClient(fl.client.NumPyClient):
 
     def set_parameters(self, parameters: List[np.ndarray]) -> None:
         """
-        Carrega pesos globais no modelo local.
-        Usa model.parameters() para garantir que apenas parâmetros treináveis
-        sejam sincronizados (não buffers como running_mean de BN).
+        Carrega pesos globais no modelo local via state_dict (treináveis + buffers).
+        O zip com state_dict().keys() garante alinhamento posicional com get_parameters().
         """
         params_dict = zip(self.model.state_dict().keys(), parameters)
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})

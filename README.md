@@ -60,6 +60,8 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 12. [Uso de Inteligência Artificial](#uso-de-inteligência-artificial)
 13. [Referências](#referências)
 
+> **Fluxo detalhado do aprendizado federado:** [`docs/FLUXO_APRENDIZADO_FEDERADO.md`](docs/FLUXO_APRENDIZADO_FEDERADO.md) — cobertura completa do carregamento de dados clínicos, tokenização temporal de exames laboratoriais, rodadas federadas FedProx (servidor ↔ clientes HSL/BPSP), agregação FedAvg, série temporal BEHRT e justificativa RAG, com diagramas Mermaid e passo a passo textual.
+
 ---
 
 ## Arquitetura

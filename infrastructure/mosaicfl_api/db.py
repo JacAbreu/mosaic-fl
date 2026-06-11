@@ -40,12 +40,14 @@ def _build_tables(is_pg: bool):
 
     patients = sa.Table(
         "patients", meta,
-        sa.Column("patient_id",  sa.Text,     primary_key=True),
-        sa.Column("sex",         sa.Text,     nullable=False, server_default=sa.text("'M'")),
-        sa.Column("age",         sa.Float,    nullable=False, server_default=sa.text("0.0")),
-        sa.Column("birth_year",  sa.SmallInteger),
-        sa.Column("state_code",  sa.String(2)),
-        sa.Column("hospital_id", sa.Text),
+        sa.Column("patient_id",   sa.Text,        primary_key=True),
+        sa.Column("sex",          sa.Text,         nullable=False, server_default=sa.text("'M'")),
+        sa.Column("age",          sa.Float,        nullable=False, server_default=sa.text("0.0")),
+        sa.Column("birth_year",   sa.SmallInteger),
+        sa.Column("state_code",   sa.String(2)),
+        sa.Column("hospital_id",  sa.Text),
+        sa.Column("municipality", sa.Text),
+        sa.Column("cep_prefix",   sa.String(5)),
         schema=clinical,
     )
     attendances = sa.Table(
@@ -54,8 +56,11 @@ def _build_tables(is_pg: bool):
         sa.Column("patient_id",      sa.Text, nullable=False),
         sa.Column("hospital_id",     sa.Text),
         sa.Column("attended_at",     sa.Date, nullable=False),
-        sa.Column("attendance_type", sa.Text),
-        sa.Column("specialty",       sa.Text),
+        sa.Column("attendance_type",     sa.Text),
+        sa.Column("specialty",           sa.Text),
+        sa.Column("clinic_id",           sa.Text),
+        sa.Column("suspected_diagnosis", sa.Text),
+        sa.Column("confirmed_diagnosis", sa.Text),
         schema=clinical,
     )
     export_paths = sa.Table(
@@ -155,35 +160,50 @@ class PatientDB:
 
     def _stmt_upsert_patient(self, patient_id: str, sex: str, age: float,
                               birth_year: Optional[int], state_code: Optional[str],
-                              hospital_id: Optional[str]):
+                              hospital_id: Optional[str], municipality: Optional[str],
+                              cep_prefix: Optional[str]):
         vals = {
-            "patient_id":  patient_id,
-            "sex":         sex,
-            "age":         age,
-            "birth_year":  birth_year,
-            "state_code":  state_code,
-            "hospital_id": hospital_id,
+            "patient_id":   patient_id,
+            "sex":          sex,
+            "age":          age,
+            "birth_year":   birth_year,
+            "state_code":   state_code,
+            "hospital_id":  hospital_id,
+            "municipality": municipality,
+            "cep_prefix":   cep_prefix,
         }
         if self._is_pg:
-            return pg_insert(self._patients).values(**vals).on_conflict_do_nothing(
-                index_elements=["patient_id"]
+            return pg_insert(self._patients).values(**vals).on_conflict_do_update(
+                index_elements=["patient_id"],
+                set_={"municipality": municipality, "cep_prefix": cep_prefix},
             )
         return insert(self._patients).prefix_with("OR IGNORE").values(**vals)
 
     def _stmt_upsert_attendance(self, attendance_id: str, patient_id: str,
                                  hospital_id: Optional[str], attended_at: _date,
-                                 attendance_type: Optional[str], specialty: Optional[str]):
+                                 attendance_type: Optional[str], specialty: Optional[str],
+                                 clinic_id: Optional[str],
+                                 suspected_diagnosis: Optional[str],
+                                 confirmed_diagnosis: Optional[str]):
         vals = {
-            "attendance_id":   attendance_id,
-            "patient_id":      patient_id,
-            "hospital_id":     hospital_id,
-            "attended_at":     attended_at,
-            "attendance_type": attendance_type,
-            "specialty":       specialty,
+            "attendance_id":       attendance_id,
+            "patient_id":          patient_id,
+            "hospital_id":         hospital_id,
+            "attended_at":         attended_at,
+            "attendance_type":     attendance_type,
+            "specialty":           specialty,
+            "clinic_id":           clinic_id,
+            "suspected_diagnosis": suspected_diagnosis,
+            "confirmed_diagnosis": confirmed_diagnosis,
         }
         if self._is_pg:
-            return pg_insert(self._attendances).values(**vals).on_conflict_do_nothing(
-                index_elements=["attendance_id"]
+            return pg_insert(self._attendances).values(**vals).on_conflict_do_update(
+                index_elements=["attendance_id"],
+                set_={
+                    "clinic_id":           clinic_id,
+                    "suspected_diagnosis": suspected_diagnosis,
+                    "confirmed_diagnosis": confirmed_diagnosis,
+                },
             )
         return insert(self._attendances).prefix_with("OR IGNORE").values(**vals)
 
@@ -206,10 +226,13 @@ class PatientDB:
         birth_year: Optional[int] = None,
         state_code: Optional[str] = None,
         hospital_id: Optional[str] = None,
+        municipality: Optional[str] = None,
+        cep_prefix: Optional[str] = None,
     ) -> None:
         with self._engine.begin() as conn:
             conn.execute(self._stmt_upsert_patient(
-                patient_id, sex, age, birth_year, state_code, hospital_id
+                patient_id, sex, age, birth_year, state_code, hospital_id,
+                municipality, cep_prefix,
             ))
 
     def patient_exists(self, patient_id: str) -> bool:
@@ -249,11 +272,15 @@ class PatientDB:
         hospital_id: Optional[str] = None,
         attendance_type: Optional[str] = None,
         specialty: Optional[str] = None,
+        clinic_id: Optional[str] = None,
+        suspected_diagnosis: Optional[str] = None,
+        confirmed_diagnosis: Optional[str] = None,
     ) -> None:
         d = attended_at if isinstance(attended_at, _date) else _date.fromisoformat(attended_at)
         with self._engine.begin() as conn:
             conn.execute(self._stmt_upsert_attendance(
-                attendance_id, patient_id, hospital_id, d, attendance_type, specialty
+                attendance_id, patient_id, hospital_id, d, attendance_type, specialty,
+                clinic_id, suspected_diagnosis, confirmed_diagnosis,
             ))
 
     # ── risk history ──────────────────────────────────────────────────────

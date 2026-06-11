@@ -71,42 +71,44 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 
 ```
 mosaic-fl/
-├── run.py                          # Ponto de entrada principal (orquestra simulação)
-├── pyproject.toml                  # Metadados e dependências do pacote
-├── requirements.txt                # Dependências (referência)
-├── setup.sh                        # Script de instalação Linux/macOS
-├── setup.bat                       # Script de instalação Windows
-├── makefile                        # Atalhos de desenvolvimento
-└── src/
-    ├── config.py                   # Hiperparâmetros globais e calibração de hardware
-    ├── preprocess.py               # Padronização FAPESP COVID-19 (Experimento 1)
-    │                               # • Interoperabilidade HF1-HF5
-    │                               # • Normalização de unidades (lb→kg, meses→anos)
-    │                               # • Vocabulário dinâmico com <PAD>, <UNK>, <MASK>, <CLS>
-    ├── model.py                    # BEHRT simplificado
-    │                               # • Embedding + Positional Encoding
-    │                               # • Transformer Encoder customizado (exposição de atenção)
-    │                               # • Masked Mean Pooling (ignora padding)
-    │                               # • Classificador multiclasse
-    ├── client.py                   # Cliente Flower com FedProx
-    │                               # • Treino local por hospital virtual
-    │                               # • Termo proximal ||w_local - w_global||²
-    │                               # • Apenas pesos treináveis trafegam (não buffers)
-    ├── server.py                   # Servidor de agregação e avaliação global
-    │                               # • Estratégia FedProx customizada
-    │                               # • ConvergenceTracker (parada antecipada)
-    │                               # • Avaliação em holdout global (privado do servidor)
-    ├── rag_system.py               # Justificativa clínica via RAG (ChromaDB)
-    │                               # • Recuperação de casos similares (all-MiniLM-L6-v2)
-    │                               # • Geração de texto (DistilGPT-2) em inglês
-    │                               # • Detecção de alucinação simples
-    │                               # • Anonimização estrutural (idade → faixa etária)
-    ├── extract_patterns.py         # Extração de padrões do BEHRT para o RAG
-    │                               # • Análise de atenção por camada e cabeça
-    │                               # • Perfis prototípicos por desfecho clínico
-    └── experiments/
-        ├── runner.py               # Orquestrador dos 5 experimentos do TCC
-        └── run_experiments.py      # Legado — redireciona para runner.py
+├── experiments/
+│   ├── run_experiments_v2.py       # Ponto de entrada — orquestra simulação FL
+│   └── experiment_server.py        # Adapter de servidor FL (experimentos locais)
+├── src/mosaicfl/core/
+│   ├── config.py                   # Hiperparâmetros globais e variáveis de ambiente
+│   │                               # FL_DB_URL, FL_ENV, MODEL_CFG (num_classes=5)
+│   ├── preprocessor.py             # Pré-processamento EHR
+│   │                               # • SequencePipeline — tokenização temporal (banco real)
+│   │                               #   build() / build_per_hospital() / hospital_id
+│   │                               # • SequencePipelineInicial — abordagem legada (referência)
+│   │                               # • EHRPreprocessor — normalização para CSV/sintético
+│   │                               # • split_by_institution() — divisão por instituição
+│   ├── model.py                    # BEHRT simplificado (5 classes de duração)
+│   │                               # • Embedding + Positional Encoding sinusoidal
+│   │                               # • BEHRTEncoderLayer (exposição de pesos de atenção)
+│   │                               # • CLS token pooling
+│   │                               # • Classificador multiclasse (0–4 duração internação)
+│   ├── client.py                   # Cliente Flower com FedProx
+│   │                               # • Treino local por hospital (HSL ou BPSP)
+│   │                               # • Loss = CrossEntropy + (μ/2)·‖w_local−w_global‖²
+│   │                               # • state_dict completo trafega (treináveis + buffers)
+│   ├── convergence.py              # ConvergenceTracker (janela deslizante)
+│   ├── federated.py                # Agregação FedAvg ponderada + get_evaluate_fn
+│   ├── data_loader.py              # Carregamento flexível CSV/SGBD (desenvolvimento)
+│   │                               # load_with_fallback() respeita FL_ENV=production
+│   ├── rag.py                      # Justificativa clínica via RAG
+│   │                               # • pgvector (knowledge.clinical_profiles)
+│   │                               # • all-MiniLM-L6-v2 + DistilGPT-2
+│   └── interpretability.py         # BEHRTPatternExtractor
+│                                   # • Atenção por camada e cabeça
+│                                   # • Perfis prototípicos por classe de duração
+├── alembic/versions/               # Migrations 001–007 (schema PostgreSQL)
+├── integration/fapesp/             # ETL da base FAPESP COVID-19
+├── infrastructure/                 # Adapters de produção (Docker, daemons)
+├── docs/
+│   └── FLUXO_APRENDIZADO_FEDERADO.md  # Diagramas Mermaid + passo a passo completo
+└── scripts/
+    └── test_pipeline.py            # Diagnóstico do SequencePipeline
 ```
 
 ---
@@ -118,73 +120,64 @@ mosaic-fl/
 ```mermaid
 flowchart TB
     subgraph Dados[" Camada de Dados"]
-        CSV["FAPESP COVID-19 CSV"]
-        PRE["EHRPreprocessor<br/>(preprocess.py)"]
-        SPLIT["split_by_institution()<br/>5 partições virtuais"]
+        DB["PostgreSQL\n(clinical + metrics)"]
+        PIPE["SequencePipeline\nbuild_per_hospital()"]
+        CSV["CSV / Sintético\n(desenvolvimento)"]
     end
 
     subgraph FL[" Camada Federada (Flower)"]
-        SRV["Servidor FedProx<br/>(server.py)"]
-        C1["Cliente 0<br/>(Hospital A)"]
-        C2["Cliente 1<br/>(Hospital B)"]
-        C3["Cliente 2<br/>(Hospital C)"]
-        C4["Cliente 3<br/>(Hospital D)"]
-        C5["Cliente 4<br/>(Hospital E)"]
+        SRV["Servidor FedProx\n(experiment_server.py)"]
+        C0["Cliente 0\n(HSL)"]
+        C1["Cliente 1\n(BPSP)"]
     end
 
     subgraph Modelo[" Camada do Modelo"]
-        BEHRT["SimplifiedBEHRT<br/>(model.py)"]
-        ENC["BEHRTEncoderLayer<br/>+ Atenção exposta"]
-        POOL["Masked Mean Pooling<br/>(ignora <PAD>)"]
-        CLS["Token <CLS><br/>(classificação)"]
+        BEHRT["SimplifiedBEHRT\n(model.py)"]
+        ENC["BEHRTEncoderLayer\n+ Atenção exposta"]
+        CLS["Token CLS\n(classificação)"]
+        OUT5["5 classes de duração\ncurta/média/longa/muito longa/prolongada"]
     end
 
     subgraph RAG[" Camada de Explicabilidade"]
-        EXT["BEHRTPatternExtractor<br/>(extract_patterns.py)"]
-        CHROMA["ChromaDB<br/>(perfis prototípicos)"]
-        LLM["DistilGPT-2<br/>(justificativa textual)"]
-        OUT["Predição + Justificativa<br/>+ Flag de alucinação"]
+        EXT["BEHRTPatternExtractor\n(interpretability.py)"]
+        PGVEC["pgvector\n(knowledge.clinical_profiles)"]
+        LLM["DistilGPT-2\n(justificativa textual)"]
     end
 
-    CSV --> PRE --> SPLIT
-    SPLIT --> C1 & C2 & C3 & C4 & C5
-    SRV -. "pesos globais" .-> C1 & C2 & C3 & C4 & C5
-    C1 & C2 & C3 & C4 & C5 -. "pesos locais" .-> SRV
+    DB --> PIPE
+    CSV -.->|FL_ENV=development| SRV
+    PIPE --> C0 & C1
+    SRV -. "pesos globais" .-> C0 & C1
+    C0 & C1 -. "pesos locais" .-> SRV
     SRV --> BEHRT
-    BEHRT --> ENC --> POOL --> CLS
-    BEHRT --> EXT --> CHROMA --> LLM --> OUT
+    BEHRT --> ENC --> CLS --> OUT5
+    BEHRT --> EXT --> PGVEC --> LLM
 ```
 
 ### Fluxo de Dados no Aprendizado Federado
 
 ```mermaid
 sequenceDiagram
-    participant S as Servidor<br/>(start_server)
-    participant C1 as Cliente 0<br/>(Hospital A)
-    participant C2 as Cliente 1<br/>(Hospital B)
-    participant C3 as Cliente 2<br/>(Hospital C)
+    participant S as Servidor FL
+    participant C0 as Cliente 0 (HSL)
+    participant C1 as Cliente 1 (BPSP)
 
-    Note over S,C3: Inicialização da Rodada 1
-    S->>S: Inicializa modelo global θ₀
-    S->>C1: Envia θ₀
-    S->>C2: Envia θ₀
-    S->>C3: Envia θ₀
+    Note over S,C1: Inicialização — modelo global θ₀ (seed=42)
+    S->>C0: Envia θ₀ (numpy arrays)
+    S->>C1: Envia θ₀ (numpy arrays)
 
-    Note over C1,C3: Treinamento Local (LOCAL_EPOCHS=2)
-    C1->>C1: Treina com dados locais<br/>+ termo proximal FedProx<br/>→ θ₀¹
-    C2->>C2: Treina com dados locais<br/>+ termo proximal FedProx<br/>→ θ₀²
-    C3->>C3: Treina com dados locais<br/>+ termo proximal FedProx<br/>→ θ₀³
+    Note over C0,C1: Treinamento Local (LOCAL_EPOCHS=2)<br/>Loss = CrossEntropy + (μ/2)·‖w_local−w_global‖²
+    C0->>C0: fit() → θ₀_HSL
+    C1->>C1: fit() → θ₀_BPSP
 
-    C1-->>S: Retorna θ₀¹ (apenas pesos, não dados!)
-    C2-->>S: Retorna θ₀² (apenas pesos, não dados!)
-    C3-->>S: Retorna θ₀³ (apenas pesos, não dados!)
+    C0-->>S: θ₀_HSL + n_amostras_HSL + {loss}
+    C1-->>S: θ₀_BPSP + n_amostras_BPSP + {loss}
 
-    S->>S: Agrega: θ₁ = weighted_average(θ₀¹, θ₀², θ₀³)
-    S->>S: Avalia θ₁ em test_loader global<br/>(holdout privado do servidor)
+    S->>S: aggregate_fedavg(ponderado por n_amostras)
+    S->>S: evaluate_global_model(test_loader holdout)
 
-    alt Convergência atingida?
-        S->>S: ConvergenceTracker: Δ < 0.005<br/>por 3 rodadas consecutivas
-        Note over S: PARADA ANTECIPADA
+    alt ConvergenceTracker: |acc_r − acc_{r-1}| < 0.005 por 3 rodadas
+        Note over S: PARADA ANTECIPADA — modelo convergido
     else Continua
         S->>S: Próxima rodada...
     end
@@ -210,8 +203,8 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     [*] --> Preprocessamento
-    Preprocessamento --> Split : split_by_institution()
-    Split --> Treino_FL : start_simulation()
+    Preprocessamento --> Split : SequencePipeline.build_per_hospital()
+    Split --> Treino_FL : run_federated_learning_manual()
 
     state Treino_FL {
         [*] --> Rodada_N
@@ -291,8 +284,12 @@ O setup cria um ambiente virtual `.venv` na raiz do projeto e instala o pacote `
 # Ative o ambiente virtual (necessário uma vez por sessão de terminal)
 source .venv/bin/activate
 
-# Execute os 5 experimentos
-python run.py
+# Com banco de dados real (recomendado)
+export FL_DB_URL="postgresql://mosaicfl:senha@localhost:5432/mosaicfl"
+python experiments/run_experiments_v2.py
+
+# Modo desenvolvimento (CSV ou sintético)
+python experiments/run_experiments_v2.py
 ```
 
 ### Windows
@@ -301,17 +298,28 @@ python run.py
 :: Ative o ambiente virtual
 .venv\Scripts\activate
 
-:: Execute os 5 experimentos
-python run.py
+:: Com banco de dados real
+set FL_DB_URL=postgresql://mosaicfl:senha@localhost:5432/mosaicfl
+python experiments\run_experiments_v2.py
 ```
 
 ### Via Makefile (Linux / macOS)
 
 ```bash
-make setup   # cria o ambiente e instala as dependências
-make run     # executa os experimentos
-make clean   # remove o ambiente virtual e caches
+make setup        # cria o ambiente e instala as dependências
+make run          # executa os experimentos (usa FL_DB_URL se configurado)
+make test-pipeline  # diagnóstico do SequencePipeline contra o banco
+make clean        # remove o ambiente virtual e caches
 ```
+
+### Variáveis de ambiente relevantes
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `FL_DB_URL` | _(vazio)_ | Connection string PostgreSQL. Se definido, usa dados reais |
+| `FL_ENV` | `development` | `production` torna `FL_DB_URL` obrigatório e bloqueia sintético |
+| `FL_DEVICE` | `cpu` | `cpu` ou `cuda` |
+| `FL_USE_RAY` | `false` | `true` ativa simulação paralela via Ray |
 
 ---
 

@@ -1,19 +1,29 @@
 """
 data_loader.py — Integração Flexível de Fontes de Dados para o MOSAIC-FL.
 
+ATENÇÃO — Dois modos de carregamento coexistem neste projeto:
+
+1. **Modo banco de dados (recomendado para dados reais)**
+   Usar diretamente: `SequencePipeline(FL_DB_URL).build_per_hospital()`
+   Gera tensores temporais ordenados por dia_relativo, tokenizados semanticamente
+   ({analyte}_{baixo|normal|alto}), com label de 5 classes de duração de internação.
+   Configurar via variável de ambiente: `FL_DB_URL` (preferencial) ou `MOSAICFL_DB_URL` (legado).
+
+2. **Modo arquivo/sintético (desenvolvimento)**
+   Usar: `load_with_fallback()` — tenta CSV e sintetiza se necessário.
+   Retorna DataFrame com colunas padronizadas (instituicao, desfecho, sintoma, exame, etc.)
+   compatíveis com EHRPreprocessor + split_by_institution.
+
+Guarda de produção:
+  Se `FL_ENV=production` e `FL_DB_URL` não estiver configurado, load_with_fallback()
+  falha imediatamente com RuntimeError. Dados sintéticos são bloqueados em produção.
+
 Suporta:
   • Arquivos locais: CSV, Excel, JSON, Parquet
   • Bancos de dados: PostgreSQL, MySQL, SQLite, SQL Server, Oracle
 
 Padrão de design: Strategy Pattern — a lógica de conexão é isolada,
 mas a interface pública é única por caso de uso.
-
-Responsabilidades:
-  1. Localizar e conectar à fonte de dados (arquivo OU SGBD)
-  2. Executar query SQL ou carregar arquivo
-  3. Mapear colunas do schema real → nomes padronizados internos
-  4. Validar schema (colunas obrigatórias existem?)
-  5. Converter tipos e desfechos textuais → numéricos
 
 Funções públicas principais:
   load_clinical_dataset()   — carrega de uma fonte específica, falha se indisponível
@@ -26,14 +36,16 @@ Cadeia de fallback (load_with_fallback):
   4. Dados sintéticos (se allow_synthetic=True)   → gera com aviso explícito
   5. DataLoadError                                → falha com diagnóstico completo
 
+Variáveis de ambiente:
+  FL_DB_URL         — connection string PostgreSQL (nova; preferencial)
+  MOSAICFL_DB_URL   — alias legado, ainda funcional
+  FL_ENV            — "production" bloqueia sintético e exige FL_DB_URL
+
 Uso:
     from mosaicfl.core.data_loader import load_with_fallback
 
     # Tenta tudo automaticamente
     df = load_with_fallback()
-
-    # Com CSV específico como segunda opção
-    df = load_with_fallback(csv_path="data/minha_base.csv")
 
     # Sem permitir sintético (falha se nenhuma fonte real disponível)
     df = load_with_fallback(allow_synthetic=False)
@@ -742,6 +754,25 @@ def load_with_fallback(
         ...     allow_synthetic=False,
         ... )
     """
+    # ─── GUARDA DE PRODUÇÃO ───────────────────────────────────────────────────
+    # Em produção, dados sintéticos são proibidos e FL_DB_URL é obrigatório.
+    # Essa verificação ocorre antes de qualquer tentativa de carga para falhar
+    # rapidamente, sem consumir tempo em fallbacks que nunca serão permitidos.
+    if RUNTIME_CFG.env == "production":
+        effective_conn = connection_string or RUNTIME_CFG.db_url or DEFAULT_CONNECTION_STRING
+        if not effective_conn:
+            raise RuntimeError(
+                "FL_ENV=production requer FL_DB_URL configurado.\n"
+                "Configure: export FL_DB_URL='postgresql://user:pass@host:5432/db'\n\n"
+                "Para desenvolvimento com dados sintéticos: export FL_ENV=development"
+            )
+        if allow_synthetic:
+            logger.warning(
+                "FL_ENV=production: ignorando allow_synthetic=True — "
+                "dados sintéticos são proibidos em ambiente de produção."
+            )
+            allow_synthetic = False
+
     attempts = []   # histórico de tentativas para o DataLoadError
 
     def _post_process(df: pd.DataFrame, fonte: str) -> pd.DataFrame:

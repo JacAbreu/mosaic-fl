@@ -10,25 +10,27 @@ Dividido em duas partes:
 
 ### Consistência de código
 
-- [ ] **Corrigir `get_parameters` em `client_v2.py`**
+- [x] ~~**Corrigir docstring de `set_parameters` em `client.py`**~~
 
-  A docstring diz "retorna apenas parâmetros treináveis" mas o código usa `state_dict().values()` (34 tensores, incluindo buffers). A linha correta está comentada logo acima. Essa contradição é uma armadilha para quem lê o código depois: ou a docstring está errada, ou a implementação está errada. Decidir qual comportamento é o correto e alinhar os dois.
+  ~~A docstring dizia "Usa model.parameters()" mas o código usa `state_dict().keys()` (inclui buffers). A contradição criava expectativa errada de que buffers não eram sincronizados.~~
+  Corrigido: docstring e comportamento alinhados — state_dict é usado em set e get (treináveis + buffers).
 
 - [x] ~~**Eliminar `from .config import *` em todos os módulos v2**~~
 
   ~~Wildcard imports poluem o namespace de cada módulo com ~20 constantes, dificultam entender de onde vem cada símbolo, e causam conflitos silenciosos se dois módulos definirem o mesmo nome. Substituir por imports explícitos: `from .config import VOCAB_SIZE, EMBED_DIM, ...`.~~
 
-- [ ] **Unificar os dois `ConvergenceTracker`**
+- [x] ~~**Unificar os dois `ConvergenceTracker`**~~
 
-  Existe um em `server_v2.py` (stable_count incremental) e outro em `infrastructure/mosaicfl_server/strategy.py` (janela deslizante). Ambos funcionam, mas têm comportamentos diferentes e nomes iguais. Um leitor não sabe qual usar. Mover para `mosaicfl.v2.server_v2` como implementação canônica e importá-lo na infra, removendo a cópia.
+  ~~Existia um em `server_v2.py` (stable_count incremental) e outro em `infrastructure/mosaicfl_server/strategy.py` (janela deslizante).~~
+  Unificado em `src/mosaicfl/core/convergence.py` (janela deslizante) — fonte única importada por todos os adapters.
 
-- [ ] **Implementar `_save_checkpoint` de verdade em `server_v2.py`**
+- [ ] **Implementar `_save_checkpoint` de verdade em `experiment_server.py`**
 
-  Hoje o método apenas registra um caminho no histórico sem escrever nada em disco. Um checkpoint que não persiste os pesos não é um checkpoint. Implementar com `torch.save(model.state_dict(), path)` e carregar com `torch.load`.
+  Hoje o método apenas registra um caminho no histórico sem escrever nada em disco. Implementar com `torch.save(model.state_dict(), path)` e carregar com `torch.load`.
 
-- [ ] **Descomentar e validar `fl.server.start_server` em `server_v2.py`**
+- [ ] **Integrar RAG com tensores reais (modo banco)**
 
-  O bloco que inicia o Flower de fato está comentado. O módulo retorna a strategy mas nunca sobe o servidor. Para a seção "Rodando Localmente" do README funcionar de ponta a ponta com `server_v2.py`, esse código precisa estar ativo (e o `StopIteration` para convergência antecipada precisa ser testado).
+  `run_rag_pipeline()` em `run_experiments_v2.py` depende de `df_raw` (DataFrame com coluna `desfecho`), que não existe no modo banco de dados (`loaded_from_db=True`). Adaptar para construir `patient_data` a partir dos tensores/vocab do SequencePipeline.
 
 - [x] ~~**Corrigir `fit_metrics_aggregation_fn=weighted_average`**~~
 

@@ -7,9 +7,12 @@ FL_TLS_CERT_DIR     ?= certs
 FL_SUPERLINK_ADDRESS ?= localhost:9091
 FL_CLIENT_ID        ?= hospital_dev
 FL_DATA_SOURCE      ?= simulated
+FL_DB_URL           ?= postgresql://mosaicfl:senhaForte@localhost:5432/mosaicfl
+PIPELINE_SEQ_LEN    ?= 128
+PIPELINE_SAMPLE     ?= 3
 
 .PHONY: setup test test-integration test-e2e test-all test-cov experiment clean \
-        superlink server-app supernode sim
+        superlink server-app supernode sim test-pipeline
 
 setup:
 	bash setup.sh
@@ -36,6 +39,15 @@ test-all:
 
 experiment:
 	$(PYTHON) experiments/run_experiments_v2.py
+
+# Diagnóstico do SequencePipeline (série temporal de internados HSL+BPSP).
+# Sobrescreva variáveis conforme necessário:
+#   make test-pipeline FL_DB_URL=postgresql://... PIPELINE_SAMPLE=5
+test-pipeline:
+	$(PYTHON) scripts/test_pipeline.py \
+		--db-url    "$(FL_DB_URL)" \
+		--max-seq-len $(PIPELINE_SEQ_LEN) \
+		--sample    $(PIPELINE_SAMPLE)
 
 # ── Flower SuperLink (produção) ────────────────────────────────────────────────
 
