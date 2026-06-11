@@ -29,8 +29,8 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 |---|---|
 | Kubernetes Secrets para credenciais | Não há cluster K8s ativo; infra é preparatória |
 | Deploy automatizado no CI/CD | Pipeline de CD está scaffolded, não operacional |
-| Prometheus / Grafana / audit trail LGPD | Roadmap de produção, documentado no `TODO.md` |
-| Differential Privacy nos pesos | Roadmap de produção, documentado no `TODO.md` |
+| Prometheus / Grafana / audit trail LGPD | Roadmap de produção, documentado no [`docs/TODO.md`](docs/TODO.md) |
+| Differential Privacy nos pesos | Roadmap de produção, documentado no [`docs/TODO.md`](docs/TODO.md) |
 | Certificação ANVISA / LGPD completa | Fora do escopo de pesquisa; documentado como requisito futuro |
 
 ### O que deve ser avaliado
@@ -39,7 +39,7 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 - **Arquitetura:** estrutura inspirada na arquitetura hexagonal — `mosaicfl.core` (domínio puro) isolado de `infrastructure/` (adapters de produção) e `experiments/` (adapter de pesquisa); Strategy pattern, Single Responsibility
 - **Testes:** cobertura, organização (um arquivo por classe), contratos de API, testes explicativos
 - **Corretude funcional:** implementação de FedProx, BEHRT, RAG, convergência, persistência de estado, recovery de sessão
-- **Documentação:** README, CHANGELOG, CONTRIBUTING, TODO rastreável
+- **Documentação:** README (raiz), [`docs/CHANGELOG.md`](docs/CHANGELOG.md), [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md), [`docs/TODO.md`](docs/TODO.md) rastreável
 - **Observabilidade:** structured logging JSON, health endpoints, separação liveness/readiness
 
 ---
