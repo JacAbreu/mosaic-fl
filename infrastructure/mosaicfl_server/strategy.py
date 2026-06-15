@@ -41,6 +41,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
     def __init__(
         self,
         global_model: torch.nn.Module,
+        vocab: Optional[Dict[str, int]] = None,
         config_loader: Optional[ConfigLoader] = None,
         on_round_start: Optional[Callable[[int, Dict], None]] = None,
         on_round_complete: Optional[Callable[[int, Dict], None]] = None,
@@ -53,6 +54,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         kwargs.setdefault("fit_metrics_aggregation_fn", weighted_average_loss)
         super().__init__(*args, **kwargs)
         self.global_model = global_model
+        self.vocab: Dict[str, int] = vocab or {}
         self.config_loader: ConfigLoader = config_loader or get_config_loader()
         self.on_round_start = on_round_start
         self.on_round_complete = on_round_complete
@@ -191,8 +193,19 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         if aggregated_parameters is not None:
             self._load_global_weights(aggregated_parameters)
             checkpoint_path = CHECKPOINT_DIR / f"round_{server_round}.pt"
-            torch.save(self.global_model.state_dict(), checkpoint_path)
-            logger.info("checkpoint_saved", extra={"round": server_round, "path": str(checkpoint_path)})
+            from .runner import _save_checkpoint
+            _save_checkpoint(
+                checkpoint_path,
+                {"model_state": self.global_model.state_dict(), "vocab": self.vocab},
+            )
+            logger.info(
+                "checkpoint_saved",
+                extra={
+                    "round": server_round,
+                    "path": str(checkpoint_path),
+                    "vocab_size": len(self.vocab),
+                },
+            )
 
         return aggregated_parameters, aggregated_metrics
 

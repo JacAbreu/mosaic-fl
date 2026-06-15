@@ -14,6 +14,7 @@ Dois modos de execução:
     Usa: FederatedServer + fl.server.start_server
 """
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -22,7 +23,7 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 import flwr as fl
 import torch
@@ -53,6 +54,36 @@ def setup_logging() -> None:
     """Configura logging estruturado (JSON ou texto) via logging_setup central."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     _setup_logging(log_file="server_daemon.log")
+
+
+def _load_standard_vocab() -> Dict:
+    """Carrega standard_vocab.json como fallback quando não há checkpoint."""
+    candidates = [
+        os.getenv("FL_VOCAB_PATH"),
+        str(CHECKPOINT_DIR / "standard_vocab.json"),
+    ]
+    for path in candidates:
+        if path and Path(path).exists():
+            try:
+                with open(path, encoding="utf-8") as f:
+                    vocab = json.load(f)
+                logger.info("standard_vocab_loaded path=%s size=%d", path, len(vocab))
+                return vocab
+            except Exception as exc:
+                logger.warning("standard_vocab_load_error path=%s error=%s", path, exc)
+    logger.warning(
+        "no_standard_vocab — execute build_standard_vocab.py antes do treinamento; "
+        "inferência será inoperante até o primeiro checkpoint com vocab"
+    )
+    return {}
+
+
+def _save_checkpoint(path: Path, state: dict) -> None:
+    """Salva checkpoint e grava SHA-256 para verificação de integridade."""
+    import torch
+    torch.save(state, path)
+    sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    path.with_suffix(".sha256").write_text(sha256, encoding="utf-8")
 
 
 def write_health_status(status: str, round_num: int = 0, clients: int = 0):
@@ -101,28 +132,49 @@ def _make_server_components(context: Context) -> ServerAppComponents:
     # ── Modelo: carrega checkpoint da sessão anterior se disponível ──────────
     model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
     initial_parameters: Optional[fl.common.Parameters] = None
+    recovered_vocab: Dict = {}
 
     if previous_state.last_checkpoint:
         ckpt_path = Path(previous_state.last_checkpoint)
         if ckpt_path.exists():
             try:
-                sd = torch.load(ckpt_path, map_location="cpu", weights_only=True)
-                model.load_state_dict(sd, strict=False)
+                ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+                # Novo formato: {"model_state": ..., "vocab": ...}
+                # Legado: state_dict puro (sem chave "model_state")
+                if isinstance(ckpt, dict) and "model_state" in ckpt:
+                    state_dict      = ckpt["model_state"]
+                    recovered_vocab = ckpt.get("vocab", {})
+                else:
+                    state_dict = ckpt
+                    logger.warning(
+                        "checkpoint_legacy_format — vocab ausente; "
+                        "tentando carregar standard_vocab.json como fallback"
+                    )
+                model.load_state_dict(state_dict, strict=False)
                 initial_parameters = fl.common.ndarrays_to_parameters(
-                    [v.cpu().detach().numpy().copy() for v in sd.values()]
+                    [v.cpu().detach().numpy().copy() for v in state_dict.values()]
                 )
                 logger.info(
                     "checkpoint_loaded_for_recovery",
-                    extra={"checkpoint": str(ckpt_path), "last_round": previous_state.last_round},
+                    extra={
+                        "checkpoint": str(ckpt_path),
+                        "last_round": previous_state.last_round,
+                        "vocab_size": len(recovered_vocab),
+                    },
                 )
             except Exception as exc:
                 logger.warning("checkpoint_load_error", extra={"error": str(exc)})
+
+    # Fallback: se o checkpoint não trouxe vocab (primeiro round ou legado), carrega standard_vocab
+    if not recovered_vocab:
+        recovered_vocab = _load_standard_vocab()
 
     config_loader = get_config_loader()
     _health.start()
 
     strategy = ProductionFedProxStrategy(
         global_model=model,
+        vocab=recovered_vocab,
         config_loader=config_loader,
         state_store=state_store,
         round_timeout=round_timeout,
@@ -227,8 +279,29 @@ class FederatedServer:
 
         config_loader = get_config_loader()
 
+        # Tenta recuperar vocab do checkpoint mais recente (se houver)
+        recovered_vocab: Dict = {}
+        existing_ckpts = sorted(CHECKPOINT_DIR.glob("round_*.pt"))
+        if existing_ckpts:
+            try:
+                ckpt = torch.load(existing_ckpts[-1], map_location="cpu", weights_only=True)
+                if isinstance(ckpt, dict) and "model_state" in ckpt:
+                    recovered_vocab = ckpt.get("vocab", {})
+                    self.global_model.load_state_dict(ckpt["model_state"], strict=False)
+                    logger.info(
+                        "legacy_checkpoint_restored",
+                        extra={"path": str(existing_ckpts[-1]), "vocab_size": len(recovered_vocab)},
+                    )
+            except Exception as exc:
+                logger.warning("legacy_checkpoint_load_error", extra={"error": str(exc)})
+
+        # Fallback: se não há checkpoint ou vocab ausente, carrega standard_vocab.json
+        if not recovered_vocab:
+            recovered_vocab = _load_standard_vocab()
+
         strategy = ProductionFedProxStrategy(
             global_model=self.global_model,
+            vocab=recovered_vocab,
             config_loader=config_loader,
             on_round_start=self._on_round_start,
             on_round_complete=self._on_round_complete,

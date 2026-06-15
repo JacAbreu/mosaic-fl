@@ -36,17 +36,34 @@ os.environ.setdefault("MKL_NUM_THREADS", "4")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
+_DEFAULT_CLASS_LABELS = (
+    "curta_1_3d",
+    "media_4_7d",
+    "longa_8_14d",
+    "muito_longa_15_30d",
+    "prolongada_30d_mais",
+)
+
+
 @dataclass(frozen=True)
 class ModelConfig:
     """Arquitetura BEHRT — imutável por experimento. frozen=True impede mutação acidental em runtime."""
-    vocab_size:  int   = 10_000
-    embed_dim:   int   = 64
-    max_seq_len: int   = 128
-    num_layers:  int   = 2
-    num_heads:   int   = 4
-    ff_dim:      int   = 128
-    num_classes: int   = 5   # faixas de duração: curta/média/longa/muito longa/prolongada
-    dropout:     float = 0.1
+    vocab_size:   int            = 10_000
+    embed_dim:    int            = 64
+    max_seq_len:  int            = 128
+    num_layers:   int            = 2
+    num_heads:    int            = 4
+    ff_dim:       int            = 128
+    num_classes:  int            = 5
+    class_labels: tuple[str, ...] = _DEFAULT_CLASS_LABELS
+    dropout:      float          = 0.1
+
+    def __post_init__(self) -> None:
+        if len(self.class_labels) != self.num_classes:
+            raise ValueError(
+                f"FL_CLASS_LABELS tem {len(self.class_labels)} label(s) "
+                f"mas FL_NUM_CLASSES={self.num_classes}. Devem ser iguais."
+            )
 
 
 @dataclass(frozen=True)
@@ -85,7 +102,19 @@ class RuntimeConfig:
     env:             str    = field(default_factory=lambda: os.getenv("FL_ENV", "development").lower())
 
 
-MODEL_CFG   = ModelConfig()
+MODEL_CFG = ModelConfig(
+    vocab_size   = int(os.getenv("FL_VOCAB_SIZE",   "10000")),
+    embed_dim    = int(os.getenv("FL_EMBED_DIM",    "64")),
+    max_seq_len  = int(os.getenv("FL_MAX_SEQ_LEN",  "128")),
+    num_layers   = int(os.getenv("FL_NUM_LAYERS",   "2")),
+    num_heads    = int(os.getenv("FL_NUM_HEADS",    "4")),
+    ff_dim       = int(os.getenv("FL_FF_DIM",       "128")),
+    num_classes  = int(os.getenv("FL_NUM_CLASSES",  "5")),
+    class_labels = tuple(
+        os.getenv("FL_CLASS_LABELS", ",".join(_DEFAULT_CLASS_LABELS)).split(",")
+    ),
+    dropout      = float(os.getenv("FL_DROPOUT",    "0.1")),
+)
 FED_CFG     = FedConfig()
 RUNTIME_CFG = RuntimeConfig()
 

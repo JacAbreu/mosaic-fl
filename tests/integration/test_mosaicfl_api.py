@@ -22,53 +22,51 @@ _ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "integration" / "clinical-path"))
 
-from infrastructure.mosaicfl_api.inference_engine import (  # noqa: E402
-    exam_name_to_token,
-    records_to_tokens,
-)
+from infrastructure.mosaicfl_api.inference_engine import records_to_tokens  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # InferenceEngine — tokenização
 # ---------------------------------------------------------------------------
 
-class TestTokenizer:
-    def test_token_within_vocab_range(self):
-        from infrastructure.mosaicfl_api.inference_engine import VOCAB_SIZE
-        tok = exam_name_to_token("WBC")
-        assert 1 <= tok <= VOCAB_SIZE - 2
+class TestRecordsToTokens:
+    """Testa records_to_tokens com a assinatura atual (vocab, alias_cache, canonical_refs)."""
 
-    def test_token_is_deterministic(self):
-        assert exam_name_to_token("Hb") == exam_name_to_token("Hb")
+    _vocab          = {"GLUCOSOSE_LOW": 10, "GLUCOSOSE_NORMAL": 11, "GLUCOSOSE_HIGH": 12}
+    _alias_cache    = {}
+    _canonical_refs = {"GLUCOSOSE": (70.0, 100.0)}
 
-    def test_different_exams_distinct_tokens(self):
-        assert exam_name_to_token("WBC") != exam_name_to_token("Hb")
+    class _R:
+        exam_name = "GLUCOSOSE"
+        date      = date(2020, 1, 1)
+        value     = 50.0  # < 70 → LOW → GLUCOSOSE_LOW → id 10
 
-    def test_case_insensitive(self):
-        assert exam_name_to_token("wbc") == exam_name_to_token("WBC")
-
-    def test_records_to_tokens_length(self):
-        class FakeRecord:
-            exam_name = "WBC"
-            date = date(2020, 1, 1)
-        tokens = records_to_tokens([FakeRecord()] * 5, seq_len=8)
+    def test_length(self):
+        tokens = records_to_tokens([self._R()], self._vocab, self._alias_cache, self._canonical_refs, seq_len=8)
         assert len(tokens) == 8
 
-    def test_records_to_tokens_pads_with_zeros(self):
-        class FakeRecord:
-            exam_name = "WBC"
-            date = date(2020, 1, 1)
-        tokens = records_to_tokens([FakeRecord()], seq_len=10)
-        assert tokens[1:] == [0] * 9
+    def test_known_token_resolves(self):
+        tokens = records_to_tokens([self._R()], self._vocab, self._alias_cache, self._canonical_refs, seq_len=8)
+        assert tokens[0] == 10  # GLUCOSOSE_LOW
 
-    def test_records_to_tokens_truncates(self):
-        class FakeRecord:
-            exam_name = "WBC"
-            date = date(2020, 1, 1)
-        tokens = records_to_tokens([FakeRecord()] * 200, seq_len=16)
+    def test_unknown_exam_resolves_to_unk(self):
+        class R:
+            exam_name = "EXAME_INEXISTENTE_XYZ"
+            date      = date(2020, 1, 1)
+            value     = 5.0
+        tokens = records_to_tokens([R()], self._vocab, self._alias_cache, self._canonical_refs, seq_len=8)
+        assert tokens[0] == 1  # UNK
+
+    def test_pads_with_zeros(self):
+        tokens = records_to_tokens([self._R()], self._vocab, self._alias_cache, self._canonical_refs, seq_len=8)
+        assert tokens[1:] == [0] * 7
+
+    def test_truncates_to_seq_len(self):
+        tokens = records_to_tokens([self._R()] * 200, self._vocab, self._alias_cache, self._canonical_refs, seq_len=16)
         assert len(tokens) == 16
 
-    def test_empty_records_returns_all_zeros(self):
-        assert records_to_tokens([], seq_len=8) == [0] * 8
+    def test_empty_returns_all_zeros(self):
+        tokens = records_to_tokens([], self._vocab, self._alias_cache, self._canonical_refs, seq_len=8)
+        assert tokens == [0] * 8
 
 
 # ---------------------------------------------------------------------------
@@ -149,8 +147,19 @@ class TestPatientDB:
 def _make_test_client(tmp_path=None):
     import infrastructure.mosaicfl_api.service as svc
 
+    _labels = ["curta_1_3d", "media_4_7d", "longa_8_14d", "muito_longa_15_30d", "prolongada_30d_mais"]
+    _proba  = {
+        "probabilities":   {l: {"value": 0.2, "uncertainty": 0.01} for l in _labels},
+        "predicted_class": 0,
+        "predicted_label": _labels[0],
+        "mc_samples":      50,
+        "risk_score":      0.42,
+        "trained":         False,
+    }
+
     mock_engine = MagicMock()
-    mock_engine.predict.return_value = 0.42
+    mock_engine.predict_proba.return_value = _proba
+    mock_engine.resolve_for_ingest.return_value = ("EXAM_CANONICAL", "NORMAL", 1.0, 10.0)
     mock_engine.checkpoint_path = None
     svc._engine = mock_engine
 
@@ -200,12 +209,12 @@ class TestPredictEndpoint:
 
     def test_engine_called(self, client_state):
         client, engine, _ = client_state
-        engine.predict.reset_mock()
+        engine.predict_proba.reset_mock()
         client.post("/api/predict", json={
             "patient_id": "P002",
             "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}],
         }, headers={"X-API-Key": "secret123"},)
-        engine.predict.assert_called_once()
+        engine.predict_proba.assert_called_once()
 
 
 class TestIngestEndpoint:
@@ -263,9 +272,10 @@ class TestIngestEndpoint:
 class TestPatientsEndpoint:
     def test_returns_list(self, client_state):
         client, _, _ = client_state
-        r = client.get("/api/patients", headers={"X-API-Key": "secret123"},)
+        r = client.get("/api/patients", headers={"X-API-Key": "secret123"})
         assert r.status_code == 200
-        assert isinstance(r.json(), list)
+        data = r.json()
+        assert "patients" in data and isinstance(data["patients"], list)
 
     def test_ingested_patient_in_list(self, client_state, tmp_path):
         client, _, _ = client_state
@@ -275,7 +285,7 @@ class TestPatientsEndpoint:
             "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}],
             "output_dir": str(tmp_path),
         }, headers={"X-API-Key": "test-token"})
-        ids = [p["patient_id"] for p in client.get("/api/patients", headers={"X-API-Key": "test-token"}).json()]
+        ids = [p["patient_id"] for p in client.get("/api/patients", headers={"X-API-Key": "test-token"}).json()["patients"]]
         assert pid in ids
 
     def test_summary_has_required_fields(self, client_state, tmp_path):
@@ -286,7 +296,7 @@ class TestPatientsEndpoint:
             "exams": [{"exam_name": "Hb", "date": "2020-03-01", "value": 12.0, "phase": "IN"}],
             "output_dir": str(tmp_path),
         }, headers={"X-API-Key": "test-token"})
-        summaries = {p["patient_id"]: p for p in client.get("/api/patients", headers={"X-API-Key": "test-token"}).json()}
+        summaries = {p["patient_id"]: p for p in client.get("/api/patients", headers={"X-API-Key": "test-token"}).json()["patients"]}
         s = summaries[pid]
         assert all(k in s for k in ("latest_risk", "latest_date", "sex", "age"))
 

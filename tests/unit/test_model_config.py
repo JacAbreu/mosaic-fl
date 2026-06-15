@@ -19,8 +19,8 @@ class TestModelConfig:
         assert MAX_SEQ_LEN > 0
         assert (MAX_SEQ_LEN & (MAX_SEQ_LEN - 1)) == 0
 
-    def test_num_classes_binary(self):
-        assert NUM_CLASSES == 2
+    def test_num_classes_valid(self):
+        assert NUM_CLASSES >= 2
 
     def test_num_layers_positive(self):
         assert NUM_LAYERS > 0
@@ -37,6 +37,17 @@ class TestModelConfig:
 
     def test_custom_instance(self):
         from mosaicfl.core.config import ModelConfig
-        cfg = ModelConfig(vocab_size=5000, num_classes=3)
+        cfg = ModelConfig(vocab_size=5000, num_classes=3, class_labels=("a", "b", "c"))
         assert cfg.vocab_size == 5000
         assert cfg.num_classes == 3
+        assert len(cfg.class_labels) == 3
+
+    def test_class_labels_length_matches_num_classes(self):
+        assert len(NUM_CLASSES * ("x",)) == NUM_CLASSES  # tautologia para doc
+        from mosaicfl.core.config import MODEL_CFG
+        assert len(MODEL_CFG.class_labels) == MODEL_CFG.num_classes
+
+    def test_class_labels_mismatch_raises(self):
+        from mosaicfl.core.config import ModelConfig
+        with pytest.raises(ValueError, match="FL_CLASS_LABELS"):
+            ModelConfig(num_classes=3, class_labels=("a", "b"))

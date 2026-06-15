@@ -12,11 +12,21 @@ Usage:
     patient_id_col = mapping.get("patient_id")
     if patient_id_col:
         df[patient_id_col]
+
+DB-backed usage (preferred — reads from knowledge.term_dictionary):
+    from sqlalchemy import create_engine
+    engine = create_engine(FL_DB_URL)
+    with engine.connect() as conn:
+        resolver = ColumnResolver.from_db(conn)
+        mapping = resolver.resolve(df.columns)
 """
 import logging
 import re
 import unicodedata
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from sqlalchemy import Connection
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +55,44 @@ class ColumnResolver:
     def __init__(self, semantic_map: dict[str, list[str]], required: Optional[set[str]] = None):
         self._map = semantic_map
         self._required = required or set()
+
+    @classmethod
+    def from_db(
+        cls,
+        conn: "Connection",
+        term_type: str = "column_concept",
+        required: Optional[set[str]] = None,
+    ) -> "ColumnResolver":
+        """Builds a ColumnResolver from knowledge.term_dictionary.
+
+        Falls back to CLINICAL_SEMANTIC_MAP if the table is unreachable or empty,
+        so callers are never broken during a migration in progress.
+        """
+        from sqlalchemy import text
+
+        try:
+            rows = conn.execute(
+                text("""
+                    SELECT canonical, alias
+                    FROM knowledge.term_dictionary
+                    WHERE term_type = :tt AND active = TRUE
+                    ORDER BY canonical, alias
+                """),
+                {"tt": term_type},
+            ).fetchall()
+        except Exception:
+            logger.warning("term_dictionary unavailable — falling back to CLINICAL_SEMANTIC_MAP")
+            return cls(CLINICAL_SEMANTIC_MAP, required)
+
+        if not rows:
+            logger.warning("term_dictionary empty for term_type=%s — falling back to CLINICAL_SEMANTIC_MAP", term_type)
+            return cls(CLINICAL_SEMANTIC_MAP, required)
+
+        semantic_map: dict[str, list[str]] = {}
+        for canonical, alias in rows:
+            semantic_map.setdefault(canonical, []).append(alias)
+
+        return cls(semantic_map, required)
 
     def resolve(self, columns: list[str]) -> dict[str, str]:
         """
@@ -88,6 +136,50 @@ class ColumnResolver:
                     return col_orig
 
         return None
+
+
+# ---------------------------------------------------------------------------
+# Analyte name resolution from knowledge.term_dictionary (term_type='analyte')
+# ---------------------------------------------------------------------------
+
+def load_analyte_aliases(conn: "Connection") -> dict[str, str]:
+    """Loads all analyte aliases from knowledge.term_dictionary into memory.
+
+    Returns {normalized_alias: canonical} for all active analyte entries.
+    Call once per ingestion job and pass the result to resolve_analyte_canonical.
+    Returns an empty dict (with a warning) if the table is unreachable.
+    """
+    from sqlalchemy import text
+
+    try:
+        rows = conn.execute(
+            text("""
+                SELECT canonical, alias
+                FROM knowledge.term_dictionary
+                WHERE term_type = 'analyte' AND active = TRUE
+            """)
+        ).fetchall()
+    except Exception:
+        logger.warning("term_dictionary unavailable — analyte resolution will return None for all inputs")
+        return {}
+
+    return {normalize(alias): canonical for canonical, alias in rows}
+
+
+def resolve_analyte_canonical(
+    raw_name: str,
+    alias_cache: dict[str, str],
+) -> Optional[str]:
+    """Returns the canonical analyte name for a raw alias using a pre-loaded cache.
+
+    Build the cache once with load_analyte_aliases(conn) before processing a batch.
+    Uses exact match only — starts-with is intentionally omitted because shared
+    prefixes do not imply clinical equivalence (CREATININA ≠ CREATININA_URINA).
+    Aliases must be registered explicitly in knowledge.term_dictionary.
+
+    Returns None if not found.
+    """
+    return alias_cache.get(normalize(raw_name))
 
 
 # ---------------------------------------------------------------------------

@@ -16,9 +16,11 @@ Dois modos de execução:
 import argparse
 import logging
 import os
+import random
 import sys
 import threading
 import time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -49,20 +51,20 @@ _health = HealthServer(port=HEALTH_PORT)
 
 
 def setup_logging(client_id: str) -> None:
-    """Configura logging em arquivo e stdout (idempotente se já configurado)."""
+    """Configura logging em arquivo rotativo e stdout (idempotente se já configurado)."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     if logging.getLogger().handlers:
         return
+    file_handler = RotatingFileHandler(
+        LOG_DIR / f"client_{client_id}.log",
+        maxBytes=20 * 1024 * 1024,  # 20 MB por arquivo
+        backupCount=5,
+        encoding="utf-8",
+    )
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[
-            logging.FileHandler(
-                LOG_DIR / f"client_{client_id}.log",
-                encoding="utf-8",
-            ),
-            logging.StreamHandler(sys.stdout),
-        ],
+        handlers=[file_handler, logging.StreamHandler(sys.stdout)],
     )
 
 
@@ -92,6 +94,10 @@ def _split_loader(loader: DataLoader, val_ratio: float = 0.2) -> Tuple[DataLoade
     )
 
 
+# Cache de DataLoaders por tipo de fonte — evita recarregar o banco a cada round
+_loader_cache: dict[str, Tuple[DataLoader, DataLoader]] = {}
+
+
 def _client_fn(context: Context) -> fl.client.Client:
     """
     Factory chamada pelo SuperNode a cada round.
@@ -99,20 +105,31 @@ def _client_fn(context: Context) -> fl.client.Client:
     Lê node_config (--node-config do flower-supernode) para identificar
     o hospital e a fonte de dados. TLS é responsabilidade do SuperNode — não
     é configurado aqui.
+
+    DataLoaders são cacheados entre rounds: a query ao banco (que pode levar minutos)
+    ocorre apenas no primeiro round. Dados não mudam durante uma sessão de treinamento.
     """
-    client_id_str = str(context.node_config.get("client-id", str(context.node_id)))
+    client_id_str    = str(context.node_config.get("client-id", str(context.node_id)))
     data_source_type = str(
         context.node_config.get("data-source", os.getenv("FL_DATA_SOURCE", "simulated"))
     )
     client_id_int = parse_client_id(client_id_str)
 
-    logger.info(
-        "client_fn_invoked",
-        extra={"client_id": client_id_str, "data_source": data_source_type},
-    )
+    if data_source_type not in _loader_cache:
+        logger.info(
+            "data_loading_start",
+            extra={"client_id": client_id_str, "data_source": data_source_type},
+        )
+        source = DataSourceFactory.create(data_source_type)
+        _loader_cache[data_source_type] = _split_loader(source.load())
+        logger.info(
+            "data_loaded_and_cached",
+            extra={"client_id": client_id_str, "data_source": data_source_type},
+        )
+    else:
+        logger.debug("data_cache_hit source=%s", data_source_type)
 
-    source = DataSourceFactory.create(data_source_type)
-    train_loader, val_loader = _split_loader(source.load())
+    train_loader, val_loader = _loader_cache[data_source_type]
 
     return FedProxClient(
         client_id=client_id_int,
@@ -190,6 +207,10 @@ class ProductionClient:
         logger.info("Heartbeat:      a cada %ss", HEARTBEAT_INTERVAL)
         logger.info("=" * 60)
 
+        _MAX_BACKOFF  = 1800  # 30 min
+        _backoff_base = RECONNECT_DELAY
+        _attempt      = 0
+
         while not stop_event.is_set():
             try:
                 flower_client = self._build_flower_client()
@@ -203,18 +224,24 @@ class ProductionClient:
                     client=flower_client,
                     root_certificates=root_cert,
                 )
+                # Sessão concluída normalmente — reseta backoff
+                _attempt = 0
+                delay = _backoff_base + random.uniform(0, 5)
                 _health.set_status("reconnecting", client_id=self.client_id, server=self.server_address)
-                logger.info("Sessão concluída. Reconectando em %ss...", RECONNECT_DELAY)
-                time.sleep(RECONNECT_DELAY)
+                logger.info("Sessão concluída. Reconectando em %.0fs...", delay)
+                time.sleep(delay)
             except KeyboardInterrupt:
                 logger.info("Cliente interrompido pelo usuário.")
                 stop_event.set()
                 break
             except Exception as e:
+                _attempt += 1
+                delay = min(_backoff_base * (2 ** (_attempt - 1)), _MAX_BACKOFF)
+                delay += random.uniform(0, min(delay * 0.1, 30))
                 _health.set_status("error", client_id=self.client_id, error=str(e))
-                logger.error("Erro na conexão: %s", e)
-                logger.info("Reconectando em %ss...", RECONNECT_DELAY)
-                time.sleep(RECONNECT_DELAY)
+                logger.error("Erro na conexão (tentativa %d): %s", _attempt, e)
+                logger.info("Backoff exponencial: reconectando em %.0fs...", delay)
+                time.sleep(delay)
 
         heartbeat_thread.join(timeout=HEARTBEAT_INTERVAL + 5)
         write_heartbeat("offline")

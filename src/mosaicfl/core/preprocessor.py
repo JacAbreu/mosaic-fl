@@ -298,20 +298,38 @@ def _bin_duration(days: int) -> int:
     return -1   # < 1 dia — inválido, será descartado
 
 
-def _make_token(analyte: str, value: float, ref_low: float, ref_high: float) -> str:
-    """Gera token semântico combinando nome do analito com bucket de valor.
+class TokenMode:
+    """Modos de composição de token para o pipeline de treino.
 
-    Quando não há referência (ref_low == ref_high == 0), retorna só o nome.
-    Caso contrário, sufixo é _baixo / _normal / _alto conforme valores de referência.
+    FULL            — analito + classificação: LEUCOCITOS_HIGH  (padrão)
+    ANALYTE_ONLY    — apenas o analito:        LEUCOCITOS
+    CLASS_ONLY      — apenas a classificação:  HIGH
+
+    Permite experimentar diferentes hipóteses de treino sem recarregar dados:
+    - FULL:         o nível clínico importa junto com o analito
+    - ANALYTE_ONLY: basta saber que o exame foi solicitado (perfil de investigação)
+    - CLASS_ONLY:   padrão de anormalidade independente do analito
     """
-    name = analyte.lower().strip()
-    if ref_low == 0.0 and ref_high == 0.0:
-        return name
-    if value < ref_low:
-        return f"{name}_baixo"
-    if value > ref_high:
-        return f"{name}_alto"
-    return f"{name}_normal"
+    FULL         = "FULL"
+    ANALYTE_ONLY = "ANALYTE_ONLY"
+    CLASS_ONLY   = "CLASS_ONLY"
+
+
+def _make_token(analyte: str, classification: str, mode: str = TokenMode.FULL) -> str:
+    """Gera token a partir do analito canônico e sua classificação clínica.
+
+    analyte        — nome canônico em maiúsculas (ex: LEUCOCITOS)
+    classification — HIGH | NORMAL | LOW | NO_REF (gravado em exam_records)
+    mode           — TokenMode.FULL | ANALYTE_ONLY | CLASS_ONLY
+    """
+    if mode == TokenMode.ANALYTE_ONLY:
+        return analyte
+    if mode == TokenMode.CLASS_ONLY:
+        return classification
+    # FULL: sem referência disponível retorna só o analito
+    if classification == "NO_REF":
+        return analyte
+    return f"{analyte}_{classification}"
 
 
 _SQL_INTERNADOS = """
@@ -321,17 +339,16 @@ SELECT
     a.hospital_id,
     (co.outcome_at - a.attended_at)     AS duration_days,
     e.analyte,
-    e.value,
-    e.ref_low,
-    e.ref_high,
+    e.classification,
     GREATEST(0, e.date - a.attended_at) AS dia_relativo
 FROM  clinical.attendances         a
 JOIN  metrics.clinical_outcomes    co ON co.attendance_id = a.attendance_id
 JOIN  metrics.exam_records         e  ON e.attendance_id  = a.attendance_id
-WHERE a.attendance_type   = 'Internado'
+WHERE a.attendance_type      = 'Internado'
   AND co.outcome_class NOT IN (2, 3)
-  AND a.hospital_id IN ('HSL', 'BPSP')
-  AND e.analyte IS NOT NULL
+  AND a.hospital_id    IN ('HSL', 'BPSP')
+  AND e.analyte        IS NOT NULL
+  AND e.classification IS NOT NULL
   AND (co.outcome_at - a.attended_at) >= 1
 ORDER BY a.patient_id, a.attendance_id, dia_relativo, e.analyte
 """
@@ -498,23 +515,36 @@ class SequencePipeline:
         max_seq_len: int = MODEL_CFG.max_seq_len,
         max_vocab_size: int = MODEL_CFG.vocab_size,
         hospital_id: Optional[str] = None,
+        token_mode: str = TokenMode.FULL,
     ):
         """
         Args:
             hospital_id: Se especificado, filtra apenas esse hospital.
                          Modo produção: cada cliente FL passa seu próprio hospital_id.
                          Modo simulação: deixar None e usar build_per_hospital().
+            token_mode:  TokenMode.FULL (padrão) | ANALYTE_ONLY | CLASS_ONLY.
+                         Controla como analyte e classification são combinados no token.
         """
         self.connection_string = connection_string
         self.max_seq_len = max_seq_len
         self.max_vocab_size = max_vocab_size
         self.hospital_id = hospital_id
+        self.token_mode = token_mode
 
-    def build(self) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, int]]:
+    def build(
+        self,
+        vocab: Optional[Dict[str, int]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, int]]:
         """
         Constrói tensores de sequência, labels e vocabulário a partir da base PostgreSQL.
 
         Se ``hospital_id`` foi definido no construtor, filtra apenas esse hospital.
+
+        Args:
+            vocab: Vocabulário pré-compartilhado (standard_vocab.json).
+                   Se fornecido, _build_vocab() é ignorado — todos os clientes FL
+                   usam o mesmo espaço de tokens, tornando a agregação federada válida.
+                   Se None, constrói o vocab a partir dos dados locais (modo simulação).
 
         Returns:
             sequences: torch.LongTensor shape (n_pacientes, max_seq_len)
@@ -542,10 +572,13 @@ class SequencePipeline:
         n_atendimentos = df.groupby(["patient_id", "attendance_id"]).ngroups
         _log(f"[pipeline] {n_atendimentos:,} atendimentos únicos encontrados")
 
-        _log("[pipeline] construindo vocabulário...")
-        t_v = time.time()
-        vocab = self._build_vocab(df)
-        _log(f"[pipeline] vocabulário pronto em {time.time() - t_v:.1f}s — {len(vocab):,} tokens")
+        if vocab is not None:
+            _log(f"[pipeline] usando vocabulário pré-compartilhado — {len(vocab):,} tokens")
+        else:
+            _log("[pipeline] construindo vocabulário local (simulação)...")
+            t_v = time.time()
+            vocab = self._build_vocab(df)
+            _log(f"[pipeline] vocabulário pronto em {time.time() - t_v:.1f}s — {len(vocab):,} tokens")
 
         _log(f"[pipeline] construindo tensores para {n_atendimentos:,} sequências...")
         t_t = time.time()
@@ -638,7 +671,7 @@ class SequencePipeline:
 
     def _build_vocab(self, df: pd.DataFrame) -> Dict[str, int]:
         token_series = df.apply(
-            lambda r: _make_token(r["analyte"], r["value"], r["ref_low"], r["ref_high"]),
+            lambda r: _make_token(r["analyte"], r["classification"], self.token_mode),
             axis=1,
         )
         available = self.max_vocab_size - len(self._SPECIAL)
@@ -648,7 +681,7 @@ class SequencePipeline:
         for i, tok in enumerate(top_tokens):
             vocab[tok] = len(self._SPECIAL) + i
 
-        logger.info("vocab_built tokens=%d total=%d", len(top_tokens), len(vocab))
+        logger.info("vocab_built mode=%s tokens=%d total=%d", self.token_mode, len(top_tokens), len(vocab))
         return vocab
 
     def _build_tensors(
@@ -674,7 +707,7 @@ class SequencePipeline:
             group = group.sort_values(["dia_relativo", "analyte"])
             tokens = [
                 vocab.get(
-                    _make_token(r["analyte"], r["value"], r["ref_low"], r["ref_high"]),
+                    _make_token(r["analyte"], r["classification"], self.token_mode),
                     unk_id,
                 )
                 for _, r in group.iterrows()

@@ -14,6 +14,7 @@ Uso:
     source = DataSourceFactory.create("sgbd", connection_string="postgresql://...")
     loader = source.load()
 """
+import json
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -68,7 +69,7 @@ class SimulatedDataSource(DataSource):
         num_samples: int = DEFAULT_NUM_SAMPLES,
         seq_len: int = DEFAULT_SEQ_LEN,
         vocab_size: int = DEFAULT_VOCAB_SIZE,
-        num_classes: int = 2,
+        num_classes: int = 5,
         batch_size: int = DEFAULT_BATCH_SIZE,
         seed: int = 42,
     ):
@@ -109,111 +110,124 @@ class SimulatedDataSource(DataSource):
         return True, "Fonte simulada: sempre disponível"
 
 
+# ---------------------------------------------------------------------------
+# Vocab padrão — carregado uma vez por processo
+# ---------------------------------------------------------------------------
+
+def _load_standard_vocab() -> Optional[dict]:
+    """Tenta carregar o vocabulário pré-compartilhado do servidor.
+
+    Caminho resolvido na ordem:
+      1. $FL_VOCAB_PATH (configuração explícita)
+      2. checkpoints/standard_vocab.json (padrão local)
+
+    Retorna None se o arquivo não existir — SGBDDataSource emitirá um aviso
+    e construirá o vocab localmente (adequado apenas para simulação).
+    """
+    candidates = [
+        os.getenv("FL_VOCAB_PATH"),
+        "checkpoints/standard_vocab.json",
+    ]
+    for path in candidates:
+        if path and Path(path).exists():
+            try:
+                with open(path, encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as exc:
+                logger.warning("[SGBD] Erro ao carregar vocab de %s: %s", path, exc)
+    return None
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # 2. SGBD — PostgreSQL, MySQL, SQLite, SQL Server, Oracle
 # ════════════════════════════════════════════════════════════════════════════
 class SGBDDataSource(DataSource):
     """
-    Conecta ao SGBD do hospital via SQLAlchemy.
-    Suporta: PostgreSQL, MySQL, SQLite, SQL Server, Oracle.
+    Fonte de dados para o cliente FL em produção.
+
+    Usa SequencePipeline para construir sequências temporais de exames
+    diretamente do banco PostgreSQL local do hospital, produzindo tensores
+    Long compatíveis com SimplifiedBEHRT.
+
+    Variáveis de ambiente:
+      FL_DB_URL     — connection string PostgreSQL do hospital
+      FL_CLIENT_ID  — hospital_id (ex: HSL, BPSP) para filtrar registros locais
     """
 
     def __init__(
         self,
         connection_string: Optional[str] = None,
-        query: Optional[str] = None,
-        table: Optional[str] = None,
+        hospital_id: Optional[str] = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
+        seq_len: int = DEFAULT_SEQ_LEN,
+        vocab_size: int = DEFAULT_VOCAB_SIZE,
     ):
         self.connection_string = connection_string or os.getenv("FL_DB_URL", "")
-        self.query = query or os.getenv("FL_DB_QUERY", "")
-        self.table = table or os.getenv("FL_DB_TABLE", "")
+        self.hospital_id = hospital_id or os.getenv("FL_CLIENT_ID", "")
         self.batch_size = batch_size
-
-        self._df: Optional[pd.DataFrame] = None
+        self.seq_len = seq_len
+        self.vocab_size = vocab_size
+        self.vocab: dict = {}
+        self._n_sequences: int = 0
 
     def validate(self) -> Tuple[bool, str]:
         if not self.connection_string:
             return False, "Connection string não configurada. Defina FL_DB_URL."
+        if not self.hospital_id:
+            return False, "ID do hospital não configurado. Defina FL_CLIENT_ID."
         try:
             import sqlalchemy
             engine = sqlalchemy.create_engine(self.connection_string)
             with engine.connect() as conn:
                 conn.execute(sqlalchemy.text("SELECT 1"))
-            return True, f"Conectado ao SGBD: {engine.dialect.name}"
+            return True, f"Conectado: hospital={self.hospital_id} dialect={engine.dialect.name}"
         except ImportError:
             return False, "SQLAlchemy não instalado. Execute: pip install sqlalchemy[postgresql]"
         except Exception as e:
             return False, f"Erro de conexão: {e}"
 
-    def _fetch_data(self) -> pd.DataFrame:
-        """Busca dados do SGBD via SQLAlchemy."""
-        import sqlalchemy
-
-        engine = sqlalchemy.create_engine(self.connection_string)
-
-        if self.query:
-            sql = self.query
-        elif self.table:
-            sql = f"SELECT * FROM {self.table}"
-        else:
-            raise ValueError("Defina 'query' ou 'table' para buscar dados do SGBD.")
-
-        logger.info(f"[SGBD] Executando query: {sql[:80]}...")
-        df = pd.read_sql(sql, engine)
-        logger.info(f"[SGBD] {len(df)} registros carregados")
-        return df
-
-    def _preprocess(self, df: pd.DataFrame) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Converte DataFrame em tensores PyTorch.
-
-        NOTA: Em produção, substituir por pipeline real de preprocessamento
-        usando EHRPreprocessor do pacote core.
-        """
-        # Placeholder: assume que o DataFrame já tem colunas numéricas
-        # Em produção: importar from mosaicfl.preprocess import EHRPreprocessor
-        logger.info(f"[SGBD] Preprocessando {len(df)} registros...")
-
-        # Detecta colunas numéricas como features
-        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-        if not numeric_cols:
-            raise ValueError("Nenhuma coluna numérica encontrada no DataFrame.")
-
-        # Target: primeira coluna binária ou 'desfecho'/'target'
-        target_col = None
-        for col in ["desfecho", "target", "label", "outcome"]:
-            if col in df.columns:
-                target_col = col
-                break
-
-        if target_col is None and len(numeric_cols) > 1:
-            target_col = numeric_cols[-1]
-            logger.warning(f"[SGBD] Target inferido: {target_col}")
-
-        feature_cols = [c for c in numeric_cols if c != target_col]
-        X = torch.tensor(df[feature_cols].fillna(0).values, dtype=torch.float32)
-        y = torch.tensor(df[target_col].fillna(0).values, dtype=torch.long) if target_col else torch.zeros(len(df), dtype=torch.long)
-
-        return X, y
-
     def load(self) -> DataLoader:
-        df = self._fetch_data()
-        self._df = df
-        X, y = self._preprocess(df)
+        from mosaicfl.core.preprocessor import SequencePipeline
 
-        dataset = TensorDataset(X, y)
+        standard_vocab = _load_standard_vocab()
+        if standard_vocab:
+            logger.info(
+                "[SGBD] vocab padrão carregado: %d tokens — aggregação federada válida",
+                len(standard_vocab),
+            )
+        else:
+            logger.warning(
+                "[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. "
+                "Execute build_standard_vocab.py antes do treinamento federado em produção."
+            )
+
+        logger.info("[SGBD] Construindo sequências via SequencePipeline hospital=%s", self.hospital_id)
+        pipeline = SequencePipeline(
+            connection_string=self.connection_string,
+            hospital_id=self.hospital_id or None,
+            max_seq_len=self.seq_len,
+            max_vocab_size=len(standard_vocab) if standard_vocab else self.vocab_size,
+        )
+        sequences, labels, vocab = pipeline.build(vocab=standard_vocab)
+        self.vocab = vocab
+        self._n_sequences = len(sequences)
+
+        dataset = TensorDataset(sequences, labels)
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
-
-        logger.info(f"[SGBD] DataLoader pronto: {len(loader)} batches")
+        logger.info(
+            "[SGBD] DataLoader pronto: %d sequências, %d batches, vocab_size=%d",
+            self._n_sequences, len(loader), len(self.vocab),
+        )
         return loader
 
     def get_metadata(self) -> dict:
         return {
-            "type": "sgbd",
-            "connection": self.connection_string.split("@")[-1] if self.connection_string else "N/A",
-            "query": self.query or self.table,
-            "records": len(self._df) if self._df is not None else 0,
-            "batch_size": self.batch_size,
+            "type":        "sgbd",
+            "hospital_id": self.hospital_id,
+            "connection":  self.connection_string.split("@")[-1] if "@" in self.connection_string else "N/A",
+            "sequences":   self._n_sequences,
+            "vocab_size":  len(self.vocab),
+            "batch_size":  self.batch_size,
         }
 
 

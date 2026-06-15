@@ -22,8 +22,10 @@ from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+from collections import Counter
+
 from mosaicfl.core.model import SimplifiedBEHRT
-from .config import FED_CFG, RUNTIME_CFG
+from .config import FED_CFG, MODEL_CFG, RUNTIME_CFG
 
 
 class FedProxClient(fl.client.NumPyClient):
@@ -32,7 +34,9 @@ class FedProxClient(fl.client.NumPyClient):
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
-        self.criterion = torch.nn.CrossEntropyLoss()
+        class_weights = self._compute_class_weights(train_loader).to(RUNTIME_CFG.device)
+        self.criterion      = torch.nn.CrossEntropyLoss(weight=class_weights)
+        self._eval_criterion = torch.nn.CrossEntropyLoss()  # sem peso para comparação entre rounds
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=FED_CFG.lr)
         self.global_params: Optional[List[torch.Tensor]] = None
 
@@ -61,6 +65,23 @@ class FedProxClient(fl.client.NumPyClient):
         `.copy()` garante array independente — evita aliasing com a memória dos tensores do modelo.
         """
         return [v.cpu().detach().numpy().copy() for v in self.model.state_dict().values()]
+
+    def _compute_class_weights(self, loader: DataLoader) -> torch.Tensor:
+        """Pesos inversamente proporcionais à frequência de cada classe no loader local."""
+        counts: Counter = Counter()
+        for _, batch_y in loader:
+            counts.update(batch_y.tolist())
+        n = MODEL_CFG.num_classes
+        total = sum(counts.values()) or 1
+        weights = torch.tensor(
+            [total / (n * max(counts.get(i, 1), 1)) for i in range(n)],
+            dtype=torch.float,
+        )
+        logger.info(
+            "class_weights client_id=%s weights=%s counts=%s",
+            self.client_id, [round(w, 3) for w in weights.tolist()], dict(counts),
+        )
+        return weights
 
     def _proximal_loss(self, loss: torch.Tensor, proximal_mu: float) -> torch.Tensor:
         """Adiciona termo proximal do FedProx com mu recebido do servidor."""
@@ -110,7 +131,7 @@ class FedProxClient(fl.client.NumPyClient):
             for batch_x, batch_y in self.val_loader:
                 batch_x, batch_y = batch_x.to(RUNTIME_CFG.device), batch_y.to(RUNTIME_CFG.device)
                 outputs = self.model(batch_x)
-                loss = self.criterion(outputs, batch_y)
+                loss = self._eval_criterion(outputs, batch_y)
                 loss_sum += loss.item() * batch_y.size(0)
                 _, predicted = torch.max(outputs.data, 1)
                 total += batch_y.size(0)

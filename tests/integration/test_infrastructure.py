@@ -598,6 +598,7 @@ class TestProductionFedProxStrategy:
                 "infrastructure.mosaicfl_server.state_store", fromlist=["TrainingState"]
             ).TrainingState()
             strategy._last_round_metrics = {}
+            strategy.vocab = {}
             strategy.CHECKPOINT_DIR = tmp_path / "checkpoints"
             strategy.LOG_DIR = tmp_path / "logs"
             strategy.CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
@@ -844,6 +845,7 @@ class TestConfigLoaderWithStrategy:
                 threshold=CONVERGENCE_THRESHOLD,
                 patience=CONVERGENCE_PATIENCE,
             )
+            strategy.vocab = {}
             strategy.round_counter = 0
             strategy._state_store = None
             strategy._round_timeout = 0

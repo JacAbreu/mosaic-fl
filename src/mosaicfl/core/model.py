@@ -100,11 +100,9 @@ class SimplifiedBEHRT(nn.Module):
     def __init__(self, use_cls_token: bool = True):
         super().__init__()
         self.use_cls_token = use_cls_token
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, MODEL_CFG.embed_dim))
+        self.cls_token = nn.Parameter(torch.empty(1, 1, MODEL_CFG.embed_dim))
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
         self.embedding = nn.Embedding(MODEL_CFG.vocab_size, MODEL_CFG.embed_dim, padding_idx=0)
-        #vocab_size = MODEL_CFG.vocab_size + 1 if use_cls_token else MODEL_CFG.vocab_size
-        #self.embedding  = nn.Embedding(vocab_size, MODEL_CFG.embed_dim, padding_idx=0)
-        #self.pos_encoder = PositionalEncoding(MODEL_CFG.embed_dim, MODEL_CFG.max_seq_len)
         self.pos_encoder = PositionalEncoding(MODEL_CFG.embed_dim, MODEL_CFG.max_seq_len + 1)
         self.dropout    = nn.Dropout(MODEL_CFG.dropout)
 
@@ -132,9 +130,6 @@ class SimplifiedBEHRT(nn.Module):
             nn.Linear(64, MODEL_CFG.num_classes),
         )
 
-        # Registra índice do token <CLS> no final do vocab
-        if use_cls_token:
-            self.register_buffer('cls_token_id', torch.tensor(MODEL_CFG.vocab_size - 1))
 
     def _masked_mean_pool(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
@@ -172,23 +167,22 @@ class SimplifiedBEHRT(nn.Module):
         """
         batch_size = x.size(0)
 
-        # Adiciona token <CLS> no início de cada sequência, se habilitado
-        if self.use_cls_token:
-            cls_tokens = self.cls_token_id.expand(batch_size, 1)  # (batch, 1)
-            x = torch.cat([cls_tokens, x], dim=1)                # (batch, seq_len+1)
-            if mask is not None:
-                cls_mask = torch.zeros(batch_size, 1, dtype=torch.bool, device=mask.device)
-                mask = torch.cat([cls_mask, mask], dim=1)        # (batch, seq_len+1)
+        # Máscara sobre a sequência original (antes do CLS)
+        if mask is None:
+            mask = (x == 0)  # True em posições de padding
 
-        # x: (batch, seq_len)
-        emb = self.embedding(x)
-        # Scaling opcional (configurável via SCALE_EMBEDDINGS se desejado)
+        emb = self.embedding(x)  # (batch, seq_len, embed_dim)
+
+        # Prefixa o vetor CLS learnable (parâmetro real, recebe gradiente)
+        if self.use_cls_token:
+            cls = self.cls_token.expand(batch_size, -1, -1)         # (batch, 1, embed_dim)
+            emb = torch.cat([cls, emb], dim=1)                       # (batch, seq_len+1, embed_dim)
+            cls_mask = torch.zeros(batch_size, 1, dtype=torch.bool, device=mask.device)
+            mask = torch.cat([cls_mask, mask], dim=1)                # (batch, seq_len+1)
+
         emb = emb * math.sqrt(MODEL_CFG.embed_dim)
         emb = self.pos_encoder(emb)
         emb = self.dropout(emb)
-
-        if mask is None:
-            mask = (x == 0)  # True em posições de padding
 
         all_attn_weights = []
         out = emb

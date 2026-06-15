@@ -79,24 +79,28 @@ def _build_tables(is_pg: bool):
     )
     exam_records = sa.Table(
         "exam_records", meta,
-        sa.Column("id",            sa.BigInteger, primary_key=True, autoincrement=True),
-        sa.Column("patient_id",    sa.Text,  nullable=False),
-        sa.Column("analyte",       sa.Text,  nullable=False),
-        sa.Column("date",          sa.Date,  nullable=False),
-        sa.Column("value",         sa.Float, nullable=False),
-        sa.Column("phase",         sa.Text,  nullable=False),
-        sa.Column("ref_low",       sa.Float, server_default=sa.text("0.0")),
-        sa.Column("ref_high",      sa.Float, server_default=sa.text("0.0")),
-        sa.Column("origin",        sa.Text),
-        sa.Column("exam_group",    sa.Text),
-        sa.Column("value_text",    sa.Text),
-        sa.Column("unit",          sa.Text),
-        sa.Column("attendance_id", sa.Text),
+        sa.Column("id",                 sa.BigInteger().with_variant(sa.Integer, "sqlite"), primary_key=True, autoincrement=True),
+        sa.Column("patient_id",         sa.Text,  nullable=False),
+        sa.Column("analyte",            sa.Text,  nullable=False),
+        sa.Column("date",               sa.Date,  nullable=False),
+        sa.Column("value",              sa.Float, nullable=False),
+        sa.Column("phase",              sa.Text,  nullable=False),
+        sa.Column("ref_low",            sa.Float, server_default=sa.text("0.0")),
+        sa.Column("ref_high",           sa.Float, server_default=sa.text("0.0")),
+        sa.Column("origin",             sa.Text),
+        sa.Column("exam_group",         sa.Text),
+        sa.Column("value_text",         sa.Text),
+        sa.Column("unit",               sa.Text),
+        sa.Column("attendance_id",      sa.Text),
+        # migration 009 — canonical reference snapshot + clinical classification
+        sa.Column("canonical_ref_low",  sa.Float),
+        sa.Column("canonical_ref_high", sa.Float),
+        sa.Column("classification",     sa.Text),
         schema=metrics,
     )
     clinical_outcomes = sa.Table(
         "clinical_outcomes", meta,
-        sa.Column("id",            sa.BigInteger, primary_key=True, autoincrement=True),
+        sa.Column("id",            sa.BigInteger().with_variant(sa.Integer, "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("patient_id",    sa.Text,         nullable=False),
         sa.Column("attendance_id", sa.Text),
         sa.Column("outcome_at",    sa.Date,         nullable=False),
@@ -242,7 +246,18 @@ class PatientDB:
         with self._engine.connect() as conn:
             return conn.execute(stmt).first() is not None
 
-    def list_patients(self) -> list[dict]:
+    def get_patient(self, patient_id: str) -> Optional[dict]:
+        """Retorna dados de um paciente ou None se não existir."""
+        stmt = select(self._patients).where(self._patients.c.patient_id == patient_id)
+        with self._engine.connect() as conn:
+            row = conn.execute(stmt).mappings().first()
+        return dict(row) if row else None
+
+    def count_patients(self) -> int:
+        with self._engine.connect() as conn:
+            return conn.execute(select(func.count()).select_from(self._patients)).scalar_one()
+
+    def list_patients(self, limit: int = 100, offset: int = 0) -> list[dict]:
         p_ref  = "clinical.patients"    if self._is_pg else "patients"
         rh_ref = "metrics.risk_history" if self._is_pg else "risk_history"
         with self._engine.connect() as conn:
@@ -259,7 +274,8 @@ class PatientDB:
                         LIMIT 1
                     )
                 ORDER BY p.patient_id
-            """)).mappings().all()
+                LIMIT :lim OFFSET :off
+            """), {"lim": limit, "off": offset}).mappings().all()
         return [dict(row) for row in rows]
 
     # ── attendances ───────────────────────────────────────────────────────
@@ -313,23 +329,57 @@ class PatientDB:
     def add_exams(self, patient_id: str, exams: list[dict]) -> None:
         rows = [
             {
-                "patient_id":    patient_id,
-                "analyte":       e["analyte"],
-                "date":          e["date"] if isinstance(e["date"], _date) else _date.fromisoformat(e["date"]),
-                "value":         e["value"],
-                "phase":         e["phase"],
-                "ref_low":       e.get("ref_low",       0.0),
-                "ref_high":      e.get("ref_high",      0.0),
-                "origin":        e.get("origin"),
-                "exam_group":    e.get("exam_group"),
-                "value_text":    e.get("value_text"),
-                "unit":          e.get("unit"),
-                "attendance_id": e.get("attendance_id"),
+                "patient_id":         patient_id,
+                "analyte":            e["analyte"],
+                "date":               e["date"] if isinstance(e["date"], _date) else _date.fromisoformat(e["date"]),
+                "value":              e["value"],
+                "phase":              e["phase"],
+                "ref_low":            e.get("ref_low",            0.0),
+                "ref_high":           e.get("ref_high",           0.0),
+                "origin":             e.get("origin"),
+                "exam_group":         e.get("exam_group"),
+                "value_text":         e.get("value_text"),
+                "unit":               e.get("unit"),
+                "attendance_id":      e.get("attendance_id"),
+                "canonical_ref_low":  e.get("canonical_ref_low"),
+                "canonical_ref_high": e.get("canonical_ref_high"),
+                "classification":     e.get("classification"),
             }
             for e in exams
         ]
         with self._engine.begin() as conn:
             conn.execute(insert(self._exams), rows)
+
+    def add_exams_bulk(self, rows: list[dict]) -> None:
+        """Insere múltiplas linhas de exames em uma única transação.
+
+        Cada elemento de `rows` deve conter 'patient_id' junto com os demais campos —
+        use quando o batch já tem múltiplos pacientes misturados (carga em streaming).
+        """
+        if not rows:
+            return
+        db_rows = [
+            {
+                "patient_id":         r["patient_id"],
+                "analyte":            r["analyte"],
+                "date":               r["date"] if isinstance(r["date"], _date) else _date.fromisoformat(r["date"]),
+                "value":              r["value"],
+                "phase":              r["phase"],
+                "ref_low":            r.get("ref_low",            0.0),
+                "ref_high":           r.get("ref_high",           0.0),
+                "origin":             r.get("origin"),
+                "exam_group":         r.get("exam_group"),
+                "value_text":         r.get("value_text"),
+                "unit":               r.get("unit"),
+                "attendance_id":      r.get("attendance_id"),
+                "canonical_ref_low":  r.get("canonical_ref_low"),
+                "canonical_ref_high": r.get("canonical_ref_high"),
+                "classification":     r.get("classification"),
+            }
+            for r in rows
+        ]
+        with self._engine.begin() as conn:
+            conn.execute(insert(self._exams), db_rows)
 
     def get_exams(self, patient_id: str) -> list[dict]:
         stmt = (
@@ -345,6 +395,9 @@ class PatientDB:
                 self._exams.c.ref_low,
                 self._exams.c.ref_high,
                 self._exams.c.attendance_id,
+                self._exams.c.canonical_ref_low,
+                self._exams.c.canonical_ref_high,
+                self._exams.c.classification,
             )
             .where(self._exams.c.patient_id == patient_id)
             .order_by(self._exams.c.date, self._exams.c.id)

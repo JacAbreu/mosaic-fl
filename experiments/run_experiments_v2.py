@@ -329,7 +329,7 @@
 #         sys.exit(1)
 
 #     # 3. Aprendizado Federado
-#     history, global_model = run_federated_learning(client_loaders, test_loader, total)
+#     history, global_model = run_federated_learning(client_loaders, test_loader, total, vocab=vocab_map)
 
 #     # 4. Pipeline RAG (explicabilidade)
 #     # Recria df_proc para o RAG (não armazenamos no escopo anterior, recarregamos)
@@ -631,6 +631,7 @@ def run_federated_learning_manual(
     client_loaders: Dict,
     test_loader: DataLoader,
     total_train_samples: int,
+    vocab: Dict[str, int] = None,
 ) -> Tuple[Dict, SimplifiedBEHRT]:
     """Simula FL manualmente, sem Ray — sequencial, leve, didático."""
     logger.info("=" * 60)
@@ -739,6 +740,12 @@ def run_federated_learning_manual(
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
 
+    ckpt_dir = Path("checkpoints")
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_path = ckpt_dir / f"final_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
+    torch.save({"model_state": global_model.state_dict(), "vocab": vocab or {}}, ckpt_path)
+    logger.info(f"Checkpoint salvo: {ckpt_path} (vocab_size={len(vocab or {})})")
+
     return history, global_model
 
 
@@ -750,6 +757,7 @@ def run_federated_learning_ray(
     client_loaders: Dict,
     test_loader: DataLoader,
     total_train_samples: int,
+    vocab: Dict[str, int] = None,
 ) -> Tuple[Dict, SimplifiedBEHRT]:
     """Simula FL com Ray via flwr.simulation.start_simulation() — paralelo, rápido."""
     logger.info("=" * 60)
@@ -806,13 +814,27 @@ def run_federated_learning_ray(
     overall_end = time.time()
     logger.info(f"Simulação concluída em {overall_end - overall_start:.2f}s")
 
+    # Recupera pesos do último round salvo pela strategy; cria modelo novo só como fallback
     global_model = SimplifiedBEHRT(use_cls_token=True).to(DEVICE)
-    logger.info("Modelo global reconstruído.")
+    last_ckpt = history.get("last_checkpoint")
+    if last_ckpt and Path(last_ckpt).exists():
+        raw = torch.load(last_ckpt, map_location="cpu", weights_only=True)
+        state_dict = raw.get("model_state", raw) if isinstance(raw, dict) else raw
+        global_model.load_state_dict(state_dict, strict=False)
+        logger.info(f"Modelo global restaurado de: {last_ckpt}")
+    else:
+        logger.warning("Checkpoint da simulação não encontrado — modelo com pesos aleatórios")
 
     hist_path = f"experiments/data/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(hist_path, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
+
+    ckpt_dir = Path("checkpoints")
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_path = ckpt_dir / f"final_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
+    torch.save({"model_state": global_model.state_dict(), "vocab": vocab or {}}, ckpt_path)
+    logger.info(f"Checkpoint salvo: {ckpt_path} (vocab_size={len(vocab or {})})")
 
     return history, global_model
 
@@ -827,6 +849,7 @@ def run_federated_learning(
     client_loaders: Dict,
     test_loader: DataLoader,
     total_train_samples: int,
+    vocab: Dict[str, int] = None,
 ) -> Tuple[Dict, SimplifiedBEHRT]:
     """Executa o treinamento federado via Flower simulation."""
 
@@ -880,10 +903,10 @@ def run_federated_learning(
 
     if use_ray:
         logger.info("Modo Ray ativado (USE_RAY=True).")
-        return run_federated_learning_ray(client_loaders, test_loader, total_train_samples)
+        return run_federated_learning_ray(client_loaders, test_loader, total_train_samples, vocab=vocab)
     else:
         logger.info("Modo manual ativado (USE_RAY=False). Ray NÃO é necessário.")
-        return run_federated_learning_manual(client_loaders, test_loader, total_train_samples)
+        return run_federated_learning_manual(client_loaders, test_loader, total_train_samples, vocab=vocab)
 
 
 
@@ -999,7 +1022,7 @@ def main():
 
     # ── 3. Aprendizado Federado ───────────────────────────────────────────────
     logger.info("[3/4] Aprendizado Federado...")
-    history, global_model = run_federated_learning(client_loaders, test_loader, total)
+    history, global_model = run_federated_learning(client_loaders, test_loader, total, vocab=vocab_map)
 
     # ── 4. RAG ────────────────────────────────────────────────────────────────
     logger.info("[4/4] Pipeline RAG...")
