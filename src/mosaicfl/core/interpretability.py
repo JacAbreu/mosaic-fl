@@ -15,6 +15,8 @@ import torch
 import torch.nn as nn
 from typing import Dict, List
 
+from .config import MODEL_CFG
+
 
 class BEHRTPatternExtractor:
     """
@@ -71,9 +73,15 @@ class BEHRTPatternExtractor:
                     token_importance = mean_attn[i].sum(dim=0)
                     top_indices = torch.topk(token_importance, k=5).indices
                     tokens = [self.vocab_inverse.get(idx.item(), "<UNK>") for idx in top_indices]
+                    labels = MODEL_CFG.class_labels
+                    label_name = (
+                        labels[desfecho_alvo]
+                        if desfecho_alvo < len(labels)
+                        else f"classe_{desfecho_alvo}"
+                    )
                     pattern_scores.append({
                         "texto": f"Paciente com {', '.join(tokens)}",
-                        "desfecho": "pneumonia" if desfecho_alvo == 1 else "alta",
+                        "desfecho": label_name,
                         "score_atencao": token_importance.sum().item(),
                         "tokens": tokens,
                     })

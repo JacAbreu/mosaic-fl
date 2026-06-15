@@ -1,6 +1,7 @@
 """
 Sistema RAG: construção de base de conhecimento + recuperação + geração.
 Usa pgvector (knowledge.clinical_profiles) + all-MiniLM-L6-v2 + DistilGPT-2.
+Quando FL_DB_URL não está configurado, usa _InMemoryStore (numpy) para experimentos.
 """
 import os
 
@@ -20,6 +21,50 @@ _DEFAULT_DB_URL = os.getenv("FL_DB_URL", "")
 # ---------------------------------------------------------------------------
 # Store — interface ChromaDB-compatível sobre knowledge.clinical_profiles
 # ---------------------------------------------------------------------------
+
+class _InMemoryStore:
+    """
+    Store em memória para experimentos sem PostgreSQL/pgvector.
+    Usa similaridade de cosseno via numpy — sem dependências externas.
+    Interface idêntica à de _PostgreSQLStore e ChromaDB.
+    """
+
+    def __init__(self) -> None:
+        self._embeddings: list = []
+        self._documents: List[str] = []
+        self._metadatas: List[Dict] = []
+
+    def add(
+        self,
+        embeddings: List,
+        documents: List[str],
+        metadatas: List[Dict],
+        ids: List[str],
+    ) -> None:
+        for emb, doc, meta in zip(embeddings, documents, metadatas):
+            self._embeddings.append(np.array(emb, dtype=np.float32))
+            self._documents.append(doc)
+            self._metadatas.append(meta)
+
+    def query(self, query_embeddings: List, n_results: int) -> Dict:
+        if not self._embeddings:
+            return {"documents": [[]], "metadatas": [[]], "distances": [[]]}
+
+        q = np.array(query_embeddings[0], dtype=np.float32)
+        stored = np.stack(self._embeddings)                      # (N, dim)
+        q_norm = q / (np.linalg.norm(q) + 1e-8)
+        norms = np.linalg.norm(stored, axis=1, keepdims=True) + 1e-8
+        sims = stored / norms @ q_norm                           # (N,)
+
+        n = min(n_results, len(self._documents))
+        top_idx = np.argsort(-sims)[:n]
+
+        return {
+            "documents": [[self._documents[i] for i in top_idx]],
+            "metadatas": [[self._metadatas[i] for i in top_idx]],
+            "distances": [[float(1.0 - sims[i]) for i in top_idx]],
+        }
+
 
 class _PostgreSQLStore:
     """
@@ -91,8 +136,11 @@ class _PostgreSQLStore:
 
 class ClinicalRAG:
     def __init__(self, db_url: str = _DEFAULT_DB_URL) -> None:
-        engine = sa.create_engine(db_url, pool_pre_ping=True)
-        self.collection = _PostgreSQLStore(engine)
+        if db_url:
+            engine = sa.create_engine(db_url, pool_pre_ping=True)
+            self.collection = _PostgreSQLStore(engine)
+        else:
+            self.collection = _InMemoryStore()
 
         self.embedder = SentenceTransformer(RUNTIME_CFG.embedding_model)
 
@@ -183,12 +231,17 @@ class ClinicalRAG:
         return justification, retrieved_cases, hallucination
 
     def explain(self, patient_data: Dict, model_prediction: Dict) -> Dict:
-        query = (
-            f"febre {patient_data.get('febre', '')}, "
-            f"tosse {patient_data.get('tosse', '')}, "
-            f"saturação {patient_data.get('saturacao', '')}, "
-            f"idade {patient_data.get('faixa_etaria', '')}"
-        )
+        # Modo banco: patient_data["tokens"] contém os tokens clínicos reais do paciente.
+        # Modo CSV: usa campos demográficos/sintomáticos clássicos.
+        if "tokens" in patient_data:
+            query = patient_data["tokens"]
+        else:
+            query = (
+                f"febre {patient_data.get('febre', '')}, "
+                f"tosse {patient_data.get('tosse', '')}, "
+                f"saturação {patient_data.get('saturacao', '')}, "
+                f"idade {patient_data.get('faixa_etaria', '')}"
+            )
         cases = self.retrieve(query)
         justification, sources, hallucinated = self.generate_justification(
             model_prediction["diagnostico"],

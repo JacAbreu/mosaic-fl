@@ -918,7 +918,6 @@ def run_rag_pipeline(
     global_model: SimplifiedBEHRT,
     vocab_map: Dict,
     test_loader: DataLoader,
-    df_raw: pd.DataFrame,
 ) -> Dict:
     """Extrai padrões do BEHRT e gera justificativa via RAG."""
 
@@ -926,23 +925,45 @@ def run_rag_pipeline(
     logger.info("PIPELINE RAG")
     logger.info("=" * 60)
 
+    # Deriva desfechos dos labels que efetivamente existem no test_loader.
+    # Evita passar classes sem amostras para o extrator.
+    all_labels = []
+    for _, batch_y in test_loader:
+        all_labels.extend(batch_y.tolist())
+    desfechos = sorted(set(all_labels))
+    logger.info(f"Desfechos presentes no test_loader: {desfechos}")
+
     extractor = BEHRTPatternExtractor(global_model, vocab_map)
-    desfechos = sorted(df_raw["desfecho"].dropna().unique().astype(int).tolist())
     patterns = extractor.generate_all_profiles(test_loader, desfechos=desfechos)
     logger.info(f"Padrões extraídos: {len(patterns)} perfis")
 
+    # ClinicalRAG usa _InMemoryStore quando FL_DB_URL não está configurado.
     rag = ClinicalRAG()
     rag.build_knowledge_base(patterns)
 
-    sample = df_raw.sample(1, random_state=RANDOM_SEED).iloc[0]
+    # Constrói patient_data a partir de uma amostra real do test_loader.
+    vocab_inverse = {v: k for k, v in vocab_map.items()}
+    sample_label = desfechos[0]
+    sample_tokens: List[str] = []
+    for batch_x, batch_y in test_loader:
+        raw_tokens = [
+            vocab_inverse.get(t, "")
+            for t in batch_x[0].tolist()
+            if t > 2  # ignora PAD=0, UNK=1, CLS=2
+        ]
+        sample_tokens = [t for t in raw_tokens if t][:10]
+        sample_label = int(batch_y[0].item())
+        break
+
+    labels = MODEL_CFG.class_labels
+    label_name = (
+        labels[sample_label] if sample_label < len(labels) else f"classe_{sample_label}"
+    )
     patient_data = {
-        "febre": random.choice(["ausente", "leve", "moderada", "alta"]),
-        "tosse": random.choice(["ausente", "seca", "produtiva"]),
-        "saturacao": random.choice(["98%", "95%", "92%", "88%"]),
-        "faixa_etaria": "idoso" if sample.get("idade", 30) >= 60 else "adulto",
+        "tokens": ", ".join(sample_tokens) if sample_tokens else "dados laboratoriais",
     }
     model_prediction = {
-        "diagnostico": "pneumonia" if int(sample.get("desfecho", 0)) == 1 else "alta",
+        "diagnostico": label_name,
         "probabilidade": random.uniform(0.55, 0.95),
     }
 
@@ -1026,22 +1047,18 @@ def main():
 
     # ── 4. RAG ────────────────────────────────────────────────────────────────
     logger.info("[4/4] Pipeline RAG...")
-    if df_raw is not None:
-        try:
-            rag_result = run_rag_pipeline(global_model, vocab_map, test_loader, df_raw)
-        except Exception as e:
-            logger.error(f"Erro no RAG: {e}")
-            rag_result = {"erro": str(e)}
-    else:
-        logger.info("      RAG ignorado no modo banco — df_raw não disponível para exemplos.")
-        rag_result = {"skipped": True, "reason": "modo banco de dados"}
+    try:
+        rag_result = run_rag_pipeline(global_model, vocab_map, test_loader)
+    except Exception as e:
+        logger.error(f"Erro no RAG: {e}")
+        rag_result = {"erro": str(e)}
 
     # ── Resumo ────────────────────────────────────────────────────────────────
     logger.info("=" * 60)
     logger.info("CONCLUÍDO")
     logger.info(f"  Modo dados:     {'banco (SequencePipeline)' if loaded_from_db else 'CSV/sintético'}")
     logger.info(f"  Clientes FL:    {len(client_loaders)}")
-    logger.info(f"  RAG confiável:  {rag_result.get('confiavel', rag_result.get('skipped', False))}")
+    logger.info(f"  RAG confiável:  {rag_result.get('confiavel', False)}")
     logger.info(f"  Logs em:        {log_file}")
     logger.info("=" * 60)
 
