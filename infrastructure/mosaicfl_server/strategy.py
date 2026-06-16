@@ -19,6 +19,7 @@ from mosaicfl.core.config import FED_CFG
 from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_loss
 from .config_loader import ConfigLoader, get_config_loader
 from .state_store import TrainingState, TrainingStateStore
+from infrastructure.shared.checkpoint_store import CheckpointStore
 
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
 LOG_DIR = Path(os.getenv("FL_LOG_DIR", "logs"))
@@ -46,6 +47,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         on_round_start: Optional[Callable[[int, Dict], None]] = None,
         on_round_complete: Optional[Callable[[int, Dict], None]] = None,
         state_store: Optional[TrainingStateStore] = None,
+        checkpoint_store: Optional[CheckpointStore] = None,
         round_timeout: int = 300,
         *args,
         **kwargs,
@@ -66,6 +68,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         self.should_stop = False
 
         self._state_store = state_store
+        self._checkpoint_store = checkpoint_store
         self._round_timeout = round_timeout
         self._round_timer: Optional[threading.Timer] = None
         self._current_state = TrainingState()
@@ -192,20 +195,35 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
 
         if aggregated_parameters is not None:
             self._load_global_weights(aggregated_parameters)
-            checkpoint_path = CHECKPOINT_DIR / f"round_{server_round}.pt"
-            from .runner import _save_checkpoint
-            _save_checkpoint(
-                checkpoint_path,
-                {"model_state": self.global_model.state_dict(), "vocab": self.vocab},
-            )
-            logger.info(
-                "checkpoint_saved",
-                extra={
-                    "round": server_round,
-                    "path": str(checkpoint_path),
-                    "vocab_size": len(self.vocab),
-                },
-            )
+            if self._checkpoint_store is not None:
+                last_acc = self._last_round_metrics.get("accuracy", 0.0)
+                last_loss = self._last_round_metrics.get("loss", 0.0)
+                self._checkpoint_store.save(
+                    round_num=server_round,
+                    state_dict=self.global_model.state_dict(),
+                    vocab=self.vocab,
+                    accuracy=last_acc,
+                    loss=last_loss,
+                )
+                logger.info(
+                    "checkpoint_saved",
+                    extra={
+                        "round": server_round,
+                        "store": type(self._checkpoint_store).__name__,
+                        "vocab_size": len(self.vocab),
+                    },
+                )
+            else:
+                checkpoint_path = CHECKPOINT_DIR / f"round_{server_round}.pt"
+                from .runner import _save_checkpoint
+                _save_checkpoint(
+                    checkpoint_path,
+                    {"model_state": self.global_model.state_dict(), "vocab": self.vocab},
+                )
+                logger.info(
+                    "checkpoint_saved",
+                    extra={"round": server_round, "path": str(checkpoint_path), "vocab_size": len(self.vocab)},
+                )
 
         return aggregated_parameters, aggregated_metrics
 

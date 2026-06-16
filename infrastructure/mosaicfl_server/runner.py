@@ -39,6 +39,7 @@ from .state_store import TrainingStateStore
 from .strategy import ProductionFedProxStrategy
 from infrastructure.shared.logging_setup import setup_logging as _setup_logging
 from infrastructure.shared.health_server import HealthServer
+from infrastructure.shared.checkpoint_store import get_checkpoint_store
 
 SERVER_ADDRESS = os.getenv("FL_SERVER_ADDRESS", "0.0.0.0:8080")
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
@@ -177,6 +178,7 @@ def _make_server_components(context: Context) -> ServerAppComponents:
         vocab=recovered_vocab,
         config_loader=config_loader,
         state_store=state_store,
+        checkpoint_store=get_checkpoint_store(RUNTIME_CFG.db_url),
         round_timeout=round_timeout,
         on_round_start=lambda rnd, cfg: write_health_status("running", round_num=rnd),
         on_round_complete=lambda rnd, metrics: _health.set_round_metrics(rnd, metrics),
@@ -303,6 +305,7 @@ class FederatedServer:
             global_model=self.global_model,
             vocab=recovered_vocab,
             config_loader=config_loader,
+            checkpoint_store=get_checkpoint_store(RUNTIME_CFG.db_url),
             on_round_start=self._on_round_start,
             on_round_complete=self._on_round_complete,
             proximal_mu=self.proximal_mu,

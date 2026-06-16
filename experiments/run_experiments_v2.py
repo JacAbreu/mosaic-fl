@@ -407,6 +407,7 @@ import flwr as fl
 # ─── Imports do projeto — v2 ───────────────────────────────────────────────
 from mosaicfl.core.config import *
 from mosaicfl.core.data_loader import load_clinical_dataset, diagnose_dataset, load_with_fallback
+from infrastructure.shared.checkpoint_store import get_checkpoint_store
 from mosaicfl.core.preprocessor import EHRPreprocessor, split_by_institution, SequencePipeline
 from mosaicfl.core.model import SimplifiedBEHRT
 from mosaicfl.core.client import FedProxClient
@@ -740,11 +741,15 @@ def run_federated_learning_manual(
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
 
-    ckpt_dir = Path("checkpoints")
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
-    ckpt_path = ckpt_dir / f"final_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
-    torch.save({"model_state": global_model.state_dict(), "vocab": vocab or {}}, ckpt_path)
-    logger.info(f"Checkpoint salvo: {ckpt_path} (vocab_size={len(vocab or {})})")
+    checkpoint_store = get_checkpoint_store(FL_DB_URL)
+    checkpoint_store.save(
+        round_num=round_num,
+        state_dict=global_model.state_dict(),
+        vocab=vocab or {},
+        accuracy=history["accuracy"][-1] if history["accuracy"] else 0.0,
+        loss=history["loss"][-1] if history["loss"] else 0.0,
+    )
+    logger.info(f"Checkpoint salvo no store ({type(checkpoint_store).__name__}, vocab_size={len(vocab or {})})")
 
     return history, global_model
 
@@ -792,6 +797,7 @@ def run_federated_learning_ray(
         num_rounds=NUM_ROUNDS,
         num_clients=len(client_loaders),
         test_loader=test_loader,
+        vocab=vocab or {},
     )
 
     logger.info(f"Rodando simulação Flower+Ray com {len(client_loaders)} clientes...")

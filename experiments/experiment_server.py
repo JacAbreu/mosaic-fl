@@ -24,6 +24,7 @@ from mosaicfl.core.model import SimplifiedBEHRT
 from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
 from mosaicfl.core.convergence import ConvergenceTracker
 from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_loss
+from infrastructure.shared.checkpoint_store import CheckpointStore, get_checkpoint_store
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,8 @@ class CustomFedProxStrategy(FedProx):
         self,
         tracker: ConvergenceTracker,
         history: Dict,
-        save_dir: str = "checkpoints",
+        checkpoint_store: CheckpointStore,
+        vocab: Optional[Dict[str, int]] = None,
         on_converged: Optional[Callable] = None,
         *args,
         **kwargs,
@@ -57,13 +59,13 @@ class CustomFedProxStrategy(FedProx):
         super().__init__(*args, **kwargs)
         self.tracker = tracker
         self.history = history
-        self.save_dir = save_dir
+        self.checkpoint_store = checkpoint_store
+        self.vocab = vocab or {}
         self.on_converged = on_converged
-        os.makedirs(save_dir, exist_ok=True)
         self._round_counter = 0
 
     def aggregate_fit(self, server_round: int, results, failures):
-        """Salva pesos agregados em disco imediatamente após cada rodada."""
+        """Agrega pesos e persiste checkpoint no store após cada rodada."""
         aggregated_parameters, aggregated_metrics = super().aggregate_fit(server_round, results, failures)
 
         if aggregated_parameters is not None:
@@ -72,10 +74,16 @@ class CustomFedProxStrategy(FedProx):
             keys = list(model.state_dict().keys())
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in zip(keys, ndarrays)})
             model.load_state_dict(state_dict, strict=False)
-            path = os.path.join(self.save_dir, f"round_{server_round}.pt")
-            torch.save(model.state_dict(), path)
-            self.history["last_checkpoint"] = path
-            logger.info("checkpoint_saved", extra={"round": server_round, "path": path})
+
+            last_acc = self.history["accuracy"][-1] if self.history["accuracy"] else 0.0
+            self.checkpoint_store.save(
+                round_num=server_round,
+                state_dict=state_dict,
+                vocab=self.vocab,
+                accuracy=last_acc,
+            )
+            self.history["last_checkpoint"] = f"db:round_{server_round}"
+            logger.info("checkpoint_saved", extra={"round": server_round, "store": type(self.checkpoint_store).__name__})
 
         return aggregated_parameters, aggregated_metrics
 
@@ -110,28 +118,27 @@ class CustomFedProxStrategy(FedProx):
         return aggregated
 
     def _save_checkpoint(self, server_round: int, final: bool = False) -> None:
-        """Cria cópia nomeada 'final.pt' do último checkpoint ao convergir."""
-        if not final:
-            return
-        last = self.history.get("last_checkpoint")
-        if last and os.path.exists(last):
-            import shutil
-            final_path = os.path.join(self.save_dir, "final.pt")
-            shutil.copy2(last, final_path)
-            self.history["last_checkpoint"] = final_path
-            logger.info("checkpoint_final_saved", extra={"path": final_path})
+        """No-op: checkpoints são persistidos a cada rodada em aggregate_fit."""
+        if final:
+            logger.info(
+                "checkpoint_final_noted",
+                extra={"round": server_round, "store": type(self.checkpoint_store).__name__},
+            )
 
 
 def start_server(
     num_rounds: int = FED_CFG.num_rounds,
     num_clients: int = FED_CFG.num_clients,
     test_loader=None,
+    vocab: Optional[Dict[str, int]] = None,
     on_converged: Optional[Callable] = None,
 ) -> Tuple["CustomFedProxStrategy", ConvergenceTracker, Dict]:
     """
     Monta a estratégia FedProx com convergência integrada e inicia servidor local.
 
     Se test_loader for fornecido, a avaliação global real é ativada.
+    Checkpoints são persistidos via get_checkpoint_store() (SQLite em experimentos,
+    PostgreSQL quando FL_DB_URL estiver configurado).
     """
     from mosaicfl.core.federated import get_evaluate_fn
     evaluate_fn = get_evaluate_fn(test_loader) if test_loader is not None else None
@@ -140,10 +147,13 @@ def start_server(
         patience=FED_CFG.convergence_patience,
     )
     history = {"rounds": [], "accuracy": [], "communication_mb": [], "last_checkpoint": None}
+    checkpoint_store = get_checkpoint_store(RUNTIME_CFG.db_url)
 
     strategy = CustomFedProxStrategy(
         tracker=tracker,
         history=history,
+        checkpoint_store=checkpoint_store,
+        vocab=vocab or {},
         on_converged=on_converged,
         fraction_fit=FED_CFG.fraction_fit,
         fraction_evaluate=FED_CFG.fraction_evaluate,

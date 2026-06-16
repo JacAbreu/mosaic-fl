@@ -28,13 +28,24 @@ Dividido em três partes:
 
   `FedProxClient` agora computa pesos inversamente proporcionais à frequência de cada classe no loader local e passa para `CrossEntropyLoss(weight=...)`. Avaliação (`evaluate`) usa critério sem peso para comparabilidade entre rounds.
 
-- [ ] **Implementar `_save_checkpoint` de verdade em `experiment_server.py`**
+- [x] ~~**Implementar `_save_checkpoint` de verdade em `experiment_server.py`**~~
 
-  Hoje o método apenas registra um caminho no histórico sem escrever nada em disco.
+  `CheckpointStore` (ABC) em `infrastructure/shared/checkpoint_store.py` com dois backends:
+  `SQLiteCheckpointStore` (experimentos, sem servidor) e `PostgreSQLCheckpointStore`
+  (`metrics.fl_checkpoints` BYTEA, para produção/hml). Seleção automática via
+  `get_checkpoint_store(FL_DB_URL)`: URL vazia → SQLite, URL configurada → PostgreSQL.
+  Integridade via SHA-256 em ambos. `_save_checkpoint` virou no-op — cada rodada
+  persiste em `aggregate_fit`. Migração futura para S3: substitui apenas os bytes,
+  a interface do store não muda.
 
-- [ ] **Integrar RAG com tensores reais (modo banco)**
+- [x] ~~**Integrar RAG com tensores reais (modo banco)**~~
 
-  `run_rag_pipeline()` depende de `df_raw` que não existe no modo banco. Adaptar para construir `patient_data` a partir dos tensores/vocab do SequencePipeline.
+  `run_rag_pipeline()` não depende mais de `df_raw`. Desfechos derivados dos labels
+  reais do `test_loader`; `patient_data` construído do vocabulário inverso da amostra.
+  `ClinicalRAG` usa `_InMemoryStore` (numpy cosine similarity) quando `FL_DB_URL` está
+  vazio — sem dependência de PostgreSQL em experimentos. Labels dos perfis extraídos de
+  `MODEL_CFG.class_labels` (5 classes de duração), configuráveis via `FL_CLASS_LABELS`.
+  `main()` executa o RAG em ambos os modos (banco e CSV/sintético).
 
 ### Qualidade de código estático
 
