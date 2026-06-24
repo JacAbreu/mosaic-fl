@@ -67,14 +67,21 @@ class FedProxClient(fl.client.NumPyClient):
         return [v.cpu().detach().numpy().copy() for v in self.model.state_dict().values()]
 
     def _compute_class_weights(self, loader: DataLoader) -> torch.Tensor:
-        """Pesos inversamente proporcionais à frequência de cada classe no loader local."""
+        """
+        Pesos inversamente proporcionais à frequência de cada classe no loader local.
+
+        Classes ausentes no conjunto de treino recebem peso 0.0 — não contribuem
+        para o gradiente. Usar count=1 como fallback para classes ausentes inflaria
+        o peso para valores como total/(n*1) >> peso das classes presentes, o que
+        distorce a loss em direção a classes inexistentes.
+        """
         counts: Counter = Counter()
         for _, batch_y in loader:
             counts.update(batch_y.tolist())
         n = MODEL_CFG.num_classes
         total = sum(counts.values()) or 1
         weights = torch.tensor(
-            [total / (n * max(counts.get(i, 1), 1)) for i in range(n)],
+            [total / (n * counts[i]) if counts.get(i, 0) > 0 else 0.0 for i in range(n)],
             dtype=torch.float,
         )
         logger.info(

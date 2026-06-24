@@ -1,0 +1,228 @@
+{
+  "round": 20,
+  "temperature": 1.0982,
+  "pre_calibration": {
+    "accuracy": 0.635,
+    "macro_f1": 0.6027,
+    "macro_auc": NaN,
+    "per_class": {
+      "alta": {
+        "auc_roc": 0.7064,
+        "f1": 0.716,
+        "precision": 0.8,
+        "recall": 0.6479,
+        "support": 142
+      },
+      "internacao_prolongada": {
+        "auc_roc": 0.7059,
+        "f1": 0.4895,
+        "precision": 0.4118,
+        "recall": 0.6034,
+        "support": 58
+      },
+      "uti": {
+        "auc_roc": NaN,
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "support": 0
+      },
+      "obito": {
+        "auc_roc": NaN,
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "support": 0
+      }
+    },
+    "calibration": {
+      "ece": 0.0537,
+      "mce": 0.1813,
+      "bins": [
+        {
+          "confidence_mean": 0.5147,
+          "accuracy": 0.3333,
+          "count": 18,
+          "gap": 0.1813
+        },
+        {
+          "confidence_mean": 0.5708,
+          "accuracy": 0.5319,
+          "count": 47,
+          "gap": 0.0389
+        },
+        {
+          "confidence_mean": 0.6301,
+          "accuracy": 0.6053,
+          "count": 38,
+          "gap": 0.0249
+        },
+        {
+          "confidence_mean": 0.6974,
+          "accuracy": 0.6667,
+          "count": 57,
+          "gap": 0.0308
+        },
+        {
+          "confidence_mean": 0.7652,
+          "accuracy": 0.8889,
+          "count": 18,
+          "gap": 0.1237
+        },
+        {
+          "confidence_mean": 0.8309,
+          "accuracy": 0.8636,
+          "count": 22,
+          "gap": 0.0327
+        }
+      ],
+      "temperature": 1.0,
+      "n_samples": 200
+    },
+    "confusion_matrix": [
+      [
+        92,
+        50,
+        0,
+        0
+      ],
+      [
+        23,
+        35,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "n_samples": 200,
+    "class_labels": [
+      "alta",
+      "internacao_prolongada",
+      "uti",
+      "obito"
+    ]
+  },
+  "post_calibration": {
+    "accuracy": 0.635,
+    "macro_f1": 0.6027,
+    "macro_auc": NaN,
+    "per_class": {
+      "alta": {
+        "auc_roc": 0.7061,
+        "f1": 0.716,
+        "precision": 0.8,
+        "recall": 0.6479,
+        "support": 142
+      },
+      "internacao_prolongada": {
+        "auc_roc": 0.7059,
+        "f1": 0.4895,
+        "precision": 0.4118,
+        "recall": 0.6034,
+        "support": 58
+      },
+      "uti": {
+        "auc_roc": NaN,
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "support": 0
+      },
+      "obito": {
+        "auc_roc": NaN,
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "support": 0
+      }
+    },
+    "calibration": {
+      "ece": 0.0506,
+      "mce": 0.18,
+      "bins": [
+        {
+          "confidence_mean": 0.5133,
+          "accuracy": 0.3333,
+          "count": 18,
+          "gap": 0.18
+        },
+        {
+          "confidence_mean": 0.5652,
+          "accuracy": 0.5417,
+          "count": 48,
+          "gap": 0.0235
+        },
+        {
+          "confidence_mean": 0.631,
+          "accuracy": 0.62,
+          "count": 50,
+          "gap": 0.011
+        },
+        {
+          "confidence_mean": 0.6926,
+          "accuracy": 0.6667,
+          "count": 51,
+          "gap": 0.0259
+        },
+        {
+          "confidence_mean": 0.7696,
+          "accuracy": 0.9,
+          "count": 20,
+          "gap": 0.1304
+        },
+        {
+          "confidence_mean": 0.8258,
+          "accuracy": 0.9231,
+          "count": 13,
+          "gap": 0.0973
+        }
+      ],
+      "temperature": 1.0982449054718018,
+      "n_samples": 200
+    },
+    "confusion_matrix": [
+      [
+        92,
+        50,
+        0,
+        0
+      ],
+      [
+        23,
+        35,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "n_samples": 200,
+    "class_labels": [
+      "alta",
+      "internacao_prolongada",
+      "uti",
+      "obito"
+    ]
+  }
+}

@@ -303,3 +303,88 @@ O projeto é **acima da média para um TCC**. A proposta mais original — usar 
 ---
 
 *Próxima reavaliação recomendada: após (a) resolução do label `internacao_prolongada`; ou (b) implementação do FHIR exporter; ou (c) validação com especialista clínico.*
+
+---
+
+## Avaliação 2 — 2026-06-24 (reavaliação com correções)
+
+### Prompt utilizado
+
+Mesmo da Avaliação 1 (2026-06-24). Reavaliação motivada por duas penalidades incorretas identificadas na análise anterior.
+
+### Estado do projeto na data da reavaliação
+
+- **Branch:** main, commit `e466e0a` (mesmo da avaliação anterior)
+- **Testes:** 541 passando, 6 deselected
+- **Linhas Python:** ~11.950 (src + infrastructure + integration)
+- **Novo artefato:** `experiment_results.json` com 5 experimentos (dados sintéticos)
+
+### Fontes consultadas
+
+| Fonte | O que revelou |
+|---|---|
+| `infrastructure/mosaicfl_api/audit.py` | `log_access()` implementado com JSON estruturado, SHA-256 pseudonimização, propagate=False |
+| `infrastructure/mosaicfl_api/service.py:592,642,682,713,771` | `audit.log_access()` chamada em todos os 5 endpoints com dados de paciente |
+| `logs/audit.log` (149KB) | Entradas reais com timestamp, token_fingerprint, patient_id_hash — audit trail está em produção |
+| `infrastructure/mosaicfl_api/service.py:270–293` | `FL_CORS_ORIGINS='*'` bloqueia startup com `ValueError` em `FL_ENV=production` |
+| `experiment_results.json` | exp5: acurácia 0.4667 constante por 11 rodadas — platô desde a rodada 1, sem aprendizado incremental |
+
+---
+
+## AVALIAÇÃO ACADÊMICA — 6,5 / 10 *(sem alteração)*
+
+Nenhum commit novo com conteúdo acadêmico desde a avaliação anterior. Penalidades inalteradas:
+
+| Penalidade | Situação |
+|---|---|
+| Label `internacao_prolongada` = dado censurado (−1,5) | `preprocessor.py:_OUTCOME_TO_PROGNOSIS[4] = "internacao_prolongada"` — inalterado |
+| SimplifiedBEHRT sem justificativa formal (−0,5) | Late fusion não implementada; ablation ausente |
+| Ausência de baseline comparativo (−0,5) | `experiment_results.json` tem exp2 com ganho FL vs. local, mas `"simulado": true` e sem baseline (LR/RF) |
+| RAG DistilGPT-2 sem avaliação formal (−0,5) | ROUGE/BERTScore ausentes |
+
+**Observação — exp5:** Acurácia 0.4667 e loss 0.7161 constantes por 11 rodadas. O `ConvergenceTracker` confunde platô estático com convergência real (nenhuma melhora desde a rodada 1). Dado sintético, não afeta a nota, mas deve ser investigado antes de apresentar resultados.
+
+---
+
+## AVALIAÇÃO DE PRODUÇÃO CLÍNICA — 8,0 / 10 *(+0,5 em relação à avaliação anterior)*
+
+### Correções
+
+**Correção 1 — Audit trail LGPD (penalidade −0,5 → −0,1)**
+
+A avaliação anterior afirmou "Audit trail LGPD ausente". Incorreto. O audit trail está completamente implementado:
+- `audit.py`: `log_access()` com JSON estruturado, `token_fingerprint` (SHA-256[:12]), `patient_id_hash` (SHA-256[:16]), `propagate=False`.
+- Chamado em `service.py` nos endpoints `predict`, `ingest`, `patient_list`, `patient_read`, `model_reload`.
+- `logs/audit.log` (149KB) contém entradas reais com estrutura correta.
+
+Gap residual: `RotatingFileHandler` (50MB × 10) permite sobrescrita. Para LGPD estrita, o registro deveria ser append-only ou WORM. Penalidade: −0,1 (imutabilidade), não ausência.
+
+**Correção 2 — CORS `"*"` (penalidade removida)**
+
+`service.py:270` levanta `ValueError` ao iniciar com `FL_CORS_ORIGINS='*'` em produção. Controle adequado — não é gap de produção.
+
+### Penalidades remanescentes
+
+| Penalidade | Fonte | Peso |
+|---|---|---|
+| Rate limiter in-process | `service.py:155 _SlidingWindowLimiter` — por processo Python; 4 workers = 480 req/min | −0,8 |
+| Generalização clínica | COVID-19 / 2 hospitais SP / 2020–2021, sem validação externa | −0,7 |
+| Prometheus ausente | TODO documentado, não implementado | −0,3 |
+| Audit trail — imutabilidade | `RotatingFileHandler` não é WORM | −0,1 |
+
+---
+
+## Síntese comparativa
+
+| Dimensão | Avaliação 1 | **Avaliação 2** | Δ | Razão |
+|---|---|---|---|---|
+| **Acadêmica** | 6,5 / 10 | **6,5 / 10** | 0 | Nenhum commit novo com conteúdo acadêmico |
+| **Produção clínica** | 7,5 / 10 | **8,0 / 10** | +0,5 | Audit trail estava implementado; CORS bloqueado em produção |
+
+**Para subir a nota acadêmica:** late fusion demográfica + baseline formal (ambos documentados no TODO com proposta concreta, sem implementação).
+
+**Para subir a nota clínica:** substituir `_SlidingWindowLimiter` por Redis + fastapi-limiter — único bloqueador que impede homologação.
+
+---
+
+*Próxima reavaliação recomendada: após implementação de (a) late fusion + baseline, ou (b) Redis rate limiter.*
