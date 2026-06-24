@@ -52,13 +52,14 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 4. [Execução de Experimentos](#execução-de-experimentos)
 5. [Testes](#testes)
 6. [Rodando Localmente](#rodando-localmente)
-7. [Infraestrutura de Produção (SuperLink)](#infraestrutura-de-produção-superlink)
-8. [Docker](#docker)
-9. [Kubernetes (Helm)](#kubernetes-helm)
-10. [Experimentos](#experimentos)
-11. [Solução de Problemas](#solução-de-problemas)
-12. [Uso de Inteligência Artificial](#uso-de-inteligência-artificial)
-13. [Referências](#referências)
+7. [Rede Federada Real (Desktop + Notebook)](#rede-federada-real-desktop--notebook)
+8. [Infraestrutura de Produção (SuperLink)](#infraestrutura-de-produção-superlink)
+9. [Docker](#docker)
+10. [Kubernetes (Helm)](#kubernetes-helm)
+11. [Experimentos](#experimentos)
+12. [Solução de Problemas](#solução-de-problemas)
+13. [Uso de Inteligência Artificial](#uso-de-inteligência-artificial)
+14. [Referências](#referências)
 
 > **Fluxo detalhado do aprendizado federado:** [`docs/FLUXO_APRENDIZADO_FEDERADO.md`](docs/FLUXO_APRENDIZADO_FEDERADO.md) — cobertura completa do carregamento de dados clínicos, tokenização temporal de exames laboratoriais, rodadas federadas FedProx (servidor ↔ clientes HSL/BPSP), agregação FedAvg, série temporal BEHRT e justificativa RAG, com diagramas Mermaid e passo a passo textual.
 
@@ -483,6 +484,133 @@ loader.write({"proximal_mu": 0.005, "stop": False})  # aplica no próximo round
 loader.write({"stop": True})                          # para após o round atual
 loader.clear()                                        # remove config (usa defaults)
 ```
+
+---
+
+## Rede Federada Real (Desktop + Notebook)
+
+Este modo executa FL de verdade: servidor e cliente em máquinas físicas separadas,
+comunicando-se via rede local. Os dados clínicos **nunca saem de cada máquina** —
+apenas os pesos do modelo (~2.8 MB) trafegam pela rede a cada round.
+
+```
+Desktop (servidor + BPSP)          Notebook (cliente HSL)
+┌─────────────────────────┐        ┌─────────────────────────┐
+│  fl.server.start_server │◄──────►│  fl.client.start_client │
+│  Agrega pesos FedProx   │  Wi-Fi │  Treina com dados HSL   │
+│  Dados BPSP (local)     │  LAN   │  Dados HSL (local)      │
+└─────────────────────────┘        └─────────────────────────┘
+       pesos globais ──────────────────► round local
+       ◄──────────────── pesos locais ──
+```
+
+### 1. Colocar as duas máquinas na mesma rede
+
+Ambas precisam estar **na mesma rede Wi-Fi** (ou cabo) para se enxergar.
+
+**Opção A — Wi-Fi doméstico (mais simples):**
+Conecte desktop e notebook no mesmo roteador. Sem configuração adicional.
+
+**Opção B — Cabo direto (mais estável para treinos longos):**
+Conecte um cabo Ethernet entre as duas máquinas e configure IPs estáticos:
+```bash
+# Desktop
+sudo ip addr add 192.168.100.1/24 dev eth0
+
+# Notebook
+sudo ip addr add 192.168.100.2/24 dev eth0
+```
+
+**Opção C — Hotspot do notebook (se não houver roteador):**
+Ative o ponto de acesso no notebook e conecte o desktop nele.
+O notebook terá IP `192.168.X.1` e o desktop receberá um IP via DHCP.
+
+### 2. Descobrir o IP do desktop
+
+```bash
+# No desktop — mostra todos os IPs (use o da interface Wi-Fi ou eth0)
+hostname -I
+
+# Ou mais detalhado:
+ip addr show | grep "inet " | grep -v 127.0.0.1
+```
+
+### 3. Liberar a porta no firewall do desktop
+
+```bash
+# Ubuntu / Debian
+sudo ufw allow 8080/tcp
+sudo ufw reload
+
+# Fedora / RHEL / Rocky
+sudo firewall-cmd --add-port=8080/tcp --permanent
+sudo firewall-cmd --reload
+
+# Verificar se a porta está ouvindo (após iniciar o servidor):
+ss -tlnp | grep 8080
+```
+
+### 4. Verificar conectividade (no notebook)
+
+```bash
+# Substitua pelo IP real do desktop
+make fl-check FL_SERVER=192.168.1.100:8080
+```
+
+### 5. Iniciar o treinamento
+
+`make fl-server` e `make fl-client` sobem o banco automaticamente via `db-up`
+antes de iniciar o processo FL. Se o container já estiver rodando, o `docker compose up -d`
+é idempotente — não reinicia nem apaga dados.
+
+**No desktop** — sobe banco + servidor FL, imprime o IP para copiar:
+```bash
+make fl-server FL_DB_PASSWORD=suasenha \
+               FL_DB_URL=postgresql://mosaicfl:suasenha@localhost:5432/mosaicfl \
+               FL_HOSPITAL_ID=BPSP
+```
+
+O servidor imprime o IP local ao subir:
+```
+  IP deste desktop: 192.168.1.100
+  No notebook, execute:
+    make fl-client FL_SERVER=192.168.1.100:8080 FL_HOSPITAL_ID=HSL
+```
+
+**No notebook** — sobe banco local + conecta ao servidor do desktop:
+```bash
+make fl-client FL_SERVER=192.168.1.100:8080 \
+               FL_DB_PASSWORD=suasenha \
+               FL_DB_URL=postgresql://mosaicfl:suasenha@localhost:5432/mosaicfl \
+               FL_HOSPITAL_ID=HSL
+```
+
+O servidor aguarda `FL_MIN_CLIENTS` (padrão: 2) antes de iniciar o primeiro round.
+Com desktop + notebook: servidor pronto → notebook conecta → round 1 começa.
+
+> **Banco separado em cada máquina:** cada máquina sobe sua própria instância
+> do PostgreSQL com os dados do seu hospital. Os dados nunca saem da máquina —
+> apenas os pesos do modelo trafegam pela rede.
+
+### Variáveis configuráveis
+
+| Variável | Desktop | Notebook | Padrão |
+|---|---|---|---|
+| `FL_DB_URL` | URL do banco BPSP | URL do banco HSL | `""` (sintético) |
+| `FL_HOSPITAL_ID` | `BPSP` | `HSL` | `BPSP` / `HSL` |
+| `FL_SERVER` | — | `IP_DESKTOP:8080` | `localhost:8080` |
+| `FL_NUM_ROUNDS` | número de rounds | — | `20` |
+| `FL_MIN_CLIENTS` | mín. para iniciar round | — | `2` |
+
+### Diferença em relação à simulação
+
+| | `make experiment` (simulação) | `make fl-server` / `fl-client` (real) |
+|---|---|---|
+| Processos | 1 processo, mesma máquina | 2 máquinas, sockets TCP reais |
+| Dados | Mesmo banco, partições locais | Bancos separados, dados isolados |
+| Privacidade | Simulada | Real — dados nunca saem da máquina |
+| Overhead de rede | Zero | ~2.8 MB × 2 × N rounds |
+| Latência entre rounds | Milissegundos | Depende da rede local |
 
 ---
 

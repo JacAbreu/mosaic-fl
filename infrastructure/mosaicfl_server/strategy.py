@@ -285,10 +285,17 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         return aggregated_loss, aggregated_metrics
 
     def _run_calibration(self, server_round: int) -> None:
-        """Executa temperature scaling após convergência e re-persiste o checkpoint calibrado.
+        """Executa temperature scaling + avaliação clínica após convergência.
 
-        Requer self._test_loader configurado (via FL_TEST_HOLDOUT_FRACTION).
-        Se não disponível, loga aviso e mantém T=1.0 (modelo não calibrado).
+        Com FL_DB_URL configurado (dados reais):
+          1. Avalia o modelo antes da calibração (ECE com T=1.0)
+          2. Ajusta temperatura via LBFGS no holdout
+          3. Avalia novamente (ECE com T=T_otimizado)
+          4. Salva relatório em logs/evaluation_round_N.json
+          5. Re-persiste checkpoint com T
+
+        Sem FL_DB_URL (simulação com dados sintéticos):
+          test_loader é None — calibração e avaliação são puladas com aviso.
         """
         if self._test_loader is None:
             logger.warning(
@@ -298,17 +305,73 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
             return
 
         from mosaicfl.core.calibration import TemperatureScaler
-        from mosaicfl.core.config import RUNTIME_CFG
+        from mosaicfl.core.config import MODEL_CFG, RUNTIME_CFG
+        from mosaicfl.core.evaluation import evaluate, print_report
 
+        device = str(RUNTIME_CFG.device)
+
+        # 1. Avaliação ANTES da calibração (T=1.0) — linha de base
+        try:
+            report_raw = evaluate(
+                self.global_model,
+                self._test_loader,
+                class_labels=MODEL_CFG.class_labels,
+                device=device,
+                temperature=1.0,
+            )
+            logger.info(
+                "evaluation_pre_calibration",
+                extra={
+                    "round":      server_round,
+                    "accuracy":   report_raw.accuracy,
+                    "macro_f1":   report_raw.macro_f1,
+                    "macro_auc":  report_raw.macro_auc,
+                    "ece":        report_raw.calibration.ece,
+                    "mce":        report_raw.calibration.mce,
+                    "n_samples":  report_raw.n_samples,
+                },
+            )
+        except Exception as exc:
+            logger.warning("evaluation_pre_calibration_error %s", exc)
+            report_raw = None
+
+        # 2. Calibração por temperature scaling
         try:
             scaler = TemperatureScaler()
-            scaler.fit(self.global_model, self._test_loader, device=str(RUNTIME_CFG.device))
+            scaler.fit(self.global_model, self._test_loader, device=device)
             logger.info("calibration_complete", extra={"round": server_round, "T": round(scaler.T, 4)})
         except Exception as exc:
             logger.warning("calibration_error %s — T mantido em 1.0", exc)
             return
 
-        # Re-persiste checkpoint final com temperature; load_latest() retorna o mais recente por id
+        # 3. Avaliação APÓS calibração (T=T_otimizado)
+        try:
+            report_cal = evaluate(
+                self.global_model,
+                self._test_loader,
+                class_labels=MODEL_CFG.class_labels,
+                device=device,
+                temperature=scaler.T,
+            )
+            logger.info(
+                "evaluation_post_calibration",
+                extra={
+                    "round":     server_round,
+                    "T":         round(scaler.T, 4),
+                    "ece":       report_cal.calibration.ece,
+                    "mce":       report_cal.calibration.mce,
+                    "macro_auc": report_cal.macro_auc,
+                    "macro_f1":  report_cal.macro_f1,
+                },
+            )
+        except Exception as exc:
+            logger.warning("evaluation_post_calibration_error %s", exc)
+            report_cal = None
+
+        # 4. Persiste relatório em JSON para rastreabilidade clínica
+        self._save_evaluation_report(server_round, scaler.T, report_raw, report_cal)
+
+        # 5. Re-persiste checkpoint com T; load_latest() retorna o mais recente por id
         if self._checkpoint_store is not None:
             last_acc  = self._last_round_metrics.get("accuracy", 0.0)
             last_loss = self._last_round_metrics.get("loss", 0.0)
@@ -320,7 +383,35 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
                 loss=last_loss,
                 temperature=scaler.T,
             )
-            logger.info(
-                "calibrated_checkpoint_saved",
-                extra={"round": server_round, "T": round(scaler.T, 4)},
-            )
+
+    def _save_evaluation_report(
+        self,
+        server_round: int,
+        temperature: float,
+        report_raw,
+        report_cal,
+    ) -> None:
+        """Persiste relatório de avaliação clínica em JSON."""
+        import dataclasses
+        import json
+
+        def _to_dict(report):
+            if report is None:
+                return None
+            d = dataclasses.asdict(report)
+            # dataclasses.asdict converte tudo recursivamente, inclusive BinStats e ClassMetrics
+            return d
+
+        payload = {
+            "round":           server_round,
+            "temperature":     round(temperature, 4),
+            "pre_calibration": _to_dict(report_raw),
+            "post_calibration": _to_dict(report_cal),
+        }
+
+        out_path = LOG_DIR / f"evaluation_round_{server_round}.json"
+        try:
+            out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.info("evaluation_report_saved path=%s", out_path)
+        except Exception as exc:
+            logger.warning("evaluation_report_save_error %s", exc)

@@ -741,16 +741,55 @@ def run_federated_learning_manual(
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
 
-    # Temperature scaling: calibra o modelo global no test_loader.
-    # Nota: em simulação acadêmica, reutilizamos o test_loader como calibration set.
-    # Em produção, deve-se reservar um holdout separado para calibração.
     from mosaicfl.core.calibration import TemperatureScaler
+    from mosaicfl.core.evaluation import evaluate, print_report
+
+    # Avaliação ANTES da calibração
+    try:
+        report_raw = evaluate(global_model, test_loader, class_labels=MODEL_CFG.class_labels,
+                              device=str(DEVICE), temperature=1.0)
+        logger.info(f"Avaliação pré-calibração — ECE={report_raw.calibration.ece:.4f} "
+                    f"AUC={report_raw.macro_auc:.4f} F1={report_raw.macro_f1:.4f}")
+        print_report(report_raw)
+    except Exception as exc:
+        logger.warning(f"Avaliação pré-calibração falhou: {exc}")
+        report_raw = None
+
+    # Temperature scaling
+    # Nota: em simulação acadêmica reutilizamos o test_loader como calibration set.
+    # Em produção (dados reais), FL_TEST_HOLDOUT_FRACTION reserva um holdout separado.
     scaler = TemperatureScaler()
     try:
         scaler.fit(global_model, test_loader, device=str(DEVICE))
         logger.info(f"Calibração concluída — T={scaler.T:.4f}")
     except Exception as exc:
         logger.warning(f"Calibração falhou ({exc}) — T mantido em 1.0")
+
+    # Avaliação APÓS calibração
+    try:
+        report_cal = evaluate(global_model, test_loader, class_labels=MODEL_CFG.class_labels,
+                              device=str(DEVICE), temperature=scaler.T)
+        logger.info(f"Avaliação pós-calibração  — ECE={report_cal.calibration.ece:.4f} "
+                    f"AUC={report_cal.macro_auc:.4f} F1={report_cal.macro_f1:.4f}")
+        print_report(report_cal)
+    except Exception as exc:
+        logger.warning(f"Avaliação pós-calibração falhou: {exc}")
+        report_cal = None
+
+    # Persiste relatório em JSON
+    eval_path = Path("experiments/logs") / f"evaluation_round_{round_num}.json"
+    try:
+        import dataclasses
+        eval_path.parent.mkdir(parents=True, exist_ok=True)
+        eval_path.write_text(json.dumps({
+            "round": round_num,
+            "temperature": round(scaler.T, 4),
+            "pre_calibration":  dataclasses.asdict(report_raw)  if report_raw  else None,
+            "post_calibration": dataclasses.asdict(report_cal) if report_cal else None,
+        }, indent=2, ensure_ascii=False), encoding="utf-8")
+        logger.info(f"Relatório de avaliação salvo: {eval_path}")
+    except Exception as exc:
+        logger.warning(f"Falha ao salvar relatório de avaliação: {exc}")
 
     checkpoint_store = get_checkpoint_store(FL_DB_URL)
     checkpoint_store.save(
@@ -848,14 +887,53 @@ def run_federated_learning_ray(
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
 
-    # Temperature scaling
     from mosaicfl.core.calibration import TemperatureScaler
+    from mosaicfl.core.evaluation import evaluate, print_report
+
+    # Avaliação ANTES da calibração
+    try:
+        report_raw = evaluate(global_model, test_loader, class_labels=MODEL_CFG.class_labels,
+                              device=str(DEVICE), temperature=1.0)
+        logger.info(f"Avaliação pré-calibração — ECE={report_raw.calibration.ece:.4f} "
+                    f"AUC={report_raw.macro_auc:.4f} F1={report_raw.macro_f1:.4f}")
+        print_report(report_raw)
+    except Exception as exc:
+        logger.warning(f"Avaliação pré-calibração falhou: {exc}")
+        report_raw = None
+
+    # Temperature scaling
     scaler = TemperatureScaler()
     try:
         scaler.fit(global_model, test_loader, device=str(DEVICE))
         logger.info(f"Calibração concluída — T={scaler.T:.4f}")
     except Exception as exc:
         logger.warning(f"Calibração falhou ({exc}) — T mantido em 1.0")
+
+    # Avaliação APÓS calibração
+    try:
+        report_cal = evaluate(global_model, test_loader, class_labels=MODEL_CFG.class_labels,
+                              device=str(DEVICE), temperature=scaler.T)
+        logger.info(f"Avaliação pós-calibração  — ECE={report_cal.calibration.ece:.4f} "
+                    f"AUC={report_cal.macro_auc:.4f} F1={report_cal.macro_f1:.4f}")
+        print_report(report_cal)
+    except Exception as exc:
+        logger.warning(f"Avaliação pós-calibração falhou: {exc}")
+        report_cal = None
+
+    # Persiste relatório em JSON
+    eval_path = Path("experiments/logs") / f"evaluation_ray_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    try:
+        import dataclasses
+        eval_path.parent.mkdir(parents=True, exist_ok=True)
+        eval_path.write_text(json.dumps({
+            "mode": "ray",
+            "temperature": round(scaler.T, 4),
+            "pre_calibration":  dataclasses.asdict(report_raw)  if report_raw  else None,
+            "post_calibration": dataclasses.asdict(report_cal) if report_cal else None,
+        }, indent=2, ensure_ascii=False), encoding="utf-8")
+        logger.info(f"Relatório de avaliação salvo: {eval_path}")
+    except Exception as exc:
+        logger.warning(f"Falha ao salvar relatório de avaliação: {exc}")
 
     ckpt_dir = Path("checkpoints")
     ckpt_dir.mkdir(parents=True, exist_ok=True)
