@@ -6,7 +6,8 @@ ATENÇÃO — Dois modos de carregamento coexistem neste projeto:
 1. **Modo banco de dados (recomendado para dados reais)**
    Usar diretamente: `SequencePipeline(FL_DB_URL).build_per_hospital()`
    Gera tensores temporais ordenados por dia_relativo, tokenizados semanticamente
-   ({analyte}_{baixo|normal|alto}), com label de 5 classes de duração de internação.
+   ({analyte}_{baixo|normal|alto}), com label de 4 classes de prognóstico clínico
+   (alta, internacao_prolongada, uti, obito).
    Configurar via variável de ambiente: `FL_DB_URL` (preferencial) ou `MOSAICFL_DB_URL` (legado).
 
 2. **Modo arquivo/sintético (desenvolvimento)**
@@ -182,13 +183,15 @@ COLUMN_MAPPING = {
     ],
 }
 
-# Mapeamento de desfechos textuais → numéricos
+# Mapeamento de desfechos textuais → 4 classes de prognóstico.
+# 0=alta  1=internacao_prolongada  2=uti  3=obito
 DESFECHO_TEXT_TO_NUMERIC = {
-    "alta": 0, "Alta": 0, "ALTA": 0, "cura": 0, "melhora": 0,
-    "obito": 1, "óbito": 1, "Obito": 1, "Óbito": 1, "morte": 1,
-    "uti": 1, "UTI": 1, "internacao": 1, "internação": 1,
-    "pneumonia": 1, "Pneumonia": 1, "gravidez": 1, "grave": 1,
-    "moderado": 0, "leve": 0, "estavel": 0,
+    "alta": 0, "Alta": 0, "ALTA": 0, "cura": 0, "Cura": 0,
+    "melhora": 0, "Melhora": 0, "melhorado": 0, "leve": 0, "estavel": 0,
+    "internacao": 1, "internação": 1, "Internacao": 1, "Internação": 1,
+    "em atendimento": 1, "moderado": 1, "transferencia": 1, "transferência": 1,
+    "uti": 2, "UTI": 2, "Uti": 2, "terapia intensiva": 2, "grave": 2,
+    "obito": 3, "óbito": 3, "Obito": 3, "Óbito": 3, "morte": 3, "Morte": 3,
 }
 
 

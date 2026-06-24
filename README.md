@@ -53,13 +53,14 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 5. [Testes](#testes)
 6. [Rodando Localmente](#rodando-localmente)
 7. [Rede Federada Real (Desktop + Notebook)](#rede-federada-real-desktop--notebook)
-8. [Infraestrutura de Produção (SuperLink)](#infraestrutura-de-produção-superlink)
-9. [Docker](#docker)
-10. [Kubernetes (Helm)](#kubernetes-helm)
-11. [Experimentos](#experimentos)
-12. [Solução de Problemas](#solução-de-problemas)
-13. [Uso de Inteligência Artificial](#uso-de-inteligência-artificial)
-14. [Referências](#referências)
+8. [Padrões de Interoperabilidade (FHIR R4 + LOINC)](#padrões-de-interoperabilidade-fhir-r4--loinc)
+9. [Infraestrutura de Produção (SuperLink)](#infraestrutura-de-produção-superlink)
+10. [Docker](#docker)
+11. [Kubernetes (Helm)](#kubernetes-helm)
+12. [Experimentos](#experimentos)
+13. [Solução de Problemas](#solução-de-problemas)
+14. [Uso de Inteligência Artificial](#uso-de-inteligência-artificial)
+15. [Referências](#referências)
 
 > **Fluxo detalhado do aprendizado federado:** [`docs/FLUXO_APRENDIZADO_FEDERADO.md`](docs/FLUXO_APRENDIZADO_FEDERADO.md) — cobertura completa do carregamento de dados clínicos, tokenização temporal de exames laboratoriais, rodadas federadas FedProx (servidor ↔ clientes HSL/BPSP), agregação FedAvg, série temporal BEHRT e justificativa RAG, com diagramas Mermaid e passo a passo textual.
 
@@ -611,6 +612,279 @@ Com desktop + notebook: servidor pronto → notebook conecta → round 1 começa
 | Privacidade | Simulada | Real — dados nunca saem da máquina |
 | Overhead de rede | Zero | ~2.8 MB × 2 × N rounds |
 | Latência entre rounds | Milissegundos | Depende da rede local |
+
+---
+
+## Padrões de Interoperabilidade (FHIR R4 + LOINC)
+
+### Princípio fundamental — as probabilidades pertencem ao quadro clínico, não ao indivíduo
+
+O modelo federado aprende `P(desfecho | quadro clínico)` — a probabilidade de um
+desfecho dado um conjunto de exames e medições. O identificador do paciente **nunca
+é uma feature do modelo**. O pseudônimo HMAC existe apenas para rastrear a sequência
+temporal de exames durante o treinamento; desaparece depois. O modelo global resultante
+não sabe quem é nenhum paciente.
+
+Consequência direta: as probabilidades retornadas pelo MOSAIC-FL são uma propriedade
+do **quadro clínico**, não do indivíduo. São uma afirmação estatística sobre um padrão,
+aprendida de múltiplas fontes, sem memória de nenhuma pessoa específica. Podem ser
+auditadas, publicadas e comparadas sem risco de re-identificação.
+
+```
+Dados clínicos (ficam no banco local do hospital — nunca saem)
+        │
+        ▼
+   Treinamento FL (Flower FedProx — só pesos do modelo trafegam)
+        │
+        ▼
+   Modelo global (não contém nenhum dado de paciente)
+        │
+        ▼
+   Inferência local (quadro clínico → SimplifiedBEHRT + temperatura calibrada)
+        │
+        ▼
+   InferenceOutput (probabilidades por desfecho — sem identidade de paciente)
+        │
+        ├──► integration/clinical-path/   → PatientExport → arquivos ClinicalPath v2.0
+        └──► integration/fhir/            → RiskAssessment FHIR R4 (token de correlação)
+```
+
+Os dois módulos de exportação recebem **contratos diferentes** e são completamente
+independentes entre si. O módulo FHIR não importa nada do módulo ClinicalPath.
+
+---
+
+### Os dois contratos de exportação
+
+#### `PatientExport` — contrato do ClinicalPath
+
+O ClinicalPath é uma ferramenta de **visualização clínica** que renderiza a evolução
+temporal dos exames de um paciente. Para isso, precisa dos valores laboratoriais reais,
+fases clínicas e a predição injetada como exames sintéticos: `FL_RISK_SCORE` (escalar de risco)
+e a distribuição completa de probabilidade por desfecho (`FL_PROB_ALTA`, `FL_PROB_UTI`, etc.)
+com incerteza MC-Dropout associada (`FL_PROB_ALTA_INCERTEZA`, etc.).
+
+```python
+# integration/clinical-path/models.py — já implementado
+@dataclass
+class ProbabilityEstimate:
+    value: float        # probabilidade média (MC-Dropout), ∈ [0, 1]
+    uncertainty: float  # desvio padrão entre amostras MC, ∈ [0, 1]
+
+@dataclass
+class RiskPrediction:
+    date: date
+    risk_score: float                                    # escalar ponderado ∈ [0,1]
+    phase: ClinicalPhase = ClinicalPhase.HOSPITALIZED
+    class_probabilities: dict[str, ProbabilityEstimate] = field(default_factory=dict)
+    # class_probabilities preenchido apenas para a predição atual;
+    # histórico carregado do banco tem apenas risk_score.
+
+@dataclass
+class PatientExport:
+    patient_id: str          # pseudônimo LGPD (HMAC-SHA256)
+    sex: str
+    age: float
+    exam_records: list[ExamRecord]
+    risk_predictions: list[RiskPrediction]
+```
+
+`PatientExport` é exclusivo do ClinicalPath. O módulo FHIR nunca o recebe.
+
+#### `InferenceOutput` — contrato do FHIR R4
+
+O FHIR exporter recebe apenas o resultado do cálculo — sem dados clínicos brutos,
+sem identidade de paciente. É arquiteturalmente impossível vazar dados clínicos por
+esse caminho porque o tipo não os carrega.
+
+```python
+# integration/fhir/models.py — a implementar
+@dataclass
+class InferenceOutput:
+    correlation_token: str              # token opaco gerado pelo hospital chamador
+    predicted_at: datetime
+    predictions: list[tuple[str, float]]  # (desfecho, probabilidade)
+    model_round: int
+    temperature: float
+    ece: float
+```
+
+O `correlation_token` é a solução para o requisito obrigatório de `subject` no FHIR R4
+(ver seção abaixo). É gerado pelo sistema do hospital que chama a API — um UUID
+descartável sem vínculo com o prontuário. O MOSAIC-FL o ecoa de volta na resposta e
+**não armazena o mapeamento**. Apenas o hospital sabe o que o token representa.
+
+```
+Hospital → POST /ingest { correlation_token: "uuid-efêmero", exams: [...] }
+MOSAIC-FL → InferenceOutput { correlation_token: "uuid-efêmero", predictions: [...] }
+MOSAIC-FL → RiskAssessment  { subject: { identifier: "uuid-efêmero" }, prediction: [...] }
+```
+
+---
+
+### HL7 FHIR R4
+
+**HL7 FHIR** (Fast Healthcare Interoperability Resources, versão R4 — 2019) é o padrão
+internacional de interoperabilidade em saúde mantido pela organização HL7 International.
+É adotado obrigatoriamente por Epic, Cerner, Oracle Health e todos os grandes fornecedores
+de prontuário eletrônico, e está em implementação crescente no Brasil (Rede Nacional de
+Dados em Saúde — RNDS, portaria SCTIE/MS 2022).
+
+**Por que FHIR e não outros padrões:**
+
+| Padrão | Caso de uso principal | Por que não é suficiente aqui |
+|---|---|---|
+| HL7 v2 | Mensageria legada (ADT, ORU) | Formato binário, não REST, sem JSON nativo |
+| OMOP CDM | Analytics e pesquisa retrospectiva | Banco de dados, não API; sem recurso de predição |
+| OpenEHR | Modelagem clínica estruturada | Adoção limitada no Brasil; complexidade alta |
+| TISS/ANS | Faturamento de planos de saúde | Escopo restrito a dados financeiro-assistenciais |
+| **FHIR R4** | **Integração operacional entre sistemas** | — é o escolhido |
+
+**O FHIR é federado?**
+
+Não por si só. O FHIR define *como estruturar e transportar* dados de saúde via REST/JSON,
+mas não impõe arquitetura distribuída. A natureza federada do MOSAIC-FL vem do Flower
+(FL training); o FHIR entra apenas na camada de saída. O FHIR resolve interoperabilidade
+de resultados; o Flower resolve privacidade dos dados de treinamento. São preocupações
+distintas e complementares.
+
+**Restrição do padrão: `subject` é obrigatório**
+
+O FHIR R4 é fundamentalmente centrado no paciente. O recurso `RiskAssessment` exige
+`subject` (cardinalidade 1..1) com tipo `Reference(Patient | Group)`. Um recurso sem
+`subject` é inválido pelo padrão e seria rejeitado por qualquer validador FHIR.
+
+A solução é o `correlation_token`: um identificador efêmero, gerado pelo hospital
+chamador, sem significado fora do contexto daquela requisição. O MOSAIC-FL nunca
+associa o token a um paciente real — essa associação existe apenas no sistema do hospital.
+
+**Recurso utilizado: `RiskAssessment`**
+
+```json
+{
+  "resourceType": "RiskAssessment",
+  "status": "final",
+  "subject": {
+    "identifier": {
+      "system": "urn:mosaicfl:correlation",
+      "value": "uuid-efêmero-gerado-pelo-hospital"
+    }
+  },
+  "occurrenceDateTime": "2026-06-24T10:00:00Z",
+  "method": {
+    "coding": [{
+      "system": "urn:mosaicfl",
+      "code": "FedProx-BEHRT-v2",
+      "display": "Federated FedProx + SimplifiedBEHRT, round 12, T=1.24"
+    }]
+  },
+  "prediction": [
+    { "outcome": { "text": "Alta hospitalar" },       "probabilityDecimal": 0.61 },
+    { "outcome": { "text": "Internação prolongada" }, "probabilityDecimal": 0.22 },
+    { "outcome": { "text": "UTI" },                   "probabilityDecimal": 0.09 },
+    { "outcome": { "text": "Óbito" },                 "probabilityDecimal": 0.08 }
+  ],
+  "note": [{ "text": "ECE=0.038 | T=1.24 | round=12 | n_samples=2847" }]
+}
+```
+
+Campos **ausentes por design**: `Patient.name`, `Patient.birthDate`, `Patient.identifier`
+com CPF/prontuário, `Observation` (valores laboratoriais). O `RiskAssessment` contém
+exclusivamente o resultado do cálculo e um token efêmero de correlação.
+
+---
+
+### LOINC
+
+**LOINC** (Logical Observation Identifiers Names and Codes) é o vocabulário controlado
+padrão para identificar exames laboratoriais e medidas clínicas de forma universal,
+mantido pelo Regenstrief Institute (EUA) e aceito pelo FHIR, ONC e RNDS.
+
+O MOSAIC-FL usa LOINC internamente para tokenização semântica no `SequencePipeline`
+(`{analito}_{baixo|normal|alto}`) e no mapeamento dos analitos do FAPESP. No contexto
+do FHIR, LOINC seria relevante se o sistema expusesse recursos `Observation` — o que
+não ocorre, pois os valores laboratoriais nunca saem do banco do hospital.
+
+**Mapeamento de referência dos analitos FAPESP:**
+
+| Analito FAPESP | Código LOINC | Nome oficial LOINC |
+|---|---|---|
+| Hemoglobina | 718-7 | Hemoglobin [Mass/volume] in Blood |
+| Leucócitos | 6690-2 | Leukocytes [#/volume] in Blood |
+| Plaquetas | 777-3 | Platelets [#/volume] in Blood |
+| Creatinina | 2160-0 | Creatinine [Mass/volume] in Serum or Plasma |
+| PCR | 1988-5 | C reactive protein [Mass/volume] in Serum or Plasma |
+| Ferritina | 2276-4 | Ferritin [Mass/volume] in Serum or Plasma |
+| D-dímero | 48066-5 | Fibrin D-dimer DDU [Mass/volume] in Platelet poor plasma |
+| LDH | 2532-0 | Lactate dehydrogenase [Enzymatic activity/volume] in Serum or Plasma |
+| Troponina | 6598-7 | Troponin T.cardiac [Mass/volume] in Serum or Plasma |
+
+Analitos sem código LOINC confirmado usam `urn:mosaicfl` como namespace temporário
+e devem ser revisados com acesso ao browser LOINC (loinc.org).
+
+---
+
+### Módulos de integração
+
+```
+integration/
+├── clinical-path/          # Exportação para ClinicalPath v2.0 (implementado)
+│   ├── models.py           # PatientExport, ExamRecord, RiskPrediction, ProbabilityEstimate, ClinicalPhase
+│   ├── exporter.py         # ClinicalPathExporter — gera arquivos .txt por paciente
+│   └── watcher.py          # Monitora diretório de saída (opcional)
+│
+├── fhir/                   # Exportação FHIR R4 (implementado)
+│   ├── models.py           # InferenceOutput (contrato de entrada; valida soma de probabilidades)
+│   ├── mapper.py           # FHIRExporter.to_risk_assessment() → dict RiskAssessment R4 válido
+│   └── loinc_map.py        # Tabela LOINC dos analitos FAPESP + aliases (referência interna)
+│
+└── fapesp/                 # Carregamento do dataset FAPESP (fonte de dados)
+    └── ...
+```
+
+**Isolamento do módulo FHIR:**
+- Não importa nada de `infrastructure/` (onde vive o banco)
+- Não recebe conexão de banco no construtor — só configuração estática
+- Sem acesso à string de conexão PostgreSQL
+- Sem acesso a `PatientExport` ou qualquer dado clínico bruto
+
+**Como a API chama os exporters:**
+
+```python
+# infrastructure/mosaicfl_api/service.py — dentro de _run_ingest
+
+# ClinicalPath — recebe quadro clínico completo
+patient_export = PatientExport(patient_id=pid, ...)
+export_path = _exporter.export(patient_export, out)
+
+# FHIR R4 — recebe apenas o resultado do cálculo, sem dados clínicos
+fhir_output = InferenceOutput(
+    predictions=[(k, v["value"]) for k, v in proba["probabilities"].items()],
+    model_round=proba.get("checkpoint_round") or 0,
+    temperature=proba.get("temperature", 1.0),
+    ece=proba.get("ece", 0.0),
+    correlation_token=request.correlation_token or "",
+)
+fhir_ra = _fhir_exporter.to_risk_assessment(fhir_output)
+# fhir_ra é retornado em IngestResponse.fhir_risk_assessment
+```
+
+---
+
+### Responsabilidades por camada
+
+| Preocupação | Quem resolve |
+|---|---|
+| Dados de treino nunca saem do hospital | Flower FedProx (FL) |
+| Apenas pesos do modelo trafegam na rede | Flower FedProx (FL) |
+| Probabilidades sem identidade de paciente | Arquitetura do `InferenceOutput` |
+| Token de correlação efêmero | Sistema do hospital chamador |
+| Resultado interoperável com qualquer sistema FHIR | `integration/fhir/` |
+| Visualização clínica temporal | `integration/clinical-path/` |
+| Vocabulário de exames sem ambiguidade | LOINC |
+
+O FHIR não adiciona privacidade — adiciona **interoperabilidade** ao resultado que o
+FL já torna privado por construção.
 
 ---
 

@@ -44,7 +44,7 @@ Dividido em três partes:
   reais do `test_loader`; `patient_data` construído do vocabulário inverso da amostra.
   `ClinicalRAG` usa `_InMemoryStore` (numpy cosine similarity) quando `FL_DB_URL` está
   vazio — sem dependência de PostgreSQL em experimentos. Labels dos perfis extraídos de
-  `MODEL_CFG.class_labels` (5 classes de duração), configuráveis via `FL_CLASS_LABELS`.
+  `MODEL_CFG.class_labels` (4 classes de prognóstico: alta, internacao_prolongada, uti, obito), configuráveis via `FL_CLASS_LABELS`.
   `main()` executa o RAG em ambos os modos (banco e CSV/sintético).
 
 ### Qualidade de código estático
@@ -104,6 +104,18 @@ Dividido em três partes:
 - [x] ~~**Exponential backoff com jitter no reconect do cliente FL**~~
 - [x] ~~**DataLoader cache no cliente (evita re-query ao banco a cada round)**~~
 - [x] ~~**RotatingFileHandler (20MB / 5 backups)**~~
+
+- [x] ~~**`hospital_id` explícito no DataSourceFactory e runner**~~
+
+  `SimulatedDataSource` e `CSVDataSource` passaram a aceitar `hospital_id: Optional[str] = None`. `_client_fn()` em `runner.py` lê `hospital-id` de `context.node_config` (ou `FL_HOSPITAL_ID`), repassa para `DataSourceFactory.create()`. Cache key mudou de `str` para `(source_type, hospital_id)` — evita colisão quando dois clientes carregam datasources diferentes do mesmo tipo.
+
+- [x] ~~**`temperature` no retorno de `predict_proba()`**~~
+
+  Ambos os returns de `predict_proba()` em `inference_engine.py` incluem `"temperature": self._temperature`. Necessário para que `service.py` construa `InferenceOutput` para exportação FHIR com o valor de T real do checkpoint.
+
+- [x] ~~**`evaluate()` integrado no script de simulação com relatório pré/pós-calibração**~~
+
+  `run_federated_learning_manual()` e `run_federated_learning_ray()` em `run_experiments_simulation.py` executam `evaluate()` antes e depois do temperature scaling. Métricas incluem ECE, AUC-ROC, F1 e matriz de confusão. Resultados gravados em JSON em `experiments/logs/`. Bug corrigido: `scaler.T` estava sendo referenciado fora de escopo em `_save_evaluation_report()` na `strategy.py`.
 
 ### Configuração e documentação
 
@@ -214,8 +226,25 @@ Dividido em três partes:
 ### Dados e Integração
 
 - [x] ~~**Exportador ClinicalPath**~~
-- [ ] Integração HL7 FHIR com EPR dos hospitais
-- [ ] Conector genérico para prontuários eletrônicos brasileiros (MV, Tasy, Soul MV)
+
+- [x] ~~**Módulo FHIR R4 — `integration/fhir/` implementado e isolado**~~
+
+  `InferenceOutput` (contrato sem dados clínicos, apenas probabilidades + `correlation_token`), `FHIRExporter.to_risk_assessment()` (gera `RiskAssessment` FHIR R4 válido), `loinc_map.py` (22 analitos mapeados). Isolamento arquitetural verificado por testes: o módulo não importa `infrastructure/`, `PatientExport` nem `sqlalchemy`. `correlation_token` é gerado pelo hospital chamador e ecoado no campo `subject.identifier` — MOSAIC-FL nunca armazena o mapeamento. `service.py` integrado: `IngestRequest` aceita `correlation_token`, `IngestResponse` retorna `fhir_risk_assessment`. 33 testes unitários.
+
+- [ ] **ClinicalPath: adicionar `FL_PROB_*` ao `list_exams.txt`**
+
+  Exames sintéticos injetados pelo exportador (`FL_PROB_ALTA`, `FL_PROB_INTERNACAO_PROLONGADA`, `FL_PROB_UTI`, `FL_PROB_OBITO`, variantes `_INCERTEZA`) não estão no `list_exams.txt` do ClinicalPath. Pendente autorização do Prof. Claudio Linhares (email enviado em `docs/email_claudio.md`).
+
+- [ ] **ClinicalPath: implementar geração do `network.txt` no exportador**
+
+  O exportador atual não gera esse arquivo, que o ClinicalPath requer para carregar o paciente. A lógica de geração já foi mapeada — é simples implementar do nosso lado sem alterar o ClinicalPath.
+
+- [ ] **ClinicalPath: esquema de IDs do `time-metadata.txt` (JGraphX)**
+
+  O ClinicalPath usa `exam_id × num_timestamps + timestamp_id` para nós internos do grafo JGraphX. Sem acesso ao código-fonte do `.jar`, não é possível determinar a fórmula exata. Bloqueado até resposta do Prof. Claudio.
+
+- [ ] Integração FHIR com EPR dos hospitais (Tasy, MV, Soul MV)
+- [ ] Conector genérico para prontuários eletrônicos brasileiros
 - [ ] Detecção de out-of-distribution: rejeitar exames com valores fisiologicamente impossíveis além do `value >= 0` atual
 
 ### Segurança e Privacidade
@@ -227,7 +256,117 @@ Dividido em três partes:
 
 ### Modelo
 
-- [ ] Temperature scaling (ver seção Dependências de Produção)
+- [x] ~~**Temperature scaling pós-treinamento (ver seção Dependências de Produção)**~~
+- [ ] **Medir ECE com dados reais do FAPESP**
+
+  Em simulação com dados sintéticos o ECE foi 0,44 — colapso para classe majoritária, probabilidades não confiáveis. Medição com dados reais do FAPESP está pendente do carregamento completo do dataset no PostgreSQL. Limiar aceitável para defesa: ECE < 0,10 (idealmente < 0,05).
+
+- [ ] **[DESKTOP] Confirmar colunas de magnitude e demográficos no dataset bruto FAPESP antes de implementar**
+
+  > Prompt original: *"o dataset que temos permite processar magnitudes? você citou isso duas vezes e admito do meu conhecimento do tema, essa poderia ser um fator que traria força para o treinamento. Outro ponto também é que apesar de não conhecermos os pacientes, a idade e o genero se forem informados devem fazer parte da busca das probabilidades. Devemos ter 2 tipos de treinamento: um genérico com a média que foi justamente o ponto que você relatou que fazemos e um especifico em que temos a idade e o genero do paciente. Avalie os ganhos da minha afirmação e a viabilidade da implementação no estado atual do mosaicfl"*
+
+  **Contexto arquitetural já analisado (retomar no desktop):**
+
+  O schema garante que `metrics.exam_records.value` (REAL) e `metrics.exam_records.ref_low/ref_high` existem, e que `clinical.attendances.age` (REAL) e `.sex` (TEXT) existem. Porém a migration 009 adicionou colunas via ALTER TABLE e é possível que os CSVs FAPESP não tenham preenchido `value` ou que `age`/`sex` estejam nulos na maioria dos registros.
+
+  **O que confirmar no desktop (com acesso ao PostgreSQL com dados reais):**
+  ```sql
+  -- 1. Magnitude: quantos registros têm value não-nulo e não-sentinela?
+  SELECT COUNT(*) FILTER (WHERE value IS NOT NULL AND value >= 0) AS com_magnitude,
+         COUNT(*) AS total
+  FROM metrics.exam_records;
+
+  -- 2. Referências canônicas: cobertura por analito
+  SELECT analyte, COUNT(*) FILTER (WHERE canonical_ref_low IS NOT NULL) AS com_ref,
+         COUNT(*) AS total
+  FROM metrics.exam_records GROUP BY analyte ORDER BY total DESC LIMIT 20;
+
+  -- 3. Demográficos: cobertura de age e sex nas internações
+  SELECT COUNT(*) FILTER (WHERE age IS NOT NULL AND age > 0) AS com_idade,
+         COUNT(*) FILTER (WHERE sex IN ('M','F')) AS com_sexo,
+         COUNT(*) AS total
+  FROM clinical.attendances;
+  ```
+
+  **Proposta de implementação (pendente confirmação de cobertura):**
+  - **Magnitudes**: bucketing fino dentro de HIGH/NORMAL/LOW usando `(value - ref_low) / (ref_high - ref_low)` → 3 tiers por classe (ex.: `PCR_HIGH_MILD`, `PCR_HIGH_SEVERE`, `PCR_HIGH_CRITICAL`). Mantém arquitetura de tokens. Impacto esperado: AUC +2–5% nos analitos com gradiente clínico relevante (PCR, D-dimer, LDH, ferritina).
+  - **Dois modos de inferência**: late fusion no classifier head — `Linear(embed_dim + 2, 64)` para modo específico (age normalizado + sex binário), `Linear(embed_dim, 64)` para modo genérico (atual). Sem alteração no Transformer. Impacto esperado: AUC +10–15% em UTI/óbito dado que idade é o preditor dominante em COVID-19.
+  - **Arquivos a modificar**: `preprocessor.py` (SQL + `_build_tensors()`), `model.py` (classifier head + argumento `demographics`), `inference_engine.py` (passar demographics opcional), `service.py` (aceitar `age`/`sex` no request).
+
+---
+
+- [ ] **[DESKTOP / TCC] Resolver penalidade acadêmica: "Arquitetura BEHRT muito simplificada para o claim (−0,5)"**
+
+  Esta tarefa nasceu da avaliação ACADÊMICA do projeto (score 6.5/10 em 2026-06-24) e condensa toda a discussão travada sobre arquitetura do `SimplifiedBEHRT`. **Não é necessariamente um bug — é uma lacuna de justificativa na tese.** O objetivo é ou (a) justificar formalmente que a simplificação é a escolha correta, ou (b) estender a arquitetura onde há ganho real.
+
+  ### Arquitetura atual do SimplifiedBEHRT (`src/mosaicfl/core/model.py`)
+
+  - `embed_dim=64`, `num_layers=2`, `num_heads=4`, `ff_dim=128`, ~712K parâmetros
+  - **Sem** age embedding, **sem** visit embedding, **sem** segment embedding
+  - Positional encoding **sinusoidal** (não aprendido) — codifica posição dos exames na sequência temporal
+  - CLS token como `nn.Parameter` com `trunc_normal_(std=0.02)`, prefixado antes do encoder
+  - `BEHRTEncoderLayer` customizado que expõe pesos de atenção por cabeça (`average_attn_weights=False`)
+  - Classifier head: `Linear(64, 64) → ReLU → Dropout → Linear(64, 4)`
+  - Cada attention head opera em subespaço de **16 dimensões** (64 / 4 heads) — muito estreito
+
+  ### Por que foi simplificado (argumentos para a tese)
+
+  1. **Tamanho do dataset**: dataset FAPESP tem escala hospitalar única (uma internação por paciente, sem histórico longitudinal longo). O BEHRT original (Rao et al., 2020) foi pré-treinado em 1,6M de pacientes UK Biobank. Modelos mais profundos com `embed_dim` maior convergem para o mesmo mínimo local quando os dados são escassos — ou pior, overfitam.
+  2. **Hardware CPU-only**: sem GPU nos clientes FL (hospitais reais), treinamento com modelos profundos é inviável em rounds frequentes. O SimplifiedBEHRT treina em ~3min/round em CPU.
+  3. **Estrutura das internações FAPESP**: cada paciente tem uma única internação COVID-19. O BEHRT original foi projetado para sequências multi-visita ao longo de anos. Com internação única, visitas ordenadas no tempo são exames dentro do mesmo episódio — a distinção semântica entre "visit embedding" e "positional encoding temporal" colapsa.
+  4. **Ausência de pré-treinamento**: o BEHRT original usa MLM (Masked Language Model) sobre sequências de CID-10. Sem corpus pré-treinado em português/FAPESP, adicionar camadas extras sem pré-treino apenas adiciona parâmetros aleatórios a serem aprendidos do zero com dados escassos.
+
+  ### Por que NÃO adicionar mais camadas (discutido e concluído)
+
+  A intuição "mais camadas = mais capacidade" não se aplica aqui porque o **gargalo é `embed_dim=64`, não a profundidade**. Cada camada adicional processa o mesmo espaço residual de 64 dimensões (16-dim por cabeça). Mais camadas iterando sobre 16-dim não aumentam capacidade representacional — apenas aumentam computação. Para ganho real, precisaria aumentar `embed_dim` (ex.: 128 ou 256), o que triplica os parâmetros e o tempo de treino.
+
+  ### O que é defensável na tese vs. o que precisa de extensão
+
+  **Defensável sem mudança de código:**
+  - Justificar SimplifiedBEHRT pela escala do dataset e ausência de pré-treinamento (itens 1–4 acima)
+  - Citar que o positional encoding sinusoidal é equivalente ao aprendido em sequências curtas (Vaswani et al., 2017 — o paper original do Transformer)
+  - Adicionar comparação formal com baseline simples (logistic regression ou XGBoost nos mesmos tokens) para demonstrar que o Transformer agrega valor mesmo simplificado
+
+  **Precisa de extensão para eliminar a penalidade:**
+  - Injetar demográficos (idade e sexo) via **late fusion** no classifier head (tarefa acima)
+  - Documentar na tese o tradeoff escolhido: SimplifiedBEHRT vs. BEHRT completo
+
+  ### Late fusion vs. early fusion (concatenação no CLS) — decisão tomada
+
+  **Early fusion** (concatenar age no embedding CLS antes do encoder): distorce o espaço residual do Transformer. O CLS token tem semântica de agregação global; injetar um escalar dimensional incompatível antes das camadas de atenção força o modelo a "neutralizar" o sinal demográfico no residual stream ou a aprender atenção enviesada. Requer projeção e aumenta complexidade sem clareza de ganho.
+
+  **Late fusion** (concatenar age + sex ao CLS poolado antes do classifier head): **escolha correta para este cenário**. O Transformer aprende a representação da sequência de exames sem interferência demográfica. O classifier head recebe `[CLS_output ∈ R^64 || age_norm ∈ R^1 || sex_bin ∈ R^1]` e aprende a ponderar ambas as fontes de sinal independentemente. Não altera os pesos do Transformer. Compatível com FL (demographics ficam locais em cada hospital, nunca são transmitidos).
+
+  **Implementação concreta da late fusion:**
+  ```python
+  # model.py — SimplifiedBEHRT.forward()
+  def forward(self, x, demographics=None):
+      # ... (encoder atual, sem alteração)
+      pooled = cls_output  # shape: (B, embed_dim)
+      if demographics is not None:
+          pooled = torch.cat([pooled, demographics], dim=-1)  # (B, embed_dim + D)
+      return self.classifier(pooled)
+
+  # ModelConfig: dois classifier heads ou um head com dim condicional
+  # Opção mais limpa: único head com embed_dim + max_demo_dim, zerar demo quando ausente
+  ```
+
+- [ ] **Definir janela temporal da predição**
+
+  O modelo é treinado com o histórico completo da internação. Na prática clínica, a predição ocorre com dados parciais. Falta definir formalmente qual janela usar (ex.: fim do 1º, 3º ou 5º dia de internação). Decisão clínica — orientadora ou literatura devem embasar.
+
+- [ ] **Validar rótulos de desfecho clinicamente**
+
+  4 classes derivadas do FAPESP: alta, internação prolongada, UTI, óbito. Verificar se têm suporte na literatura como categorias de prognóstico independentes — ou se devem ser substituídas por escores de gravidade (ex.: SOFA score).
+
+- [ ] **Validar fórmula do risk score clinicamente**
+
+  Score escalar `sum(prob × linspace(0,1,n))` — sem justificativa clínica, escolha técnica. Substituir por fórmula com embasamento na literatura ou justificar formalmente para a defesa.
+
+- [ ] **Revisão clínica do mapeamento LOINC (22 analitos)**
+
+  Mapeamento feito de forma técnica; deve ser verificado por profissional de saúde ou terminologista antes de uso clínico.
+
 - [ ] Avaliação com AUC-ROC, sensibilidade e especificidade em estudo retrospectivo
 - [ ] Fine-tuning em corpus clínico brasileiro (MIMIC-BR ou equivalente)
 - [ ] Substituir DistilGPT-2 por LLM em português (Maritaca, Llama-PT) no módulo RAG
@@ -239,6 +378,16 @@ Dividido em três partes:
 - [ ] Monitoramento com Prometheus + Grafana para métricas de treino federado
 - [ ] Message broker (RabbitMQ ou Redis) para orquestração de rounds
 - [ ] Chamadas gRPC diretas do scheduler para o servidor Flower
+
+### Custo computacional e energético
+
+- [ ] **Medir e documentar custo computacional de um round de treinamento FL**
+
+  Tempo de treinamento, uso de CPU/GPU e consumo de memória por round — em simulação e (futuramente) com clientes reais. Relevante para cenários de restrição energética (hospitais com infraestrutura elétrica limitada ou instável).
+
+- [ ] **Avaliar viabilidade em hardware de baixo consumo**
+
+  Verificar se o modelo pode ser treinado/inferido em hardware mais modesto (ex.: sem GPU dedicada) e qual é o impacto na latência e precisão. Considerar quantização e pruning se necessário.
 
 ### Regulatório
 

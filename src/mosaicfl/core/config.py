@@ -37,11 +37,10 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
 _DEFAULT_CLASS_LABELS = (
-    "curta_1_3d",
-    "media_4_7d",
-    "longa_8_14d",
-    "muito_longa_15_30d",
-    "prolongada_30d_mais",
+    "alta",
+    "internacao_prolongada",
+    "uti",
+    "obito",
 )
 
 
@@ -54,7 +53,7 @@ class ModelConfig:
     num_layers:   int            = 2
     num_heads:    int            = 4
     ff_dim:       int            = 128
-    num_classes:  int            = 5
+    num_classes:  int            = 4
     class_labels: tuple[str, ...] = _DEFAULT_CLASS_LABELS
     dropout:      float          = 0.1
 
@@ -109,7 +108,7 @@ MODEL_CFG = ModelConfig(
     num_layers   = int(os.getenv("FL_NUM_LAYERS",   "2")),
     num_heads    = int(os.getenv("FL_NUM_HEADS",    "4")),
     ff_dim       = int(os.getenv("FL_FF_DIM",       "128")),
-    num_classes  = int(os.getenv("FL_NUM_CLASSES",  "5")),
+    num_classes  = int(os.getenv("FL_NUM_CLASSES",  "4")),
     class_labels = tuple(
         os.getenv("FL_CLASS_LABELS", ",".join(_DEFAULT_CLASS_LABELS)).split(",")
     ),

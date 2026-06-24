@@ -4,9 +4,8 @@ Modelo BEHRT simplificado para sequências temporais de exames clínicos (Simpli
 Arquitetura: embedding de tokens clínicos + PositionalEncoding sinusoidal +
 N camadas BEHRTEncoderLayer (Transformer com atenção multi-cabeça) + classificador linear.
 
-Tarefa: classificação multiclasse de duração de internação em 5 faixas (MODEL_CFG.num_classes=5):
-  0 = curta (1–3 d)  |  1 = média (4–7 d)  |  2 = longa (8–14 d)
-  3 = muito longa (15–30 d)  |  4 = prolongada (>30 d)
+Tarefa: classificação multiclasse de prognóstico clínico em 4 classes (MODEL_CFG.num_classes=4):
+  0 = alta  |  1 = internacao_prolongada  |  2 = uti  |  3 = obito
 
 Tokens de entrada: sequência temporal de analitos laboratoriais gerada pelo SequencePipeline.
   PAD=0 (padding)  |  UNK=1  |  CLS=2  |  vocab de analitos: ids 3 em diante

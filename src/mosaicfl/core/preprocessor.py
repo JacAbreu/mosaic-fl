@@ -278,24 +278,21 @@ def split_by_institution(
 from .config import MODEL_CFG
 
 
-# Mapeamento de duração em dias → classe (para SequencePipeline).
-# Internações < 1 dia são descartadas (entrada e saída no mesmo dia calendário).
-_DURATION_BINS: List[Tuple[int, int, int]] = [
-    (1,  3,  0),   # curta
-    (4,  7,  1),   # média
-    (8,  14, 2),   # longa
-    (15, 30, 3),   # muito longa
-]
-_LABEL_PROLONGADA = 4   # > 30 dias
+# Mapeamento de outcome_class (FAPESP) → classe de prognóstico (4 classes).
+# outcome_class vem de classify_outcome() em integration/fapesp/transforms.py.
+# Classes excluídas na query SQL (2=alta administrativa, 3=transferência) não aparecem aqui.
+_OUTCOME_TO_PROGNOSIS: Dict[int, int] = {
+    0: 0,  # curado       → alta
+    1: 0,  # melhora      → alta
+    4: 1,  # em atendimento → internacao_prolongada
+    5: 2,  # uti          → uti
+    6: 3,  # obito        → obito
+}
 
 
-def _bin_duration(days: int) -> int:
-    for lo, hi, label in _DURATION_BINS:
-        if lo <= days <= hi:
-            return label
-    if days > 30:
-        return _LABEL_PROLONGADA
-    return -1   # < 1 dia — inválido, será descartado
+def _map_outcome(outcome_class: int) -> int:
+    """Converte outcome_class do FAPESP em classe de prognóstico (0–3). Retorna -1 se desconhecido."""
+    return _OUTCOME_TO_PROGNOSIS.get(outcome_class, -1)
 
 
 class TokenMode:
@@ -337,6 +334,7 @@ SELECT
     a.patient_id,
     a.attendance_id,
     a.hospital_id,
+    co.outcome_class,
     (co.outcome_at - a.attended_at)     AS duration_days,
     e.analyte,
     e.classification,
@@ -462,20 +460,22 @@ class SequencePipeline:
         • 3 = transferência (desfecho clínico desconhecido — paciente continua em outro serviço)
     - Duração mínima: ≥ 1 dia (exclui entradas e saídas no mesmo dia calendário)
 
-    Label — faixas de duração de internação (5 classes)
-    -----------------------------------------------------
-    +--------+----------------+-------------+
-    | Classe | Faixa          | Nome        |
-    +--------+----------------+-------------+
-    |   0    | 1–3 dias       | curta       |
-    |   1    | 4–7 dias       | média       |
-    |   2    | 8–14 dias      | longa       |
-    |   3    | 15–30 dias     | muito longa |
-    |   4    | > 30 dias      | prolongada  |
-    +--------+----------------+-------------+
+    Label — cenários de evolução clínica (4 classes de prognóstico)
+    ----------------------------------------------------------------
+    +--------+------------------------+------------------------------+
+    | Classe | Nome                   | outcome_class FAPESP         |
+    +--------+------------------------+------------------------------+
+    |   0    | alta                   | 0 (curado) + 1 (melhora)     |
+    |   1    | internacao_prolongada  | 4 (em atendimento)           |
+    |   2    | uti                    | 5 (internado em UTI)         |
+    |   3    | obito                  | 6 (óbito)                    |
+    +--------+------------------------+------------------------------+
+
+    Classes excluídas na query: 2 (alta administrativa) e 3 (transferência) —
+    desfechos não-clínicos ou com desfecho final desconhecido.
 
     Atenção: o modelo BEHRT usa ``MODEL_CFG.num_classes`` para dimensionar o
-    classificador. Para usar este pipeline, configure ``num_classes = 5`` antes
+    classificador. Para usar este pipeline, configure ``num_classes = 4`` antes
     de instanciar ``SimplifiedBEHRT``.
 
     Sequência temporal
@@ -585,7 +585,7 @@ class SequencePipeline:
         sequences, labels, _ = self._build_tensors(df, vocab)
         _log(f"[pipeline] tensores prontos em {time.time() - t_t:.1f}s")
 
-        label_dist = {i: int((labels == i).sum()) for i in range(5)}
+        label_dist = {i: int((labels == i).sum()) for i in range(MODEL_CFG.num_classes)}
         _log(
             f"[pipeline] concluído em {time.time() - t0:.1f}s total — "
             f"{len(sequences):,} pacientes | dist={label_dist}"
@@ -629,7 +629,7 @@ class SequencePipeline:
             _log(f"[pipeline/per_hospital] {hosp}: construindo tensores ({n:,} atendimentos)...")
             t_h = time.time()
             seqs, lbls, _ = self._build_tensors(df_h, vocab)
-            dist = {i: int((lbls == i).sum()) for i in range(5)}
+            dist = {i: int((lbls == i).sum()) for i in range(MODEL_CFG.num_classes)}
             _log(
                 f"[pipeline/per_hospital] {hosp}: {len(seqs):,} sequências "
                 f"em {time.time() - t_h:.1f}s | dist={dist}"
@@ -699,8 +699,7 @@ class SequencePipeline:
         checkpoint = max(1, total // 10)
 
         for idx, ((_, _att_id), group) in enumerate(groups):
-            duration = int(group["duration_days"].iloc[0])
-            label = _bin_duration(duration)
+            label = _map_outcome(int(group["outcome_class"].iloc[0]))
             if label < 0:
                 continue
 

@@ -61,10 +61,23 @@ if str(_INTEGRATION_DIR) not in sys.path:
     sys.path.insert(0, str(_INTEGRATION_DIR))
 
 from exporter import ClinicalPathExporter  # noqa: E402
-from models import ClinicalPhase, ExamRecord, PatientExport, RiskPrediction  # noqa: E402
+from models import (  # noqa: E402
+    ClinicalPhase, ExamRecord, PatientExport, ProbabilityEstimate, RiskPrediction,
+)
 
 from .db import PatientDB  # noqa: E402
 from .inference_engine import InferenceEngine  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# integration/fhir
+# ---------------------------------------------------------------------------
+_FHIR_DIR = Path(__file__).parent.parent.parent / "integration" / "fhir"
+if str(_FHIR_DIR.parent) not in sys.path:
+    sys.path.insert(0, str(_FHIR_DIR.parent))
+
+from integration.fhir import FHIRExporter, InferenceOutput  # noqa: E402
+
+_fhir_exporter = FHIRExporter()
 
 # ---------------------------------------------------------------------------
 # Configuração
@@ -394,21 +407,23 @@ class PredictResponse(BaseModel):
 
 
 class IngestRequest(BaseModel):
-    patient_id: str
-    sex:        str   = "M"
-    age:        float = 0.0
-    exams:      list[ExamInput]
-    output_dir: Optional[str] = None
+    patient_id:        str
+    sex:               str   = "M"
+    age:               float = 0.0
+    exams:             list[ExamInput]
+    output_dir:        Optional[str] = None
+    correlation_token: Optional[str] = None
 
 
 class IngestResponse(BaseModel):
-    patient_id:          str
-    risk_score:          float
-    export_path:         str
-    class_probabilities: dict[str, ClassProbability]
-    predicted_class:     int
-    predicted_label:     str
-    model_metadata:      ModelMetadata
+    patient_id:           str
+    risk_score:           float
+    export_path:          str
+    class_probabilities:  dict[str, ClassProbability]
+    predicted_class:      int
+    predicted_label:      str
+    model_metadata:       ModelMetadata
+    fhir_risk_assessment: Optional[dict] = None
 
 
 class RiskEntry(BaseModel):
@@ -532,19 +547,37 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
             if patient_row is None:
                 raise HTTPException(status_code=500, detail="Erro interno: paciente não encontrado após upsert")
 
+            today_proba = {
+                k: ProbabilityEstimate(value=v["value"], uncertainty=v["uncertainty"])
+                for k, v in proba["probabilities"].items()
+            }
             patient_export = PatientExport(
                 patient_id=pid,
                 sex=patient_row["sex"],
                 age=patient_row["age"],
                 exam_records=history_records,
                 risk_predictions=[
-                    RiskPrediction(date=h["date"], risk_score=h["risk_score"])
+                    RiskPrediction(
+                        date=h["date"],
+                        risk_score=h["risk_score"],
+                        class_probabilities=today_proba if h["date"] == today else {},
+                    )
                     for h in all_risk_rows
                 ],
             )
-            # Exportação de arquivo: idempotente (sobrescreve). Se falhar, a transação reverte.
+            # Exportação ClinicalPath: idempotente (sobrescreve). Se falhar, a transação reverte.
             export_path = _exporter.export(patient_export, out)
             _db.set_export_path_tx(conn, pid, str(export_path))
+
+            # Exportação FHIR R4: probabilidades sem dados clínicos, sem identidade real.
+            fhir_output = InferenceOutput(
+                predictions=[(k, v["value"]) for k, v in proba["probabilities"].items()],
+                model_round=proba.get("checkpoint_round") or 0,
+                temperature=proba.get("temperature", 1.0),
+                ece=proba.get("ece", 0.0),
+                correlation_token=request.correlation_token or "",
+            )
+            fhir_ra = _fhir_exporter.to_risk_assessment(fhir_output)
 
     logger.info(
         "exam_ingested",
@@ -570,6 +603,7 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
         class_probabilities={k: ClassProbability(**v) for k, v in proba["probabilities"].items()},
         predicted_class=proba["predicted_class"],
         predicted_label=proba["predicted_label"],
+        fhir_risk_assessment=fhir_ra,
         model_metadata=ModelMetadata(
             trained=proba["trained"],
             calibrated=proba.get("calibrated", False),

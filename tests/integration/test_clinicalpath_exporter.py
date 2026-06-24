@@ -16,11 +16,17 @@ from exporter import ClinicalPathExporter
 from models import (
     ClinicalPhase,
     ExamRecord,
+    FL_PROB_REF_HIGH,
+    FL_PROB_REF_LOW,
+    FL_PROB_UNCERTAINTY_REF_HIGH,
     FL_RISK_EXAM_NAME,
     FL_RISK_REF_HIGH,
     FL_RISK_REF_LOW,
     PatientExport,
+    ProbabilityEstimate,
     RiskPrediction,
+    prob_exam_name,
+    uncertainty_exam_name,
 )
 
 # ---------------------------------------------------------------------------
@@ -32,22 +38,45 @@ D1 = date(2020, 3, 2)
 D2 = date(2020, 3, 5)
 
 
-def _make_patient(with_risk: bool = True) -> PatientExport:
+_SAMPLE_PROBA = {
+    "alta":                 ProbabilityEstimate(value=0.61, uncertainty=0.04),
+    "internacao_prolongada": ProbabilityEstimate(value=0.22, uncertainty=0.03),
+    "uti":                  ProbabilityEstimate(value=0.09, uncertainty=0.02),
+    "obito":                ProbabilityEstimate(value=0.08, uncertainty=0.01),
+}
+
+
+def _make_patient(with_risk: bool = True, with_proba: bool = False) -> PatientExport:
     records = [
         ExamRecord("WBC", D0, 8.5, ClinicalPhase.HOSPITALIZED, 4.0, 11.0, 4.0, 11.0),
         ExamRecord("Hb", D0, 12.1, ClinicalPhase.HOSPITALIZED, 12.0, 17.0, 11.0, 15.0),
         ExamRecord("WBC", D1, 9.2, ClinicalPhase.HOSPITALIZED, 4.0, 11.0, 4.0, 11.0),
         ExamRecord("CRP", D2, 45.0, ClinicalPhase.POST_DISCHARGE, 0.0, 5.0, 0.0, 5.0),
     ]
-    preds = (
-        [
+    if not with_risk:
+        preds = []
+    elif with_proba:
+        preds = [
+            RiskPrediction(D0, 0.12, ClinicalPhase.HOSPITALIZED),
+            RiskPrediction(D2, 0.55, ClinicalPhase.POST_DISCHARGE,
+                           class_probabilities=_SAMPLE_PROBA),
+        ]
+    else:
+        preds = [
             RiskPrediction(D0, 0.12, ClinicalPhase.HOSPITALIZED),
             RiskPrediction(D2, 0.55, ClinicalPhase.POST_DISCHARGE),
         ]
-        if with_risk
-        else []
-    )
     return PatientExport("P001", "F", 55.0, records, preds)
+
+
+@pytest.fixture(scope="module")
+def exported_with_proba(tmp_path_factory):
+    out = tmp_path_factory.mktemp("cp_export_proba")
+    patient = _make_patient(with_risk=True, with_proba=True)
+    patient.patient_id = "P002"
+    exporter = ClinicalPathExporter()
+    patient_dir = exporter.export(patient, out)
+    return patient_dir, patient
 
 
 @pytest.fixture(scope="module")
@@ -82,17 +111,24 @@ class TestExamIdFile:
         indices = [int(l.split()[0]) for l in lines]
         assert indices == list(range(len(indices)))
 
-    def test_fl_risk_score_has_last_index(self, exported):
+    def test_fl_risk_score_precedes_prob_exams(self, exported):
+        """FL_RISK_SCORE must appear before any FL_PROB_* entries."""
         patient_dir, _ = exported
         lines = (patient_dir / "exam-id.txt").read_text().splitlines()
-        last_idx, last_name = lines[-1].split(" ", 1)
-        assert last_name == FL_RISK_EXAM_NAME
-        assert int(last_idx) == len(lines) - 1
+        names = [l.split(" ", 1)[1] for l in lines]
+        if FL_RISK_EXAM_NAME not in names:
+            return
+        risk_idx = names.index(FL_RISK_EXAM_NAME)
+        for i, name in enumerate(names):
+            if name.startswith("FL_PROB_"):
+                assert i > risk_idx, f"{name} appears before {FL_RISK_EXAM_NAME}"
 
     def test_real_exams_sorted_alphabetically(self, exported):
         patient_dir, _ = exported
         lines = (patient_dir / "exam-id.txt").read_text().splitlines()
-        names = [l.split(" ", 1)[1] for l in lines if l.split(" ", 1)[1] != FL_RISK_EXAM_NAME]
+        fl_prefixes = ("FL_RISK_", "FL_PROB_")
+        names = [l.split(" ", 1)[1] for l in lines
+                 if not any(l.split(" ", 1)[1].startswith(p) for p in fl_prefixes)]
         assert names == sorted(names)
 
     def test_no_fl_risk_score_without_predictions(self, tmp_path):
@@ -214,10 +250,14 @@ class TestNodeInlineTimeFile:
             code = int(line.split()[2])
             assert code in valid_codes
 
-    def test_row_count_equals_records_plus_predictions(self, exported):
+    def test_row_count_equals_records_plus_prediction_rows(self, exported):
+        """Each RiskPrediction contributes 1 (FL_RISK_SCORE) + 2×|class_probabilities| rows."""
         patient_dir, patient = exported
         lines = (patient_dir / "node-inline-time.txt").read_text().splitlines()
-        assert len(lines) == len(patient.exam_records) + len(patient.risk_predictions)
+        expected = len(patient.exam_records) + sum(
+            1 + 2 * len(p.class_probabilities) for p in patient.risk_predictions
+        )
+        assert len(lines) == expected
 
     def test_exam_ids_within_valid_range(self, exported):
         patient_dir, _ = exported
@@ -335,6 +375,91 @@ class TestFlRiskScoreExam:
         exporter.export(p2, tmp_path)
         assert (tmp_path / "Patients" / "A001" / "exam-id.txt").exists()
         assert (tmp_path / "Patients" / "B002" / "exam-id.txt").exists()
+
+
+# ---------------------------------------------------------------------------
+# FL probability distribution synthetic exams
+# ---------------------------------------------------------------------------
+
+
+class TestFlProbabilityDistribution:
+    def test_prob_exam_names_in_exam_id(self, exported_with_proba):
+        patient_dir, patient = exported_with_proba
+        names = {l.split(" ", 1)[1] for l in (patient_dir / "exam-id.txt").read_text().splitlines()}
+        proba_pred = next(p for p in patient.risk_predictions if p.class_probabilities)
+        for label in proba_pred.class_probabilities:
+            assert prob_exam_name(label) in names
+            assert uncertainty_exam_name(label) in names
+
+    def test_prob_values_in_complete_file(self, exported_with_proba):
+        patient_dir, patient = exported_with_proba
+        id_lines = (patient_dir / "exam-id.txt").read_text().splitlines()
+        complete  = (patient_dir / "node-inline-time-complete.txt").read_text().splitlines()
+        id_map = {name: int(idx) for line in id_lines
+                  for idx, name in [line.split(" ", 1)]}
+
+        proba_pred = next(p for p in patient.risk_predictions if p.class_probabilities)
+        for label, est in proba_pred.class_probabilities.items():
+            prob_id  = id_map[prob_exam_name(label)]
+            uncrt_id = id_map[uncertainty_exam_name(label)]
+
+            prob_rows  = [l for l in complete if int(l.split()[0]) == prob_id]
+            uncrt_rows = [l for l in complete if int(l.split()[0]) == uncrt_id]
+
+            assert len(prob_rows)  == 1
+            assert len(uncrt_rows) == 1
+            assert float(prob_rows[0].split()[3])  == pytest.approx(est.value)
+            assert float(uncrt_rows[0].split()[3]) == pytest.approx(est.uncertainty)
+
+    def test_prob_ref_range_values(self, exported_with_proba):
+        patient_dir, patient = exported_with_proba
+        id_lines = (patient_dir / "exam-id.txt").read_text().splitlines()
+        complete  = (patient_dir / "node-inline-time-complete.txt").read_text().splitlines()
+        id_map = {name: int(idx) for line in id_lines
+                  for idx, name in [line.split(" ", 1)]}
+
+        proba_pred = next(p for p in patient.risk_predictions if p.class_probabilities)
+        for label in proba_pred.class_probabilities:
+            prob_id  = id_map[prob_exam_name(label)]
+            uncrt_id = id_map[uncertainty_exam_name(label)]
+
+            prob_row  = next(l for l in complete if int(l.split()[0]) == prob_id)
+            uncrt_row = next(l for l in complete if int(l.split()[0]) == uncrt_id)
+
+            p_parts = prob_row.split()
+            assert float(p_parts[4]) == pytest.approx(FL_PROB_REF_LOW)
+            assert float(p_parts[5]) == pytest.approx(FL_PROB_REF_HIGH)
+
+            u_parts = uncrt_row.split()
+            assert float(u_parts[4]) == pytest.approx(FL_PROB_REF_LOW)
+            assert float(u_parts[5]) == pytest.approx(FL_PROB_UNCERTAINTY_REF_HIGH)
+
+    def test_historical_prediction_has_no_prob_rows(self, exported_with_proba):
+        """RiskPrediction without class_probabilities exports only FL_RISK_SCORE."""
+        patient_dir, patient = exported_with_proba
+        id_lines = (patient_dir / "exam-id.txt").read_text().splitlines()
+        compact  = (patient_dir / "node-inline-time.txt").read_text().splitlines()
+        id_map = {name: int(idx) for line in id_lines
+                  for idx, name in [line.split(" ", 1)]}
+
+        risk_id = id_map[FL_RISK_EXAM_NAME]
+        # The historical prediction (D0, no class_probabilities) should contribute
+        # exactly one row: the FL_RISK_SCORE row at timestamp 0.
+        ts0 = 0  # D0 is the earliest date
+        risk_rows_at_ts0 = [
+            l for l in compact
+            if int(l.split()[0]) == risk_id and int(l.split()[1]) == ts0
+        ]
+        assert len(risk_rows_at_ts0) == 1
+
+    def test_no_prob_exams_without_class_probabilities(self, tmp_path):
+        """A patient with no class_probabilities should have no FL_PROB_* exams."""
+        patient = _make_patient(with_risk=True, with_proba=False)
+        patient.patient_id = "P003"
+        exporter = ClinicalPathExporter()
+        pdir = exporter.export(patient, tmp_path)
+        names = [l.split(" ", 1)[1] for l in (pdir / "exam-id.txt").read_text().splitlines()]
+        assert not any(n.startswith("FL_PROB_") for n in names)
 
 
 # ---------------------------------------------------------------------------

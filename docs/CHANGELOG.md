@@ -25,7 +25,7 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 - `.pre-commit-config.yaml` — hooks de lint e formatação automáticos
 
 ### Corrigido
-- `MODEL_CFG.num_classes`: 2 → 5 (faixas de duração de internação como label, não binário)
+- `MODEL_CFG.num_classes`: 2 → 5 → 4 (migrado de binário para faixas de duração, depois para prognóstico clínico: alta, internacao_prolongada, uti, obito)
 - `set_parameters` em `client.py`: docstring corrigida — usa `state_dict()` (treináveis + buffers), não `model.parameters()`
 - `preprocess_v2.py`: `select_dtypes(include=['object'])` → `['object', 'str']` (Pandas4Warning)
 - `preprocess_v2.py`: `normalize_units` cast explícito para float antes de multiplicação

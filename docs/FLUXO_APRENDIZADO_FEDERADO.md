@@ -36,7 +36,7 @@ flowchart TD
     subgraph PIPELINE["SequencePipeline"]
         SQL[_SQL_INTERNADOS\nJOIN 3 tabelas]
         TOKEN[_make_token\nanalito + bucket]
-        BIN[_bin_duration\n5 faixas de internação]
+        BIN[_map_outcome\n4 classes de prognóstico]
         VOCAB[_build_vocab\nvocabulário global]
         TENSORS[_build_tensors\nsequências temporais]
         SPLIT[build_per_hospital\ndivisão por hospital]
@@ -241,18 +241,17 @@ O token `<CLS>` (id=2) é inserido pelo `SimplifiedBEHRT` no início da sequênc
 durante o forward pass — não pelo pipeline. O embedding do `<CLS>` é usado como
 representação global da internação para a classificação final.
 
-### Distribuição esperada das 5 classes (label)
+### Distribuição esperada das 4 classes de prognóstico (label)
 
-| Classe | Faixa | Nome | Interpretação clínica |
+| Classe | Nome | Derivado de `outcome_class` FAPESP | Interpretação clínica |
 |---|---|---|---|
-| 0 | 1–3 dias | curta | Caso leve, resolução rápida |
-| 1 | 4–7 dias | média | Quadro moderado, resposta ao tratamento |
-| 2 | 8–14 dias | longa | Complicação ou resposta lenta |
-| 3 | 15–30 dias | muito longa | Caso grave, comorbidades |
-| 4 | > 30 dias | prolongada | Crítico, UTI prolongada |
+| 0 | alta | 0 (curado), 1 (melhora) | Resolução favorável, paciente recebe alta |
+| 1 | internacao_prolongada | 4 (em atendimento) | Quadro sem desfecho imediato — ainda internado |
+| 2 | uti | 5 (uti) | Agravamento, necessidade de terapia intensiva |
+| 3 | obito | 6 (óbito) | Desfecho fatal |
 
 > A distribuição entre classes é verificada a cada rodada federada nos logs:
-> `dist={0: n0, 1: n1, 2: n2, 3: n3, 4: n4}`
+> `dist={0: n0, 1: n1, 2: n2, 3: n3}`
 
 ---
 
@@ -439,13 +438,13 @@ flowchart TD
 5. `SequencePipeline._load_dataframe()` abre conexão com PostgreSQL, testa com `SELECT 1`, executa `_SQL_INTERNADOS` (JOIN de `clinical.attendances`, `metrics.clinical_outcomes`, `metrics.exam_records`).
 6. Para cada linha do resultado, `_make_token()` gera o token semântico: `{analyte}_{baixo|normal|alto}` se houver referência, ou apenas `{analyte}`.
 7. `_build_vocab()` conta frequência de todos os tokens e mantém os `vocab_size − 3 = 9.997` mais frequentes. Tokens especiais: `PAD=0, UNK=1, CLS=2`.
-8. `_build_tensors()` agrupa por `(patient_id, attendance_id)`, ordena exames por `(dia_relativo, analyte)`, converte tokens em IDs, aplica padding/truncamento para `max_seq_len=128`. `_bin_duration()` classifica a duração em 5 classes.
+8. `_build_tensors()` agrupa por `(patient_id, attendance_id)`, ordena exames por `(dia_relativo, analyte)`, converte tokens em IDs, aplica padding/truncamento para `max_seq_len=128`. `_map_outcome()` converte `outcome_class` FAPESP em 4 classes de prognóstico.
 9. `build_per_hospital()` executa os passos 5–8 **uma única vez** e divide os tensores por `hospital_id`: HSL → cliente 0, BPSP → cliente 1.
 10. `prepare_dataloaders_from_db()` embaralha cada hospital, divide 80% treino / 10% validação / 10% holdout global, e cria `DataLoader`s com `batch_size=16`.
 
 ### Fase 2 — Inicialização do Servidor
 
-11. `SimplifiedBEHRT` é instanciado com `vocab_size=10.000`, `embed_dim=64`, `max_seq_len=128`, `num_layers=2`, `num_heads=4`, `num_classes=5`, `dropout=0.1`. Seed `42` garante reprodutibilidade.
+11. `SimplifiedBEHRT` é instanciado com `vocab_size=10.000`, `embed_dim=64`, `max_seq_len=128`, `num_layers=2`, `num_heads=4`, `num_classes=4`, `dropout=0.1`. Seed `42` garante reprodutibilidade.
 12. O estado do modelo global (`state_dict`) é extraído como lista de arrays NumPy — formato de comunicação com os clientes.
 
 ### Fase 3 — Rodada Federada (repetida até NUM_ROUNDS=20 ou convergência)
@@ -459,7 +458,7 @@ flowchart TD
 
 ### Fase 4 — RAG e Explicabilidade
 
-19. `BEHRTPatternExtractor` realiza forward pass no `test_loader` com o modelo final, extrai pesos de atenção por cabeça/camada e identifica os tokens mais ativados para cada uma das 5 classes de duração.
+19. `BEHRTPatternExtractor` realiza forward pass no `test_loader` com o modelo final, extrai pesos de atenção por cabeça/camada e identifica os tokens mais ativados para cada uma das 4 classes de prognóstico.
 20. Os perfis prototípicos são vetorizados pelo `sentence-transformers/all-MiniLM-L6-v2` e armazenados no ChromaDB.
 21. Para um caso de teste, `ClinicalRAG.explain()` recupera os `top_k=3` padrões mais similares, monta um prompt estruturado e o `DistilGPT-2` gera a justificativa (máx. `64` tokens).
 22. O sistema verifica alucinação (tokens de alta incerteza ou ausência de evidência clínica no contexto) e sinaliza `confiavel=True/False`.
@@ -521,9 +520,11 @@ flowchart TD
         F3[time-metadata.txt\nmetadados de fase clínica]
         F4[node-inline-time.txt\nvalores por dia]
         F5[node-inline-time-complete.txt\nregistro completo]
-        FL_RISK[FL_RISK_SCORE\nexame sintético — ref_high=0.3]
+        FL_RISK[FL_RISK_SCORE\nescalar de risco — ref_high=0.3]
+        FL_PROB[FL_PROB_{CLASSE}\n+ FL_PROB_{CLASSE}_INCERTEZA\npor classe de prognóstico]
         EXPORTER --> F1 & F2 & F3 & F4 & F5
         EXPORTER --> FL_RISK
+        EXPORTER --> FL_PROB
     end
 
     subgraph CP["ClinicalPath"]
@@ -534,7 +535,7 @@ flowchart TD
 
     API --> REQ
     BEHRT_INF --> EXPORTER
-    F1 & F2 & F3 & F4 & F5 & FL_RISK --> DIR
+    F1 & F2 & F3 & F4 & F5 & FL_RISK & FL_PROB --> DIR
 ```
 
 ### 10.2 Passo a Passo
@@ -557,11 +558,12 @@ O `InferenceEngine` já carregou esse checkpoint ao iniciar a `mosaicfl_api`.
    }
    ```
 
-2. **Tokenização e predição** — O `InferenceEngine.predict()` tokeniza os exames
+2. **Tokenização e predição** — O `InferenceEngine.predict_proba()` tokeniza os exames
    usando o mesmo vocabulário do `SequencePipeline` (`analito_baixo`, `analito_alto`,
-   `analito_normal`), constrói a sequência temporal, passa pelo BEHRT e retorna
-   um **score de risco de 0.0 a 1.0** (probabilidade ponderada das 5 faixas de
-   duração de internação).
+   `analito_normal`), constrói a sequência temporal e passa pelo BEHRT com MC Dropout
+   (50 passes). Retorna a **distribuição de probabilidade por prognóstico** (alta,
+   internacao_prolongada, uti, obito) com incerteza, e o `risk_score` escalar
+   derivado como média ponderada: `Σ(p_i × w_i)`, `w_i = linspace(0, 1, 4)`.
 
 3. **Exportação dos arquivos** — O `ClinicalPathExporter.export()` grava
    **5 arquivos plain-text** no diretório configurado por `FL_CLINICALPATH_OUTPUT`:
@@ -577,34 +579,42 @@ O `InferenceEngine` já carregou esse checkpoint ao iniciar a `mosaicfl_api`.
            └── node-inline-time-complete.txt  # registro completo com referências
    ```
 
-4. **Exame sintético `FL_RISK_SCORE`** — Junto com os exames reais, o exportador
-   adiciona uma linha especial:
-   - **Nome:** `FL_RISK_SCORE`
-   - **Valor:** score de risco calculado pelo BEHRT (ex: `0.42`)
-   - **Referência:** `ref_high=0.3`
+4. **Exames sintéticos injetados** — Junto com os exames reais, o exportador
+   injeta nas linhas do tempo do ClinicalPath:
 
-   Isso significa que o ClinicalPath exibirá os dias em que o score ultrapassa 0.3
-   **na cor de alerta** da sua interface — exatamente como faz para qualquer exame
-   fora da faixa de referência. O score não aparece como uma nota separada; ele é
-   tratado pelo ClinicalPath como mais um exame na linha do tempo do paciente.
+   - **`FL_RISK_SCORE`** — escalar de risco ∈ [0,1], `ref_high=0.3`.
+     Dias com valor > 0.3 são renderizados na cor de alerta da interface.
+   - **`FL_PROB_{CLASSE}`** — probabilidade média MC-Dropout por desfecho
+     (ex: `FL_PROB_ALTA`, `FL_PROB_UTI`), `ref_high=1.0`.
+   - **`FL_PROB_{CLASSE}_INCERTEZA`** — desvio padrão entre passes MC,
+     `ref_high=0.15` (acima de 15% sinaliza baixa confiança do modelo).
+
+   Para a predição atual, todos os exames sintéticos são exportados.
+   Para histórico carregado do banco, apenas `FL_RISK_SCORE` é exportado
+   (compatibilidade retroativa — `class_probabilities={}` nesses registros).
 
 5. **Leitura pelo ClinicalPath** — O ClinicalPath aponta seu diretório de entrada
    para `FL_CLINICALPATH_OUTPUT`. Quando abre o paciente `PAC-001`, encontra os
-   5 arquivos e os exibe na linha do tempo, incluindo o `FL_RISK_SCORE`.
+   5 arquivos e exibe na linha do tempo tanto os exames reais quanto o `FL_RISK_SCORE`
+   e a distribuição completa de probabilidade por desfecho.
 
 ### 10.3 O que o ClinicalPath vê
 
 ```
-Linha do tempo — PAC-001
+Linha do tempo — PAC-001 (predição atual = Dia 3)
 Dia 0 (admissão)  │ hemoglobina_baixo │ leucocitos_alto │ FL_RISK_SCORE=0.18
 Dia 1             │ pcr_alto          │                 │ FL_RISK_SCORE=0.31 ← ALERTA
 Dia 2             │ ferritina_alto    │ leucocitos_alto │ FL_RISK_SCORE=0.45 ← ALERTA
 Dia 3             │                   │                 │ FL_RISK_SCORE=0.52 ← ALERTA
+                  │                   │                 │ FL_PROB_ALTA=0.31 (±0.04)
+                  │                   │                 │ FL_PROB_INTERNACAO_PROLONGADA=0.28 (±0.06)
+                  │                   │                 │ FL_PROB_UTI=0.24 (±0.08)
+                  │                   │                 │ FL_PROB_OBITO=0.17 (±0.05)
 ```
 
-Dias com `FL_RISK_SCORE > 0.3` são renderizados pelo ClinicalPath na cor de
-valor fora de referência, tornando visualmente evidente a evolução do risco
-predito pelo modelo federado.
+Dias históricos exibem apenas `FL_RISK_SCORE`. A predição atual (último dia)
+exibe a distribuição completa — o ClinicalPath renderiza qualquer `FL_PROB_*_INCERTEZA`
+acima de 0.15 como valor fora de referência, indicando baixa confiança do modelo.
 
 ### 10.4 Onde está implementado
 
