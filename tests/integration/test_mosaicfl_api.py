@@ -146,6 +146,7 @@ class TestPatientDB:
 
 def _make_test_client(tmp_path=None):
     import infrastructure.mosaicfl_api.service as svc
+    from infrastructure.mosaicfl_api import state
 
     _labels = ["curta_1_3d", "media_4_7d", "longa_8_14d", "muito_longa_15_30d", "prolongada_30d_mais"]
     _proba  = {
@@ -161,13 +162,15 @@ def _make_test_client(tmp_path=None):
     mock_engine.predict_proba.return_value = _proba
     mock_engine.resolve_for_ingest.return_value = ("EXAM_CANONICAL", "NORMAL", 1.0, 10.0)
     mock_engine.checkpoint_path = None
-    svc._engine = mock_engine
+    state._engine = mock_engine
 
     if tmp_path:
-        svc._db = PatientDB(tmp_path / "test_api.db")
+        state._db = PatientDB(tmp_path / "test_api.db")
 
     from fastapi.testclient import TestClient
-    return TestClient(svc.app), mock_engine, svc
+    # Retorna state como terceiro elemento: testes que fazem `_, _, svc = client_state`
+    # passam a usar svc como referência ao state (._db, ._CHECKPOINT_DIR, etc.).
+    return TestClient(svc.app), mock_engine, state
 
 
 @pytest.fixture(scope="module")
@@ -391,8 +394,9 @@ class TestAuthentication:
 
     def test_no_auth_when_disabled(self, client_state, monkeypatch):
         """FL_AUTH_REQUIRED=false → request sem token é aceito."""
-        client, _, svc = client_state
-        monkeypatch.setattr(svc, "_AUTH_REQUIRED", False)
+        client, _, _ = client_state
+        from infrastructure.mosaicfl_api import security
+        monkeypatch.setattr(security, "_AUTH_REQUIRED", False)
         r = client.post("/api/predict", json=self._EXAM)
         assert r.status_code == 200
 

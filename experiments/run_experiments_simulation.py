@@ -408,6 +408,7 @@ import flwr as fl
 from mosaicfl.core.config import *
 from mosaicfl.core.data_loader import load_clinical_dataset, diagnose_dataset, load_with_fallback
 from infrastructure.shared.checkpoint_store import get_checkpoint_store
+from infrastructure.shared.metrics_store import get_metrics_store
 from mosaicfl.core.preprocessor import EHRPreprocessor, split_by_institution, SequencePipeline
 from mosaicfl.core.model import SimplifiedBEHRT
 from mosaicfl.core.client import FedProxClient
@@ -1019,12 +1020,81 @@ def run_federated_learning(
 # PIPELINE RAG
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _eval_rag_precision_at_k(
+    rag: "ClinicalRAG",
+    test_loader: DataLoader,
+    vocab_inverse: Dict[int, str],
+    class_labels: List[str],
+    k: int = 3,
+) -> Dict:
+    """
+    Avalia a qualidade da recuperação do RAG via Precision@k.
+
+    Para cada amostra do test_loader, consulta o RAG com os tokens do paciente
+    e verifica quantos dos k casos recuperados têm o mesmo desfecho que o rótulo
+    real. Essa é a métrica central para um CDSS humano-no-loop: o clínico lê os
+    casos recuperados, não o texto gerado pelo LLM.
+
+    Retorna Precision@k global e por classe.
+    """
+    hits_total = 0
+    queries_total = 0
+    per_class_hits: Dict[str, int] = {lbl: 0 for lbl in class_labels}
+    per_class_queries: Dict[str, int] = {lbl: 0 for lbl in class_labels}
+
+    for batch_x, batch_y in test_loader:
+        for seq, label_idx in zip(batch_x.tolist(), batch_y.tolist()):
+            tokens = [
+                vocab_inverse[t]
+                for t in seq
+                if t > 2 and t in vocab_inverse  # ignora PAD=0, UNK=1, CLS=2
+            ]
+            if not tokens:
+                continue
+
+            ground_truth = (
+                class_labels[label_idx]
+                if label_idx < len(class_labels)
+                else f"classe_{label_idx}"
+            )
+            query = ", ".join(tokens[:20])
+            retrieved = rag.retrieve(query, top_k=k)
+
+            n_hits = sum(
+                1 for c in retrieved
+                if c.get("metadata", {}).get("desfecho") == ground_truth
+            )
+            hits_total += n_hits
+            queries_total += k
+            per_class_hits[ground_truth] = per_class_hits.get(ground_truth, 0) + n_hits
+            per_class_queries[ground_truth] = per_class_queries.get(ground_truth, 0) + k
+
+    precision_at_k = round(hits_total / queries_total, 4) if queries_total > 0 else 0.0
+    per_class_precision = {
+        lbl: round(per_class_hits[lbl] / per_class_queries[lbl], 4)
+        if per_class_queries[lbl] > 0 else None
+        for lbl in class_labels
+    }
+
+    logger.info(f"RAG Precision@{k} (recuperação): {precision_at_k:.4f}")
+    for lbl, p in per_class_precision.items():
+        p_str = f"{p:.4f}" if p is not None else "n/a"
+        logger.info(f"  {lbl}: {p_str}")
+
+    return {
+        f"precision_at_{k}": precision_at_k,
+        f"per_class_precision_at_{k}": per_class_precision,
+        "k": k,
+        "n_queries": queries_total // k,
+    }
+
+
 def run_rag_pipeline(
     global_model: SimplifiedBEHRT,
     vocab_map: Dict,
     test_loader: DataLoader,
 ) -> Dict:
-    """Extrai padrões do BEHRT e gera justificativa via RAG."""
+    """Extrai padrões do BEHRT, gera justificativa via RAG e avalia Precision@k."""
 
     logger.info("=" * 60)
     logger.info("PIPELINE RAG")
@@ -1046,21 +1116,28 @@ def run_rag_pipeline(
     rag = ClinicalRAG()
     rag.build_knowledge_base(patterns)
 
-    # Constrói patient_data a partir de uma amostra real do test_loader.
     vocab_inverse = {v: k for k, v in vocab_map.items()}
+    labels = MODEL_CFG.class_labels
+
+    # ── Precision@k — métrica principal de recuperação ───────────────────────
+    logger.info("Avaliando Precision@k da recuperação...")
+    precision_metrics = _eval_rag_precision_at_k(
+        rag, test_loader, vocab_inverse, list(labels), k=3
+    )
+
+    # ── Exemplo de justificativa — uma amostra real ───────────────────────────
     sample_label = desfechos[0]
     sample_tokens: List[str] = []
     for batch_x, batch_y in test_loader:
         raw_tokens = [
             vocab_inverse.get(t, "")
             for t in batch_x[0].tolist()
-            if t > 2  # ignora PAD=0, UNK=1, CLS=2
+            if t > 2
         ]
         sample_tokens = [t for t in raw_tokens if t][:10]
         sample_label = int(batch_y[0].item())
         break
 
-    labels = MODEL_CFG.class_labels
     label_name = (
         labels[sample_label] if sample_label < len(labels) else f"classe_{sample_label}"
     )
@@ -1075,6 +1152,8 @@ def run_rag_pipeline(
     result = rag.explain(patient_data, model_prediction)
     logger.info(f"Justificativa — confiável: {result['confiavel']} | "
                 f"alucinação: {result['alucinacao_detectada']}")
+
+    result["precision_metrics"] = precision_metrics
 
     rag_path = f"experiments/data/rag_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(rag_path, "w", encoding="utf-8") as f:
@@ -1379,14 +1458,48 @@ def main():
 
     logger.info(f"      {len(client_loaders)} clientes | {total} amostras de treino")
 
+    # ── MetricsStore — persiste métricas no banco (SQLite dev / PostgreSQL prod) ─
+    data_source = "fapesp" if loaded_from_db else "synthetic"
+    metrics_store = get_metrics_store(FL_DB_URL)
+
     # ── 3. Aprendizado Federado ───────────────────────────────────────────────
-    logger.info("[3/4] Aprendizado Federado...")
+    logger.info("[3/5] Aprendizado Federado...")
     history, global_model = run_federated_learning(client_loaders, test_loader, total, vocab=vocab_map)
+
+    # Persiste métricas do último round FL
+    if history:
+        last_round = max(history.keys()) if isinstance(history, dict) else len(history)
+        last_metrics = history[last_round] if isinstance(history, dict) else history[-1]
+        metrics_store.save(
+            round_num=last_round,
+            metrics={
+                "accuracy": last_metrics.get("accuracy"),
+                "loss":     last_metrics.get("loss"),
+                "macro_auc": last_metrics.get("macro_auc"),
+                "macro_f1":  last_metrics.get("macro_f1"),
+                "ece":       last_metrics.get("ece"),
+                "per_class_auc": last_metrics.get("per_class_auc"),
+                "per_class_f1":  last_metrics.get("per_class_f1"),
+            },
+            data_source=data_source,
+        )
 
     # ── 4. RAG ────────────────────────────────────────────────────────────────
     logger.info("[4/5] Pipeline RAG...")
     try:
         rag_result = run_rag_pipeline(global_model, vocab_map, test_loader)
+        # Persiste Precision@k do RAG associada ao round final
+        p_metrics = rag_result.get("precision_metrics", {})
+        if p_metrics:
+            metrics_store.save(
+                round_num=last_round if history else 0,
+                metrics={
+                    "rag_precision_at_k":      p_metrics.get(f"precision_at_{p_metrics.get('k', 3)}"),
+                    "rag_k":                   p_metrics.get("k"),
+                    "rag_per_class_precision": p_metrics.get(f"per_class_precision_at_{p_metrics.get('k', 3)}"),
+                },
+                data_source=data_source,
+            )
     except Exception as e:
         logger.error(f"Erro no RAG: {e}")
         rag_result = {"erro": str(e)}
@@ -1404,6 +1517,19 @@ def main():
         baseline_path.write_text(
             json.dumps(baseline_result, indent=2, ensure_ascii=False), encoding="utf-8"
         )
+        # Persiste métricas do baseline centralizado no banco para comparação histórica
+        m_a = (baseline_result.get("opcao_a_centralizado") or {})
+        if m_a:
+            metrics_store.save(
+                round_num=0,  # round 0 = baseline pré-FL
+                metrics={
+                    "accuracy":  m_a.get("accuracy"),
+                    "macro_auc": m_a.get("macro_auc"),
+                    "macro_f1":  m_a.get("macro_f1"),
+                    "ece":       m_a.get("ece"),
+                },
+                data_source=f"{data_source}_baseline_rf",
+            )
         logger.info(f"Baseline salvo: {baseline_path}")
     except Exception as e:
         logger.error(f"Erro no baseline RF: {e}")

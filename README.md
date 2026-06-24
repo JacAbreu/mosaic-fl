@@ -1,6 +1,6 @@
 # MOSAIC-FL
 
-**Módulo de Predição Federada para Possibilidades de Diagnóstico e Evoluções Clínicas**
+**Módulo de Predição Federada para Possibilidades de Diagnóstico e Evoluções Clínicas**, *o modelo estima probabilidades de evoluções de quadros clínicos de acordo com as informações clínicas disponibilizadas, estratificando o risco*
 
 Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 - **Aprendizado Federado (FedProx)** para dados hospitalares fragmentados
@@ -1071,8 +1071,82 @@ O CronJob do scheduler executa por padrão às **2h da manhã** (`0 2 * * *`), c
 | 3 | Impacto heterogeneidade não-IID | Curvas por subgrupo demográfico | Curva aproximada |
 | 4 | RAG e detecção de alucinação | ChromaDB + DistilGPT-2 | Real |
 | 5 | Eficiência operacional | Convergência vs. comunicação | Real |
+| 6 | **Baseline comparativo** | Random Forest (Bag-of-Tokens) vs. SimplifiedBEHRT | Sintético / Real |
 
 Resultados em `experiments/data/` após cada execução. Documentação detalhada em `EXPERIMENTOS.md`.
+
+### Baseline Comparativo — Random Forest (Bag-of-Tokens)
+
+O experimento 6 responde a pergunta central de qualquer avaliação de modelo: **o Transformer agrega valor real em relação a um modelo clássico usando as mesmas features?**
+
+O baseline usa a mesma representação de tokens que o SimplifiedBEHRT, mas sem modelagem de ordem temporal: cada sequência de exames vira um vetor de contagem de tokens (**Bag-of-Tokens, BoT**). O Random Forest treinado nessa representação é o adversário mais honesto para o BEHRT — mesmos dados, mesma granularidade de features, zero aprendizado de dependências temporais.
+
+**Duas modalidades avaliadas:**
+
+| Modalidade | Dados de treino | Analogia no cenário clínico |
+|---|---|---|
+| **RF Centralizado** | Pool de todos os hospitais | Baseline sem restrição de privacidade — limite superior para modelo clássico |
+| **RF por Hospital** | Cada hospital treina seu próprio RF | Cenário local sem colaboração — baseline inferior do FL |
+
+A diferença `BEHRT(FL) − RF(por hospital)` mede o ganho do aprendizado federado sobre o cenário local. A diferença `BEHRT(FL) − RF(centralizado)` mede o ganho da modelagem sequencial temporal mesmo quando o adversário tem acesso irrestrito aos dados.
+
+**Resultados em dados sintéticos (20 tokens, 2 classes presentes de 4):**
+
+| Modelo | Accuracy | F1 Macro | ECE |
+|---|---|---|---|
+| RF Centralizado (BoT) | 0.675 | 0.646 | 0.067 |
+| RF por Hospital (média) | 0.623 | 0.567 | 0.172 |
+| SimplifiedBEHRT (FL federado) | 0.635 | — | — |
+
+> **AUC não calculável em dados sintéticos:** os dados sintéticos geram apenas 2 das 4 classes de prognóstico (alta e internação prolongada). O AUC-ROC multi-classe requer todas as classes presentes no conjunto de teste. Os resultados acima refletem essa limitação; o AUC será calculável com os dados reais do FAPESP.
+
+A competitividade do SimplifiedBEHRT (0.635 vs. 0.675 centralizado) em dados com apenas 20 tokens e sem estrutura temporal real é o resultado esperado — a vantagem do Transformer sobre BoW emerge de sequências longas com padrões temporais, que os dados sintéticos não reproduzem.
+
+**Como executar:**
+
+```bash
+source .venv/bin/activate
+# Baseline isolado (sem rodar o FL completo):
+python -c "
+import sys, numpy as np, torch, random
+from pathlib import Path
+sys.path.insert(0, str(Path('.').resolve()))
+sys.path.insert(0, str(Path('src').resolve()))
+from mosaicfl.core.config import MODEL_CFG, RANDOM_SEED
+from mosaicfl.core.data_loader import load_with_fallback
+from mosaicfl.core.preprocessor import EHRPreprocessor
+from experiments.run_experiments_simulation import prepare_dataloaders, run_baseline_rf
+random.seed(RANDOM_SEED); np.random.seed(RANDOM_SEED); torch.manual_seed(RANDOM_SEED)
+df = load_with_fallback(allow_synthetic=True)
+loaders, test, _, _ = prepare_dataloaders(df, EHRPreprocessor())
+run_baseline_rf(loaders, test, class_labels=list(MODEL_CFG.class_labels))
+"
+
+# Ou como parte do pipeline completo (passo 5/5 do main):
+python experiments/run_experiments_simulation.py
+```
+
+Resultados salvos em `experiments/data/baseline_rf_YYYYMMDD_HHMMSS.json`.
+
+#### Correção de bug identificada durante a investigação
+
+Durante a análise do exp5 (convergência), foi identificado que `FedProxClient._compute_class_weights()` atribuía peso `total / (n × 1)` para classes ausentes no conjunto de treino local (usando `max(counts.get(i, 1), 1)` como fallback). Com dados sintéticos que contêm apenas 2 das 4 classes, classes ausentes recebiam pesos da ordem de 42× maior que as classes presentes — distorcendo o gradiente para prever prognósticos inexistentes nos dados.
+
+**Sintoma:** acurácia constante em 0.4667 por 11 rodadas (platô na inicialização, sem aprendizado real).
+
+**Causa:** `class_weight[UTI] = class_weight[óbito] = 168 / (4 × 1) = 42.0` com dados 100% de alta/internação prolongada.
+
+**Correção aplicada:** classes ausentes no treino local recebem peso `0.0`, excluindo-as da loss sem distorcer o gradiente em direção a classes sem sinal de treinamento:
+
+```python
+# antes (bug)
+total / (n * max(counts.get(i, 1), 1))
+
+# depois (fix)
+total / (n * counts[i]) if counts.get(i, 0) > 0 else 0.0
+```
+
+**Impacto com dados reais:** nenhum — o dataset FAPESP contém as 4 classes em ambos os hospitais (HSL e BPSP), portanto todos os pesos serão positivos e calculados corretamente.
 
 ---
 

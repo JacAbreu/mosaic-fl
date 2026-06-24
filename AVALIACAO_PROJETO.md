@@ -388,3 +388,264 @@ Gap residual: `RotatingFileHandler` (50MB × 10) permite sobrescrita. Para LGPD 
 ---
 
 *Próxima reavaliação recomendada: após implementação de (a) late fusion + baseline, ou (b) Redis rate limiter.*
+
+---
+
+## Avaliação 3 — 2026-06-24 (avaliação holística do ciclo de vida completo)
+
+### Prompt utilizado
+
+```
+avalie novamente o projeto, tendo como base o avaliacao_projeto.md - dessa vez,
+não veja só as últimas alteracoes, veja o projeto inteiro em todo seu tempo de vida
+```
+
+### Metodologia desta avaliação
+
+Avaliação de ciclo de vida completo: considera todos os 50 commits (2026-05-31 a 2026-06-24),
+a trajetória de evolução do projeto, artefatos produzidos ao longo das sessões, e o estado atual
+do repositório. Critérios idênticos às avaliações anteriores (seção "Critérios de avaliação").
+
+### Estado do projeto na data desta avaliação
+
+- **Branch:** main — 50 commits, 24 dias de desenvolvimento
+- **Período:** 2026-05-31 (commit inicial) → 2026-06-24 (baseline RF + correção class_weights)
+- **Testes:** 541 passando, 6 deselected (e2e sem ambiente disponível)
+- **Arquivos Python:** 68 fonte + 39 teste = 107 arquivos, 13.818 linhas
+- **Camadas arquiteturais:** `src/mosaicfl/core/` (domínio) · `infrastructure/` (API, server, shared) · `integration/` (FHIR, ClinicalPath) · `experiments/`
+
+### Fontes consultadas para a avaliação
+
+| Fonte | O que revelou |
+|---|---|
+| `git log --oneline` (50 commits) | Trajetória completa: 7 sessões de desenvolvimento com arcos temáticos distintos |
+| `src/mosaicfl/core/model.py` | SimplifiedBEHRT sem embeddings de idade/visita; CLS token correto; ~712K parâmetros |
+| `src/mosaicfl/core/client.py` | Correção class_weights nesta sessão; proximal term correto após sessão 2 |
+| `src/mosaicfl/core/preprocessor.py` | `outcome_class=4 → internacao_prolongada` — label de censura, não prognóstico |
+| `src/mosaicfl/core/calibration.py` | Temperature scaling LBFGS, T persistido em checkpoint |
+| `src/mosaicfl/core/evaluation.py` | ECE (15 bins), AUC-ROC OVR, F1 macro, matriz de confusão — pipeline completo |
+| `src/mosaicfl/core/rag.py` | DistilGPT-2 + MiniLM; confiabilidade por heurística textual, sem métrica formal |
+| `integration/fhir/` (models.py, mapper.py, loinc_map.py) | FHIR R4 RiskAssessment completo; `correlation_token` efêmero |
+| `integration/clinical-path/exporter.py` | 5 arquivos ClinicalPath exportados; FL_PROB_* como exames sintéticos |
+| `infrastructure/mosaicfl_api/audit.py` | log_access JSON + SHA-256 + RotatingFileHandler (não-WORM) |
+| `infrastructure/mosaicfl_api/service.py` | TLS obrigatório, JWT, rate limiter in-process, CORS bloqueado em produção |
+| `infrastructure/shared/tls.py` | EnvironmentError se FL_TLS_CERT_DIR ausente — TLS obrigatório por construção |
+| `experiments/run_experiments_simulation.py` | 5 experimentos + baseline RF (exp6) adicionado nesta sessão |
+| `experiment_results.json` | exp1-5 com dados sintéticos; exp5 acurácia corrigida após bug class_weights |
+| `docs/TODO.md` | 11 bloqueadores de produção abertos; DP no roadmap |
+| `tests/unit/` (34 arquivos) | Cobertura unit em quase todos os módulos; sem e2e real |
+
+---
+
+## Trajetória do projeto — visão de ciclo de vida
+
+O projeto evoluiu em 7 sessões com arcos temáticos distintos:
+
+| Sessão | Data | Commits | Arco temático |
+|---|---|---|---|
+| 1 | 2026-05-31 | 2 | Bootstrap: FL sintético, SQLite, ChromaDB |
+| 2 | 2026-06-02/03 | 7 | Algoritmo: FedProx, BEHRT v1, RAG v1 (DistilGPT-2), Ray |
+| 3 | 2026-06-04/05 | 8 | Produção v1: daemons, convergência, watchdog, JSON logging |
+| 4 | 2026-06-06/07 | 14 | Produção v2: SuperLink, recovery, TLS obrigatório, LGPD, PostgreSQL |
+| 5 | 2026-06-15 | 5 | Refinamento: CheckpointStore ABC, RAG real, hospital_id |
+| 6 | 2026-06-23/24 | 7 | Interoperabilidade: FHIR R4 completo (33 testes), evaluate() no simulador |
+| 7 | 2026-06-24 | 7 | Avaliação crítica: RF baseline, correção class_weights, documentação |
+
+**O que a trajetória revela:** o projeto seguiu uma ordem racional — algoritmo → produção → interoperabilidade → avaliação crítica. Não houve reescrita arquitetural ou descarte de artefatos; cada sessão adicionou camadas ao mesmo núcleo. Isso é consistência metodológica rara em TCC.
+
+**O que a trajetória esconde:** todos os experimentos (exp1-exp6) usam dados sintéticos. O dado real FAPESP nunca foi usado para validação. Isso não é um detalhe tardio — a decisão de usar sintético está presente desde a sessão 1 e nunca foi revisitada. O projeto construiu infraestrutura de produção sobre uma base de dados que ainda não validou a hipótese central.
+
+---
+
+## AVALIAÇÃO ACADÊMICA — 7,0 / 10 *(+0,5 em relação à Avaliação 2)*
+
+### Fontes de força que a visão holística confirma
+
+**1. Alinhamento teórico consistente ao longo de todo o desenvolvimento**
+
+O projeto implementa corretamente os quatro pilares do estado da arte em FL clínico:
+- **FedProx** (Li et al., MLSys 2020): proximal term com μ configurável via `config` dict do servidor, class weights por hospital para não-IID. Correção do bug de propagação de μ documentada na sessão 4. Em `client.py:103-104`.
+- **BEHRT** (Rasmy et al., npj Digital Medicine 2021): CLS token como `nn.Parameter` + `trunc_normal_(std=0.02)`, positional encoding sinusoidal, `padding_idx=0`. Em `model.py:27-38, 98-117`.
+- **Temperature Scaling** (Guo et al., ICML 2017): LBFGS sobre NLL, T persistido no checkpoint, ECE como métrica primária de calibração. Em `calibration.py`.
+- **MC Dropout** (Gal & Ghahramani, 2016): 50 forward passes, thread-safe via `threading.Lock()`, incerteza exportada como exame ClinicalPath. Em `inference_engine.py`.
+
+Isso é acima da média de TCCs: a maioria implementa FedAvg + MLP sem calibração ou mecanismo de incerteza.
+
+**2. Contribuições originais verificáveis no repositório**
+
+- **Vocabulário canônico distribuído** (`build_standard_vocab.py`): sem esse artefato, FedAvg entre hospitais com nomes de analitos divergentes seria semanticamente inválido. Nenhum trabalho de FL clínico revisado menciona esse passo como artefato explícito.
+- **Exportação de distribuição completa de probabilidade com incerteza** para ClinicalPath (`FL_PROB_*` + `FL_PROB_*_INCERTEZA` como exames sintéticos): injeta a epistemologia bayesiana na linha do tempo visual. Fonte: `integration/clinical-path/exporter.py`, `models.py:RiskPrediction`.
+- **`correlation_token` efêmero para FHIR**: resolve o campo obrigatório `subject` do R4 sem armazenar mapeamento identidade → token. Isolamento arquitetural verificado por teste: `test_no_infrastructure_import`, `test_no_patient_export_import`. Fonte: `integration/fhir/models.py`.
+
+**3. Engenharia de software consistentemente disciplinada**
+
+Ao longo dos 50 commits:
+- Arquitetura hexagonal mantida: `core/` nunca importa `infrastructure/`, `integration/` nunca importa `infrastructure/`. Verificável via testes de isolamento.
+- 541 testes com 34 suites unitárias cobrindo todos os subsistemas principais.
+- Cada bug corrigido foi documentado (proximal_mu: sessão 4; class_weights: sessão 7; except→raise: sessão 4).
+- `docs/TODO.md` como roadmap honesto de limitações — não como lista de boas intenções, mas como item rastreável por sessão.
+
+---
+
+### Penalidades — visão de ciclo de vida completo
+
+**1. Problema central de label — permanece o maior risco acadêmico (−1,5)**
+
+`outcome_class=4 → "internacao_prolongada"` permanece inalterado desde o commit inicial.
+Esse mapeamento é um **dado censurado** (paciente ainda internado no momento do snapshot),
+não um prognóstico de desfecho. O modelo aprende a identificar pacientes cujo registro foi
+capturado antes do desfecho, não pacientes que terão internação prolongada. Isso contamina a
+classe mais clinicamente relevante para predição de risco.
+
+Fonte: `src/mosaicfl/core/preprocessor.py:_OUTCOME_TO_PROGNOSIS[4]`.
+A penalidade não é reduzida porque o problema não foi nem reconhecido formalmente no código
+(nenhum `# WARNING: censored label` ou equivalente), nem mitigado com análise de sobrevivência.
+
+**2. SimplifiedBEHRT sem ablation — mesmo gap (−0,5)**
+
+A comparação com BEHRT original (`embed_dim=288`, age/visit/segment embeddings) continua ausente.
+A justificativa de "escala hospitalar, CPU-only" está documentada em `docs/TODO.md` mas não
+como ablation study executável — é uma afirmação não verificada no repositório.
+Late fusion de demográficos (proposta documentada no TODO) não implementada.
+
+**3. Baseline comparativo — parcialmente resolvido nesta sessão (−0,5 → −0,2)**
+
+Random Forest com Bag-of-Tokens implementado em dois modos (centralizado + por hospital)
+com `n_estimators=200, class_weight="balanced"`, reordenamento de colunas por classe,
+métricas completas (accuracy, macro_F1, macro_AUC, ECE). Fonte: `experiments/run_experiments_simulation.py:run_baseline_rf()`.
+
+Gap residual: comparação executada exclusivamente com dados sintéticos (2 classes
+de 4 presentes, AUC retorna NaN para classes ausentes). Sem validação com dados FAPESP reais,
+não é possível afirmar que SimplifiedBEHRT supera RF no domínio alvo. A penalidade parcial
+(−0,2) permanece pela ausência de dados reais.
+
+**4. RAG DistilGPT-2 sem avaliação formal — mesmo gap (−0,5)**
+
+Os resultados do exp4 (`100% úteis, 0% alucinadas, 4.7/5`) são auto-avaliação em 50 amostras
+sintéticas. DistilGPT-2 (82M parâmetros, pré-treinado em inglês) gerando justificativas clínicas
+em português é uma limitação fundamental não quantificada. Detecção de alucinação por heurística
+textual (`"certeza" in justification.lower()`) não tem validade clínica.
+ROUGE, BERTScore ou avaliação por especialista clínico ausentes.
+
+**5. Validação exclusivamente sintética — limitação transversal (observacional — não penaliza adicionalmente)**
+
+Nenhum dos 6 experimentos foi executado com dados FAPESP reais. Isso não gera penalidade
+adicional porque é esperado num TCC com acesso restrito a dados clínicos, mas deve ser declarado
+explicitamente como limitação principal na monografia. A nota atual assume que os resultados
+sintéticos demonstram que a arquitetura funciona; a afirmação de que ela funciona *neste domínio clínico*
+permanece não verificada.
+
+### Cálculo da nota acadêmica
+
+| Item | Valor |
+|---|---|
+| Nota base | 10,0 |
+| Label censurado (`internacao_prolongada = 4`) | −1,5 |
+| SimplifiedBEHRT sem ablation | −0,5 |
+| Baseline parcial (RF sintético, sem real) | −0,2 |
+| RAG sem avaliação formal | −0,5 |
+| **Subtotal** | **7,3** |
+| Ajuste holístico (−): experimentos 100% sintéticos como limitação transversal | −0,3 |
+| **NOTA FINAL** | **7,0 / 10** |
+
+---
+
+## AVALIAÇÃO DE PRODUÇÃO CLÍNICA — 8,0 / 10 *(sem alteração)*
+
+### O que a visão de ciclo de vida confirma
+
+**Evolução de segurança em profundidade (verificado commit a commit)**
+
+A sessão 4 (2026-06-06/07) representou um salto qualitativo em produção:
+- TLS: `logger.warning` → `EnvironmentError` (commit de segurança explícito)
+- Audit trail LGPD: implementado como artefato independente (`audit.py`) com logging estruturado
+- SuperLink: eliminou SPOF com separação de plano de dados / plano de controle
+- TrainingStateStore → CheckpointStore ABC: recovery de sessão com verificação SHA-256
+- `except Exception: continue` → `raise`: sem silenciamento de falhas de hardware
+
+Esses não foram correções pontuais — foram decisões arquiteturais com impacto estrutural. O código
+atual não tem nenhum ponto onde falhas críticas são silenciadas silenciosamente.
+
+**Interoperabilidade completa (confirmada na sessão 6)**
+
+FHIR R4 (`integration/fhir/`): `FHIRExporter.to_risk_assessment()` completo, 33 testes
+unitários verificando isolamento arquitetural, mapeamento LOINC de 22 analitos, correlation_token.
+ClinicalPath (`integration/clinical-path/`): 5 arquivos exportados, distribuição completa de
+probabilidade com incerteza injetada como exame clínico. 70% completo — bloqueio externo
+(autorização Prof. Claudio para FL_PROB_* em `list_exams.txt`).
+
+**Padrão operacional acima do esperado para TCC**
+
+- Scheduler APScheduler + cron + `--once` (deploy como CronJob Kubernetes)
+- Quórum de hospitais verificado antes de cada round
+- DataLoader cache por cliente (sem re-query)
+- Exponential backoff com jitter na reconexão
+- `model_metadata.trained: bool` na resposta da API (consumidor sabe se recebe predição válida)
+- Health endpoints liveness/readiness em porta separada
+
+### Penalidades remanescentes — confirmadas pela visão holística
+
+| Penalidade | Evidência | Peso |
+|---|---|---|
+| Rate limiter in-process | `service.py:_SlidingWindowLimiter` — por processo; 4 workers = 480 req/min efetivos | −0,8 |
+| Generalização clínica | COVID-19 / 2 hospitais SP / 2020-2021 / dados sintéticos nos experimentos | −0,7 |
+| Prometheus ausente | TODO documentado desde sessão 3, sem implementação ao longo de todo o ciclo | −0,3 |
+| Audit trail imutabilidade | `RotatingFileHandler` permite sobrescrita — não é WORM (LGPD estrita) | −0,1 |
+
+**Gaps documentados mas não bloqueadores para TCC:**
+- MC Dropout sequencial sem timeout (risco com alta carga, documentado no TODO)
+- Rotação de `FL_PATIENT_ID_SECRET` sem estratégia de key versioning
+- Sem DP (Gaussian mechanism) — bloqueador para dados reais, mas fora do escopo do TCC com dados sintéticos
+
+---
+
+## Síntese holística — ciclo de vida completo
+
+### O que o projeto entregou em 24 dias (50 commits)
+
+| Artefato | Status | Testes |
+|---|---|---|
+| FedProx com proximal term + class weights | Completo, bug corrigido | `test_fedprox_client.py` |
+| SimplifiedBEHRT com CLS token | Completo | `test_simplified_behrt.py` |
+| Temperature scaling + ECE | Completo, T no checkpoint | `test_training_state_store.py` |
+| MC Dropout com thread safety | Completo | (in `inference_engine.py`) |
+| FHIR R4 RiskAssessment | Completo, isolado | 33 testes |
+| ClinicalPath exporter | 70% (bloqueio externo) | sem teste unitário |
+| LGPD audit trail | Completo (não-WORM) | `test_audit.py` |
+| SuperLink + recovery SHA-256 | Completo | `test_training_state_store.py` |
+| Baseline RF (2 modos) | Completo, sintético | (em `run_experiments_simulation.py`) |
+| Validação com dados FAPESP reais | **Ausente** | — |
+
+### Notas finais comparativas
+
+| Dimensão | Av. 1 | Av. 2 | **Av. 3 (holística)** | Δ total |
+|---|---|---|---|---|
+| **Acadêmica** | 6,5 / 10 | 6,5 / 10 | **7,0 / 10** | +0,5 |
+| **Produção clínica** | 7,5 / 10 | 8,0 / 10 | **8,0 / 10** | +0,5 |
+
+### Avaliação qualitativa do ciclo de vida
+
+**O que o projeto fez bem (perspectiva de ciclo de vida):**
+O MosaicFL demonstrou consistência metodológica: cada sessão teve um arco temático claro,
+os artefatos se acumularam sem reescrita, os bugs encontrados foram corrigidos com documentação
+explícita do que estava errado. A decisão de separar `integration/fhir/` com testes de isolamento
+arquitetural (`test_no_infrastructure_import`) é o tipo de detalhe que distingue código produzido
+com intenção de código produzido por acumulação.
+
+**O que o projeto deixou em aberto (perspectiva de ciclo de vida):**
+A hipótese central — que FL com SimplifiedBEHRT prediz prognóstico clínico de forma superior a
+alternativas mais simples — permanece não testada com dados reais. Todos os experimentos usam
+dados sintéticos com distribuição não representativa do dataset FAPESP real. O label mais
+clinicamente relevante (`internacao_prolongada`) é um dado censurado. Esses gaps não surgiram
+tarde no projeto — estão presentes desde o commit inicial e atravessaram 24 dias de desenvolvimento
+sem revisão. Isso é o principal risco para a defesa do TCC.
+
+**Veredicto geral:**
+Acima da média para um TCC em engenharia de software e arquitetura de sistemas clínicos.
+Abaixo do que seria necessário para uma publicação acadêmica (rigor metodológico dos experimentos).
+O caminho mais curto para elevar a nota acadêmica é documentar explicitamente o label
+`internacao_prolongada` como dado censurado na monografia e executar o baseline RF com dados FAPESP reais.
+
+---
+
+*Próxima reavaliação recomendada: após (a) execução dos experimentos com dados FAPESP reais, ou (b) resolução formal do label `internacao_prolongada` com análise de sobrevivência ou reclassificação.*

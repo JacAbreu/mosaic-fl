@@ -14,9 +14,10 @@ Constructor accepts Path for backwards compatibility:
   PatientDB(Path("foo.db"))  →  SQLite at foo.db
 """
 import contextlib
+import json
 import logging
 import os
-from datetime import date as _date
+from datetime import date as _date, datetime as _datetime, timezone as _timezone
 from pathlib import Path
 from typing import Optional, Union
 
@@ -109,8 +110,36 @@ def _build_tables(is_pg: bool):
         sa.Column("outcome_class", sa.SmallInteger, nullable=False),
         schema=metrics,
     )
+    # Predições em produção — link via correlation_token para avaliação com ground truth tardio.
+    # patient_id_hash: HMAC-SHA256 para audit LGPD sem armazenar identidade real.
+    predicted_outcomes = sa.Table(
+        "predicted_outcomes", meta,
+        sa.Column("id",                   sa.BigInteger().with_variant(sa.Integer, "sqlite"), primary_key=True, autoincrement=True),
+        sa.Column("correlation_token",    sa.Text,         nullable=False, unique=True),
+        sa.Column("patient_id_hash",      sa.Text,         nullable=False),
+        sa.Column("predicted_class",      sa.SmallInteger, nullable=False),
+        sa.Column("predicted_label",      sa.Text,         nullable=False),
+        sa.Column("class_probabilities",  sa.Text,         nullable=False),  # JSON
+        sa.Column("risk_score",           sa.Float,        nullable=False),
+        sa.Column("model_round",          sa.Integer),
+        sa.Column("model_version",        sa.Text),
+        sa.Column("predicted_at",         sa.DateTime,     nullable=False),
+        schema=metrics,
+    )
+    # Desfecho real registrado na alta — gravado pelo hospital, não pelo servidor FL.
+    # Nunca trafega pela rede federada: apenas o token efêmero vincula predição ao desfecho.
+    outcome_feedback = sa.Table(
+        "outcome_feedback", meta,
+        sa.Column("id",                sa.BigInteger().with_variant(sa.Integer, "sqlite"), primary_key=True, autoincrement=True),
+        sa.Column("correlation_token", sa.Text,         nullable=False, unique=True),
+        sa.Column("actual_label",      sa.Text,         nullable=False),
+        sa.Column("actual_class",      sa.SmallInteger),
+        sa.Column("source",            sa.Text,         nullable=False, server_default=sa.text("'manual'")),
+        sa.Column("recorded_at",       sa.DateTime,     nullable=False),
+        schema=metrics,
+    )
 
-    return meta, patients, attendances, export_paths, risk_history, exam_records, clinical_outcomes
+    return meta, patients, attendances, export_paths, risk_history, exam_records, clinical_outcomes, predicted_outcomes, outcome_feedback
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +189,8 @@ class PatientDB:
             self._risk,
             self._exams,
             self._outcomes,
+            self._predicted_outcomes,
+            self._outcome_feedback,
         ) = _build_tables(self._is_pg)
 
         if not self._is_pg:
@@ -566,3 +597,93 @@ class PatientDB:
 
     def set_export_path_tx(self, conn, patient_id: str, path: str) -> None:
         conn.execute(self._stmt_upsert_export(patient_id, path))
+
+    # ── desfecho tardio (delayed ground truth) ────────────────────────────
+
+    def _stmt_insert_prediction(self, values: dict):
+        if self._is_pg:
+            return pg_insert(self._predicted_outcomes).values(**values).on_conflict_do_nothing(
+                index_elements=["correlation_token"]
+            )
+        return insert(self._predicted_outcomes).prefix_with("OR IGNORE").values(**values)
+
+    def _stmt_insert_feedback(self, values: dict):
+        if self._is_pg:
+            return pg_insert(self._outcome_feedback).values(**values).on_conflict_do_nothing(
+                index_elements=["correlation_token"]
+            )
+        return insert(self._outcome_feedback).prefix_with("OR IGNORE").values(**values)
+
+    def store_prediction_tx(
+        self,
+        conn,
+        correlation_token: str,
+        patient_id_hash: str,
+        predicted_class: int,
+        predicted_label: str,
+        class_probabilities: dict,
+        risk_score: float,
+        model_round: Optional[int] = None,
+        model_version: Optional[str] = None,
+    ) -> None:
+        """Persiste predição com correlation_token dentro de uma transação existente."""
+        conn.execute(self._stmt_insert_prediction({
+            "correlation_token":   correlation_token,
+            "patient_id_hash":     patient_id_hash,
+            "predicted_class":     predicted_class,
+            "predicted_label":     predicted_label,
+            "class_probabilities": json.dumps(class_probabilities),
+            "risk_score":          risk_score,
+            "model_round":         model_round,
+            "model_version":       model_version,
+            "predicted_at":        _datetime.now(_timezone.utc),
+        }))
+
+    def record_outcome(
+        self,
+        correlation_token: str,
+        actual_label: str,
+        actual_class: Optional[int] = None,
+        source: str = "manual",
+    ) -> bool:
+        """Registra desfecho real. Retorna False se token já registrado (idempotente)."""
+        with self._engine.begin() as conn:
+            result = conn.execute(self._stmt_insert_feedback({
+                "correlation_token": correlation_token,
+                "actual_label":      actual_label,
+                "actual_class":      actual_class,
+                "source":            source,
+                "recorded_at":       _datetime.now(_timezone.utc),
+            }))
+            return (result.rowcount or 0) > 0
+
+    def prediction_exists(self, correlation_token: str) -> bool:
+        stmt = select(self._predicted_outcomes.c.id).where(
+            self._predicted_outcomes.c.correlation_token == correlation_token
+        )
+        with self._engine.connect() as conn:
+            return conn.execute(stmt).first() is not None
+
+    def get_prediction_outcome_pairs(self) -> list[dict]:
+        """Retorna pares (predição, desfecho real) para avaliação de production quality."""
+        po = self._predicted_outcomes
+        of = self._outcome_feedback
+        stmt = (
+            select(
+                po.c.correlation_token,
+                po.c.predicted_class,
+                po.c.predicted_label,
+                po.c.class_probabilities,
+                po.c.risk_score,
+                po.c.model_round,
+                po.c.model_version,
+                of.c.actual_label,
+                of.c.actual_class,
+                of.c.source,
+                of.c.recorded_at,
+            )
+            .join(of, po.c.correlation_token == of.c.correlation_token)
+        )
+        with self._engine.connect() as conn:
+            rows = conn.execute(stmt).mappings()
+            return [dict(r) for r in rows]

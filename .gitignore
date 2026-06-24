@@ -291,3 +291,6 @@ certs/
 # .crt é seguro para distribuir, mas excluímos por precaução
 # Remova a linha abaixo se quiser commitar ca.crt para facilitar distribuição
 *.crt
+
+# Emails pessoais — não devem ser versionados
+email_*.md
