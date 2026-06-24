@@ -721,26 +721,38 @@ cat logs/client_registry.json   # heartbeats dos clientes (últimos 10 min)
 
 ## Uso de Inteligência Artificial
 
-Este projeto foi desenvolvido com auxílio de ferramentas de Inteligência Artificial Generativa — incluindo geração e revisão de código, documentação técnica e decisões de arquitetura.
+Esta declaração atende às recomendações do ICMC/USP e das principais agências de fomento, que exigem informar: **em quais etapas do trabalho, qual ferramenta, para qual função, impactos observados e responsabilidades**.
 
-### Modelos utilizados
+### Ferramenta utilizada
 
-| Ferramenta | Modelo | Uso principal |
+| Ferramenta | Modelo | Período de uso |
 |---|---|---|
-| [Claude Code](https://claude.ai/code) (Anthropic) | Claude Sonnet 4.6 | Geração de código, refatoração, testes, documentação |
+| [Claude Code](https://claude.ai/code) (Anthropic) | Claude Sonnet 4.6 | Fevereiro de 2026 em diante |
 
-### Postura ética e acadêmica
+### Etapas e funções
 
-O uso de IA neste projeto segue as diretrizes éticas do MBA USP/Esalq e as boas práticas da indústria de software:
+| Etapa do trabalho | Função exercida pela IA |
+|---|---|
+| Implementação do núcleo federado | Geração e refatoração de código Python (FedProxClient, estratégia, convergência) |
+| Infraestrutura de produção | Geração de código para adapters (servidor, cliente, API, scheduler) |
+| Testes automatizados | Geração de testes unitários e de integração; correção de falhas de contrato |
+| Segurança e LGPD | Revisão de código para vulnerabilidades; sugestão de controles (HMAC, JWT, rate limiting) |
+| Documentação técnica | Revisão e complementação de docstrings, CHANGELOG, CONTRIBUTING e README |
+| Depuração | Diagnóstico de bugs em tempo de execução e sugestão de correções |
 
-- **Supervisão humana:** todo código gerado foi revisado, testado e validado pela autora antes de ser incorporado ao projeto.
-- **Responsabilidade intelectual:** as decisões de arquitetura, os objetivos de pesquisa e a interpretação dos resultados são de autoria da pesquisadora.
-- **Reprodutibilidade:** o projeto é inteiramente reproduzível a partir do código-fonte público, independentemente das ferramentas usadas na sua construção.
-- **Transparência:** esta seção existe porque declarar o uso de IA é um ato de integridade acadêmica, não uma limitação.
+A IA **não foi utilizada** na definição do problema de pesquisa, na escolha dos algoritmos (FedProx, BEHRT, RAG), na interpretação dos resultados experimentais nem na redação da monografia.
 
-A IA funcionou como uma ferramenta de produtividade — equivalente a um compilador ou uma IDE avançada — e não como substituta do raciocínio, julgamento ou criatividade da autora.
+### Impactos observados
 
-temp: https://drive.usercontent.google.com/download?id=1CwUMQuS-aBs3as_KMxED2gRWS1MOw-Fp&export=download&authuser=0
+- **Produtividade:** redução significativa do tempo de implementação de boilerplate e testes repetitivos.
+- **Qualidade:** identificação de inconsistências de contrato (ex.: assinatura de `records_to_tokens`, namespace collision nos testes) que poderiam escapar à revisão manual.
+- **Riscos gerenciados:** sugestões de código foram sempre revisadas antes da incorporação; nenhum trecho foi aceito sem compreensão e validação funcional pela autora.
+
+### Responsabilidades
+
+A autoria intelectual deste trabalho é **inteiramente humana**. A pesquisadora responde legalmente e academicamente por todo o conteúdo — código, documentação e conclusões — independentemente das ferramentas utilizadas na produção. O uso de IA como ferramenta de desenvolvimento não transfere nem dilui essa responsabilidade.
+
+> Esta declaração deve ser reproduzida no capítulo de **Metodologia** ou **Apêndice** da monografia, conforme orientação do ICMC/USP.
 
 ---
 

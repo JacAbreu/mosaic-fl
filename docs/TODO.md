@@ -129,54 +129,68 @@ Dividido em três partes:
 
 ### BLOQUEADOR: Modelo retorna probabilidades sem calibração
 
-- [ ] **Temperature scaling pós-treinamento**
+- [x] ~~**Temperature scaling pós-treinamento**~~
 
-  MC Dropout mede incerteza epistêmica mas não resolve a calibração. Um modelo pode ter `uncertainty = 0.01` e estar sistematicamente errado. Temperature scaling requer:
-  1. Um conjunto de calibração holdout (não visto durante treino nem validação)
-  2. Otimizar o parâmetro T que minimiza NLL no holdout
-  3. Dividir todos os logits por T antes do softmax
-
-  Sem isso, `model_metadata.calibrated` permanece `False` para sempre — e o `note` na resposta da API precisa ser levado a sério pelos integradores.
+  `TemperatureScaler` em `src/mosaicfl/core/calibration.py` aprende escalar T via LBFGS
+  minimizando NLL no conjunto de calibração (Guo et al., ICML 2017). Executado
+  automaticamente ao final de `run_federated_learning_manual()` e `run_federated_learning_ray()`
+  em `run_experiments_v2.py`. T é persistido no checkpoint junto com `model_state` e `vocab`.
+  `InferenceEngine` carrega T do checkpoint e divide os logits por T antes do softmax em
+  todos os passes MC. `predict_proba()` retorna `calibrated: bool` e `service.py` propaga
+  para `ModelMetadata.calibrated`. Ressalva: em simulação acadêmica o test_loader é
+  reutilizado como calibration set — em produção deve-se reservar holdout separado.
 
 ### BLOQUEADOR: Sem conjunto de teste global no servidor
 
-- [ ] **Implementar `_load_test_data()` em `FederatedServer`**
+- [x] ~~**Implementar `_load_test_data()` em `FederatedServer`**~~
 
-  Hoje retorna `None`. Sem dados de teste holdout no servidor, não há como medir generalização do modelo global. O `evaluate_fn` nunca é chamado. É possível treinar N rounds, atingir "convergência" e ter acurácia aleatória em pacientes novos — sem nenhum sinal de alerta.
-
-  **O que fazer:** reservar uma fração dos dados antes da partição por hospital, manter centralmente no servidor, e passar para `get_evaluate_fn()`.
+  `_load_test_data()` em `infrastructure/mosaicfl_server/runner.py` carrega holdout via
+  `SequencePipeline.build_per_hospital()` quando `FL_DB_URL` está configurado. Fração
+  configurável via `FL_TEST_HOLDOUT_FRACTION` (padrão 0.1). Retorna `None`
+  silenciosamente quando sem banco — `evaluate_fn` não é ativado. Loga
+  `_load_test_data_ready n=... hospitals=...` ao subir.
 
 ### BLOQUEADOR: `predict_proba` bloqueia sob carga
 
+- [x] ~~**`FL_MC_SAMPLES` via env var**~~
+
+  `_DEFAULT_MC_SAMPLES = int(os.getenv("FL_MC_SAMPLES", "50"))` em `inference_engine.py`.
+  `predict_proba(mc_samples=_DEFAULT_MC_SAMPLES)` — reduzir para 20 em produção sem rebuild.
+
 - [ ] **Timeout e circuit breaker no MC Dropout**
 
-  50 forward passes sequenciais por request. Com requisições concorrentes e o lock em `_mc_lock`, requests enfileiram e podem timeout na camada HTTP antes de receber resposta.
+  Passes sequenciais com lock por request — sob carga alta, requests enfileiram antes do timeout HTTP.
 
-  **O que fazer:** configurar `mc_samples` via env var `FL_MC_SAMPLES` (padrão 50, reduzir para 20 em produção), adicionar timeout interno, e considerar executar os passes em batches paralelos com `torch.vmap` quando disponível.
+  **O que fazer:** adicionar timeout interno e considerar batches paralelos com `torch.vmap`.
 
 ### BLOQUEADOR: Auto-discovery de checkpoint no startup da API
 
-- [ ] **API não carrega checkpoint automaticamente ao reiniciar**
+- [x] ~~**API carrega checkpoint automaticamente ao reiniciar**~~
 
-  Se o processo da API reinicia depois de checkpoints existirem em disco, o `InferenceEngine` sobe com modelo aleatório (`trained: false`) até que `POST /api/fl/reload` seja chamado manualmente ou pelo scheduler.
-
-  **O que fazer:** no startup da API, verificar `FL_CHECKPOINT_DIR` para o checkpoint mais recente (`round_*.pt`) e carregá-lo automaticamente antes de aceitar tráfego.
+  `_lifespan(app)` em `service.py` substitui `@app.on_event("startup")` (deprecated).
+  Chama `_get_engine()` antes de aceitar tráfego — o engine já faz auto-discovery via
+  `CheckpointStore.load_latest()` na construção. Se não há checkpoint, sobe com
+  `trained: false` (comportamento explícito, não silencioso).
 
 ### BLOQUEADOR: `_run_ingest` não é atômica
 
-- [ ] **Transação abrangendo exames + risco + exportação**
+- [x] ~~**Transação única abrangendo exames + risco + exportação**~~
 
-  Hoje: salva exames → lê histórico → prediz → salva risco → exporta. Se o processo morrer entre passo 3 e 4, o exame foi salvo mas o risco não. O estado fica inconsistente sem possibilidade de replay.
-
-  **O que fazer:** envolver os passos de persistência em uma transação do SQLAlchemy. A exportação de arquivo pode ficar fora (não-transacional) mas deve ser idempotente (sobrescrever se já existir).
+  `_run_ingest` em `service.py` envolve todos os passos em `with _db.begin() as conn:`.
+  `PatientDB.begin()` (contextlib.contextmanager) abre uma transação SQLAlchemy e repassa
+  `conn` para os métodos `_tx` (`upsert_patient_tx`, `add_exams_tx`, `get_exams_tx`,
+  `add_risk_tx`, `get_risk_history_tx`, `get_patient_tx`, `set_export_path_tx`).
+  Se qualquer passo falhar (incluindo a exportação de arquivo), tudo reverte — sem estado parcial.
 
 ### Importante: Rastreabilidade de versão do modelo
 
-- [ ] **Versão do modelo nas respostas da API**
+- [x] ~~**Versão do modelo nas respostas da API**~~
 
-  A resposta retorna probabilidades mas não qual round gerou o modelo, quando foi treinado, com quantos hospitais participaram. Se um checkpoint ruim é carregado, não há rastreabilidade para incidentes clínicos.
-
-  **O que fazer:** incluir em `model_metadata`: `checkpoint_round`, `checkpoint_timestamp`, `participating_hospitals` (N, sem identificar quais), `model_version`. Gravar esses metadados no checkpoint junto com `model_state` e `vocab`.
+  `checkpoint_round`, `checkpoint_at`, `model_version` (SHA-256 12 hex chars dos pesos)
+  gravados em `_serialize()` de `checkpoint_store.py`. `InferenceEngine._load()` lê os
+  três campos. `predict_proba()` e `ModelMetadata` os propagam nas respostas da API.
+  `_run_calibration()` no servidor federado re-grava o checkpoint com T calibrado,
+  preservando `checkpoint_round` e atualizando `checkpoint_at` + `model_version`.
 
 ### Importante: Rotação de chave HMAC
 
@@ -188,9 +202,10 @@ Dividido em três partes:
 
 ### Importante: `on_event("startup")` deprecated
 
-- [ ] **Migrar para `lifespan` context manager (FastAPI)**
+- [x] ~~**Migrar para `lifespan` context manager (FastAPI)**~~
 
-  `@app.on_event("startup")` gera `DeprecationWarning` em cada teste e será removido em versão futura do FastAPI. Migrar para o padrão `lifespan` com `asynccontextmanager`.
+  `@app.on_event("startup")` removido. `_lifespan` com `@asynccontextmanager` passado para
+  `FastAPI(lifespan=_lifespan)`. Zero `DeprecationWarning` nos testes.
 
 ---
 

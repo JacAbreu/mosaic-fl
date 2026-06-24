@@ -247,8 +247,70 @@ class FederatedServer:
         return model
 
     def _load_test_data(self) -> Optional[torch.utils.data.DataLoader]:
-        """Carrega dados de teste holdout (opcional)."""
-        return None
+        """Carrega dados de teste holdout do banco para avaliação global a cada round.
+
+        Usa FL_TEST_HOLDOUT_FRACTION (padrão 0.1) de cada hospital como holdout.
+        Requer FL_DB_URL configurado; retorna None silenciosamente caso contrário.
+
+        Nota: em FL real, o servidor não deve ter acesso a dados de pacientes.
+        Esta implementação é válida para simulação local (TCC) e para um eventual
+        conjunto de validação compartilhado formalmente acordado entre hospitais.
+        """
+        if not RUNTIME_CFG.db_url:
+            logger.info("_load_test_data: FL_DB_URL ausente — avaliação global desativada")
+            return None
+
+        try:
+            from mosaicfl.core.preprocessor import SequencePipeline
+            from mosaicfl.core.config import MAX_SEQ_LEN
+            from torch.utils.data import DataLoader, TensorDataset
+
+            holdout_fraction = float(os.getenv("FL_TEST_HOLDOUT_FRACTION", "0.1"))
+            batch_size = int(os.getenv("FL_BATCH_SIZE", "32"))
+
+            pipeline = SequencePipeline(
+                connection_string=RUNTIME_CFG.db_url,
+                max_seq_len=MAX_SEQ_LEN,
+            )
+            hospital_data = pipeline.build_per_hospital()
+
+            if not hospital_data:
+                logger.warning("_load_test_data: SequencePipeline retornou vazio")
+                return None
+
+            rng = torch.Generator()
+            rng.manual_seed(42)
+
+            test_seqs_list, test_lbls_list = [], []
+            for _hospital_id, (seqs, labels, _vocab) in hospital_data.items():
+                n = len(seqs)
+                if n < 10:
+                    continue
+                perm = torch.randperm(n, generator=rng)
+                n_test = max(1, int(holdout_fraction * n))
+                test_seqs_list.append(seqs[perm[:n_test]])
+                test_lbls_list.append(labels[perm[:n_test]])
+
+            if not test_seqs_list:
+                logger.warning("_load_test_data: nenhuma amostra de teste coletada")
+                return None
+
+            test_seqs = torch.cat(test_seqs_list, dim=0)
+            test_lbls = torch.cat(test_lbls_list, dim=0)
+
+            loader = DataLoader(
+                TensorDataset(test_seqs, test_lbls),
+                batch_size=batch_size,
+            )
+            logger.info(
+                "_load_test_data_ready n=%d holdout_fraction=%.2f hospitals=%d",
+                len(test_seqs), holdout_fraction, len(test_seqs_list),
+            )
+            return loader
+
+        except Exception as exc:
+            logger.warning("_load_test_data_error %s — avaliação global desativada", exc)
+            return None
 
     def _signal_handler(self, signum, frame):
         logger.info("signal_received", extra={"signum": signum})
@@ -308,6 +370,7 @@ class FederatedServer:
             checkpoint_store=get_checkpoint_store(RUNTIME_CFG.db_url),
             on_round_start=self._on_round_start,
             on_round_complete=self._on_round_complete,
+            test_loader=self.test_loader,
             proximal_mu=self.proximal_mu,
             fraction_fit=1.0,
             fraction_evaluate=1.0,

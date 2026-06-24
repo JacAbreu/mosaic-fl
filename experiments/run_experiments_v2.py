@@ -741,6 +741,17 @@ def run_federated_learning_manual(
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
 
+    # Temperature scaling: calibra o modelo global no test_loader.
+    # Nota: em simulação acadêmica, reutilizamos o test_loader como calibration set.
+    # Em produção, deve-se reservar um holdout separado para calibração.
+    from mosaicfl.core.calibration import TemperatureScaler
+    scaler = TemperatureScaler()
+    try:
+        scaler.fit(global_model, test_loader, device=str(DEVICE))
+        logger.info(f"Calibração concluída — T={scaler.T:.4f}")
+    except Exception as exc:
+        logger.warning(f"Calibração falhou ({exc}) — T mantido em 1.0")
+
     checkpoint_store = get_checkpoint_store(FL_DB_URL)
     checkpoint_store.save(
         round_num=round_num,
@@ -748,8 +759,9 @@ def run_federated_learning_manual(
         vocab=vocab or {},
         accuracy=history["accuracy"][-1] if history["accuracy"] else 0.0,
         loss=history["loss"][-1] if history["loss"] else 0.0,
+        temperature=scaler.T,
     )
-    logger.info(f"Checkpoint salvo no store ({type(checkpoint_store).__name__}, vocab_size={len(vocab or {})})")
+    logger.info(f"Checkpoint salvo no store ({type(checkpoint_store).__name__}, vocab_size={len(vocab or {})}, T={scaler.T:.4f})")
 
     return history, global_model
 
@@ -836,11 +848,20 @@ def run_federated_learning_ray(
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
 
+    # Temperature scaling
+    from mosaicfl.core.calibration import TemperatureScaler
+    scaler = TemperatureScaler()
+    try:
+        scaler.fit(global_model, test_loader, device=str(DEVICE))
+        logger.info(f"Calibração concluída — T={scaler.T:.4f}")
+    except Exception as exc:
+        logger.warning(f"Calibração falhou ({exc}) — T mantido em 1.0")
+
     ckpt_dir = Path("checkpoints")
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     ckpt_path = ckpt_dir / f"final_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
-    torch.save({"model_state": global_model.state_dict(), "vocab": vocab or {}}, ckpt_path)
-    logger.info(f"Checkpoint salvo: {ckpt_path} (vocab_size={len(vocab or {})})")
+    torch.save({"model_state": global_model.state_dict(), "vocab": vocab or {}, "temperature": scaler.T}, ckpt_path)
+    logger.info(f"Checkpoint salvo: {ckpt_path} (vocab_size={len(vocab or {})}, T={scaler.T:.4f})")
 
     return history, global_model
 

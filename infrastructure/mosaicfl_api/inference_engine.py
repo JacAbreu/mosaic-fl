@@ -12,6 +12,7 @@ Substituição do MD5: a tokenização por hash gerava tokens fora do vocabulár
 treinado, tornando o predict() clinicamente inválido.
 """
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Optional
@@ -20,6 +21,8 @@ import torch
 import torch.nn.functional as F
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_MC_SAMPLES = int(os.getenv("FL_MC_SAMPLES", "50"))
 
 _MOSAICFL_AVAILABLE = False
 _VOCAB_SIZE = 10000
@@ -168,9 +171,13 @@ class InferenceEngine:
         self._checkpoint_path: Optional[Path] = None
         self.token_mode = token_mode
 
-        self._vocab:         dict[str, int]           = {}
-        self._alias_cache:   dict[str, str]           = {}
-        self._canonical_refs: dict[str, tuple[float, float]] = {}
+        self._vocab:             dict[str, int]             = {}
+        self._alias_cache:       dict[str, str]             = {}
+        self._canonical_refs:    dict[str, tuple[float, float]] = {}
+        self._temperature:       float                      = 1.0
+        self._checkpoint_round:  Optional[int]              = None
+        self._checkpoint_at:     Optional[str]              = None
+        self._model_version:     Optional[str]              = None
         self._mc_lock = threading.Lock()
 
         if checkpoint_path and Path(checkpoint_path).exists():
@@ -186,19 +193,26 @@ class InferenceEngine:
 
     def _load(self, path: Path) -> None:
         state = torch.load(path, map_location="cpu", weights_only=True)
-        # Checkpoint deve conter 'model_state' e 'vocab'
         if isinstance(state, dict) and "vocab" in state:
             self._vocab = state["vocab"]
             self.model.load_state_dict(state["model_state"])
+            self._temperature      = float(state.get("temperature", 1.0))
+            self._checkpoint_round = state.get("checkpoint_round")
+            self._checkpoint_at    = state.get("checkpoint_at")
+            self._model_version    = state.get("model_version")
         else:
             # Compatibilidade com checkpoints antigos (só pesos)
             self.model.load_state_dict(state)
+            self._temperature = 1.0
             logger.warning(
                 "inference_engine_legacy_checkpoint — vocabulário ausente; "
                 "salve o vocab junto com os pesos do modelo"
             )
         self._checkpoint_path = path
-        logger.info("inference_engine_loaded path=%s vocab_size=%d", path, len(self._vocab))
+        logger.info(
+            "inference_engine_loaded path=%s vocab_size=%d T=%.4f",
+            path, len(self._vocab), self._temperature,
+        )
 
     def _load_references(self, db_url: str) -> None:
         """Carrega alias cache e refs canônicas do banco."""
@@ -236,7 +250,7 @@ class InferenceEngine:
         x = torch.tensor([tokens], dtype=torch.long)
         return x, (x == 0)
 
-    def predict_proba(self, exam_records: list, mc_samples: int = 50) -> dict:
+    def predict_proba(self, exam_records: list, mc_samples: int = _DEFAULT_MC_SAMPLES) -> dict:
         """Retorna probabilidades por classe com incerteza via MC Dropout.
 
         Returns:
@@ -256,12 +270,16 @@ class InferenceEngine:
             else:
                 logger.warning("inference_engine_empty_vocab")
             return {
-                "probabilities":   {l: dict(empty) for l in labels},
-                "predicted_class": 0,
-                "predicted_label": labels[0],
-                "mc_samples":      0,
-                "risk_score":      0.0,
-                "trained":         self._checkpoint_path is not None,
+                "probabilities":    {l: dict(empty) for l in labels},
+                "predicted_class":  0,
+                "predicted_label":  labels[0],
+                "mc_samples":       0,
+                "risk_score":       0.0,
+                "trained":          self._checkpoint_path is not None,
+                "calibrated":       self._temperature != 1.0,
+                "checkpoint_round": self._checkpoint_round,
+                "checkpoint_at":    self._checkpoint_at,
+                "model_version":    self._model_version,
             }
 
         x, mask = self._tokenize(exam_records)
@@ -272,7 +290,7 @@ class InferenceEngine:
             all_probs: list = []
             with torch.no_grad():
                 for _ in range(mc_samples):
-                    logits = self.model(x, mask=mask)
+                    logits = self.model(x, mask=mask) / max(self._temperature, 1e-3)
                     all_probs.append(F.softmax(logits, dim=-1)[0])
             self.model.eval()
 
@@ -292,11 +310,15 @@ class InferenceEngine:
                 }
                 for i, label in enumerate(labels)
             },
-            "predicted_class": predicted_class,
-            "predicted_label": labels[predicted_class],
-            "mc_samples":      mc_samples,
-            "risk_score":      round(risk_score, 4),
-            "trained":         self._checkpoint_path is not None,
+            "predicted_class":  predicted_class,
+            "predicted_label":  labels[predicted_class],
+            "mc_samples":       mc_samples,
+            "risk_score":       round(risk_score, 4),
+            "trained":          self._checkpoint_path is not None,
+            "calibrated":       self._temperature != 1.0,
+            "checkpoint_round": self._checkpoint_round,
+            "checkpoint_at":    self._checkpoint_at,
+            "model_version":    self._model_version,
         }
 
     def predict(self, exam_records: list) -> float:

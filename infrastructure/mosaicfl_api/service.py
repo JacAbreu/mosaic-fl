@@ -35,6 +35,7 @@ import os
 import sys
 import time
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
@@ -230,30 +231,11 @@ async def _get_token_fingerprint(
 
 
 # ---------------------------------------------------------------------------
-# FastAPI app
+# Lifespan (startup/shutdown)
 # ---------------------------------------------------------------------------
-app = FastAPI(
-    title="MOSAIC-FL API",
-    description="Inferência federada e painel de monitoramento clínico",
-    version="0.3.0",
-)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
-)
-
-_STATIC_DIR = Path(__file__).parent / "static"
-if _STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
-
-
-@app.on_event("startup")
 async def _startup_checks() -> None:
-    """Valida configuração crítica no startup — falha rápido antes de aceitar tráfego."""
+    """Valida configuração crítica — chamado pelo lifespan antes de aceitar tráfego."""
     errors: list[str] = []
 
     if not os.getenv("FL_DB_URL"):
@@ -313,6 +295,42 @@ async def _startup_checks() -> None:
     )
 
 
+@asynccontextmanager
+async def _lifespan(app):
+    await _startup_checks()
+    # Auto-discovery: carrega o checkpoint mais recente antes de aceitar tráfego.
+    # Sem isso, a API sobe com modelo aleatório (trained=False) após qualquer reinicialização.
+    engine = _get_engine()
+    if engine.checkpoint_path:
+        logger.info("startup_checkpoint_loaded path=%s", engine.checkpoint_path)
+    else:
+        logger.warning("startup_no_checkpoint — API operacional mas modelo não treinado (trained=False)")
+    yield
+
+
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
+app = FastAPI(
+    title="MOSAIC-FL API",
+    description="Inferência federada e painel de monitoramento clínico",
+    version="0.3.0",
+    lifespan=_lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+_STATIC_DIR = Path(__file__).parent / "static"
+if _STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+
 # ---------------------------------------------------------------------------
 # Pydantic schemas
 # ---------------------------------------------------------------------------
@@ -351,11 +369,14 @@ class ClassProbability(BaseModel):
 
 
 class ModelMetadata(BaseModel):
-    trained:            bool = False
-    calibrated:         bool = False
-    uncertainty_method: str  = "mc_dropout"
-    mc_samples:         int  = 0
-    note:               str  = (
+    trained:            bool          = False
+    calibrated:         bool          = False
+    uncertainty_method: str           = "mc_dropout"
+    mc_samples:         int           = 0
+    checkpoint_round:   Optional[int] = None
+    checkpoint_at:      Optional[str] = None
+    model_version:      Optional[str] = None
+    note:               str           = (
         "Probabilidades estimadas via MC Dropout. Modelo sem calibração pós-treinamento: "
         "os valores refletem confiança relativa entre classes, não frequência empírica calibrada. "
         "Não usar como probabilidade clínica absoluta sem avaliação profissional."
@@ -459,9 +480,8 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
         out = _OUTPUT_DIR
 
     async with _patient_lock(pid):
-        # 1. Persiste paciente e exames com resolução canônica
-        _db.upsert_patient(pid, request.sex, request.age)
-        _db.add_exams(pid, [
+        # Prepara linhas de exames (resolução canônica fora da transação — sem IO de banco)
+        exam_rows = [
             {
                 "analyte":            canonical,
                 "date":               str(e.date),
@@ -481,44 +501,50 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
             for e in request.exams
             for canonical, classification, canon_ref_low, canon_ref_high
             in (engine.resolve_for_ingest(e.exam_name, e.value),)
-        ])
-
-        # 2. Prediz sobre histórico COMPLETO do paciente (não só os exames do request)
-        all_exam_rows = _db.get_exams(pid)
-        history_records = [
-            ExamRecord(
-                exam_name=r["analyte"],
-                date=r["date"],
-                value=r["value"],
-                phase=ClinicalPhase.from_str(r["phase"]),
-                ref_low=r["ref_low"],
-                ref_high=r["ref_high"],
-            )
-            for r in all_exam_rows
         ]
-        proba      = engine.predict_proba(history_records)
-        risk_score = proba["risk_score"]
-        today      = date.today()
-        _db.add_risk(pid, today.isoformat(), risk_score)
 
-        # 3. Exporta ClinicalPath
-        all_risk_rows = _db.get_risk_history(pid)
-        patient_row   = _db.get_patient(pid)
-        if patient_row is None:
-            raise HTTPException(status_code=500, detail="Erro interno: paciente não encontrado após upsert")
+        # Transação única: persiste paciente + exames + risco + path de exportação.
+        # Se qualquer passo falhar, o banco reverte completamente (sem estado parcial).
+        with _db.begin() as conn:
+            _db.upsert_patient_tx(conn, pid, request.sex, request.age)
+            _db.add_exams_tx(conn, pid, exam_rows)
 
-        patient_export = PatientExport(
-            patient_id=pid,
-            sex=patient_row["sex"],
-            age=patient_row["age"],
-            exam_records=history_records,
-            risk_predictions=[
-                RiskPrediction(date=h["date"], risk_score=h["risk_score"])
-                for h in all_risk_rows
-            ],
-        )
-        export_path = _exporter.export(patient_export, out)
-        _db.set_export_path(pid, str(export_path))
+            all_exam_rows = _db.get_exams_tx(conn, pid)
+            history_records = [
+                ExamRecord(
+                    exam_name=r["analyte"],
+                    date=r["date"],
+                    value=r["value"],
+                    phase=ClinicalPhase.from_str(r["phase"]),
+                    ref_low=r["ref_low"],
+                    ref_high=r["ref_high"],
+                )
+                for r in all_exam_rows
+            ]
+
+            proba      = engine.predict_proba(history_records)
+            risk_score = proba["risk_score"]
+            today      = date.today()
+            _db.add_risk_tx(conn, pid, today, risk_score)
+
+            all_risk_rows = _db.get_risk_history_tx(conn, pid)
+            patient_row   = _db.get_patient_tx(conn, pid)
+            if patient_row is None:
+                raise HTTPException(status_code=500, detail="Erro interno: paciente não encontrado após upsert")
+
+            patient_export = PatientExport(
+                patient_id=pid,
+                sex=patient_row["sex"],
+                age=patient_row["age"],
+                exam_records=history_records,
+                risk_predictions=[
+                    RiskPrediction(date=h["date"], risk_score=h["risk_score"])
+                    for h in all_risk_rows
+                ],
+            )
+            # Exportação de arquivo: idempotente (sobrescreve). Se falhar, a transação reverte.
+            export_path = _exporter.export(patient_export, out)
+            _db.set_export_path_tx(conn, pid, str(export_path))
 
     logger.info(
         "exam_ingested",
@@ -544,7 +570,14 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
         class_probabilities={k: ClassProbability(**v) for k, v in proba["probabilities"].items()},
         predicted_class=proba["predicted_class"],
         predicted_label=proba["predicted_label"],
-        model_metadata=ModelMetadata(trained=proba["trained"], mc_samples=proba["mc_samples"]),
+        model_metadata=ModelMetadata(
+            trained=proba["trained"],
+            calibrated=proba.get("calibrated", False),
+            mc_samples=proba["mc_samples"],
+            checkpoint_round=proba.get("checkpoint_round"),
+            checkpoint_at=proba.get("checkpoint_at"),
+            model_version=proba.get("model_version"),
+        ),
     )
 
 
@@ -580,7 +613,14 @@ async def predict(
         class_probabilities={k: ClassProbability(**v) for k, v in proba["probabilities"].items()},
         predicted_class=proba["predicted_class"],
         predicted_label=proba["predicted_label"],
-        model_metadata=ModelMetadata(trained=proba["trained"], mc_samples=proba["mc_samples"]),
+        model_metadata=ModelMetadata(
+            trained=proba["trained"],
+            calibrated=proba.get("calibrated", False),
+            mc_samples=proba["mc_samples"],
+            checkpoint_round=proba.get("checkpoint_round"),
+            checkpoint_at=proba.get("checkpoint_at"),
+            model_version=proba.get("model_version"),
+        ),
     )
 
 

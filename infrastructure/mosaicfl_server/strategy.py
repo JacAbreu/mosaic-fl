@@ -37,7 +37,11 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
       - Exporta métricas para JSON (consumidas pelo scheduler)
       - Rastreia convergência
       - Lê config de runtime do PostgreSQL (ou arquivo) antes de cada round
+      - Temperature scaling pós-convergência (quando test_loader disponível)
     """
+
+    _test_loader      = None  # fallback para __new__ em testes
+    _checkpoint_store = None  # fallback para __new__ em testes
 
     def __init__(
         self,
@@ -49,6 +53,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         state_store: Optional[TrainingStateStore] = None,
         checkpoint_store: Optional[CheckpointStore] = None,
         round_timeout: int = 300,
+        test_loader=None,
         *args,
         **kwargs,
     ):
@@ -70,6 +75,7 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
         self._state_store = state_store
         self._checkpoint_store = checkpoint_store
         self._round_timeout = round_timeout
+        self._test_loader = test_loader
         self._round_timer: Optional[threading.Timer] = None
         self._current_state = TrainingState()
         self._last_round_metrics: Dict = {}
@@ -274,5 +280,47 @@ class ProductionFedProxStrategy(fl.server.strategy.FedProx):
                 "convergence_detected",
                 extra={"round": server_round, "convergence_round": self.tracker.converged_round},
             )
+            self._run_calibration(server_round)
 
         return aggregated_loss, aggregated_metrics
+
+    def _run_calibration(self, server_round: int) -> None:
+        """Executa temperature scaling após convergência e re-persiste o checkpoint calibrado.
+
+        Requer self._test_loader configurado (via FL_TEST_HOLDOUT_FRACTION).
+        Se não disponível, loga aviso e mantém T=1.0 (modelo não calibrado).
+        """
+        if self._test_loader is None:
+            logger.warning(
+                "calibration_skipped — test_loader ausente; "
+                "configure FL_DB_URL e FL_TEST_HOLDOUT_FRACTION para habilitar"
+            )
+            return
+
+        from mosaicfl.core.calibration import TemperatureScaler
+        from mosaicfl.core.config import RUNTIME_CFG
+
+        try:
+            scaler = TemperatureScaler()
+            scaler.fit(self.global_model, self._test_loader, device=str(RUNTIME_CFG.device))
+            logger.info("calibration_complete", extra={"round": server_round, "T": round(scaler.T, 4)})
+        except Exception as exc:
+            logger.warning("calibration_error %s — T mantido em 1.0", exc)
+            return
+
+        # Re-persiste checkpoint final com temperature; load_latest() retorna o mais recente por id
+        if self._checkpoint_store is not None:
+            last_acc  = self._last_round_metrics.get("accuracy", 0.0)
+            last_loss = self._last_round_metrics.get("loss", 0.0)
+            self._checkpoint_store.save(
+                round_num=server_round,
+                state_dict=self.global_model.state_dict(),
+                vocab=self.vocab,
+                accuracy=last_acc,
+                loss=last_loss,
+                temperature=scaler.T,
+            )
+            logger.info(
+                "calibrated_checkpoint_saved",
+                extra={"round": server_round, "T": round(scaler.T, 4)},
+            )

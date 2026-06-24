@@ -51,9 +51,32 @@ CREATE TABLE IF NOT EXISTS metrics.fl_checkpoints (
 """
 
 
-def _serialize(state_dict: OrderedDict, vocab: Dict[str, int]) -> bytes:
+def _model_version(state_dict: OrderedDict) -> str:
+    """Fingerprint SHA-256 dos pesos — 12 hex chars. Mesmo modelo → mesmo hash."""
+    h = hashlib.sha256()
+    for v in state_dict.values():
+        h.update(v.numpy().tobytes())
+    return h.hexdigest()[:12]
+
+
+def _serialize(
+    state_dict: OrderedDict,
+    vocab: Dict[str, int],
+    temperature: float = 1.0,
+    checkpoint_round: int = 0,
+) -> bytes:
     buf = io.BytesIO()
-    torch.save({"model_state": state_dict, "vocab": vocab}, buf)
+    torch.save(
+        {
+            "model_state":      state_dict,
+            "vocab":            vocab,
+            "temperature":      temperature,
+            "checkpoint_round": checkpoint_round,
+            "checkpoint_at":    datetime.now(timezone.utc).isoformat(),
+            "model_version":    _model_version(state_dict),
+        },
+        buf,
+    )
     return buf.getvalue()
 
 
@@ -73,8 +96,9 @@ class CheckpointStore(ABC):
         vocab: Dict[str, int],
         accuracy: float = 0.0,
         loss: float = 0.0,
+        temperature: float = 1.0,
     ) -> None:
-        """Serializa state_dict + vocab e persiste com metadados da rodada."""
+        """Serializa state_dict + vocab + temperature e persiste com metadados da rodada."""
 
     @abstractmethod
     def load_latest(self) -> Optional[Dict]:
@@ -99,8 +123,9 @@ class SQLiteCheckpointStore(CheckpointStore):
         vocab: Dict[str, int],
         accuracy: float = 0.0,
         loss: float = 0.0,
+        temperature: float = 1.0,
     ) -> None:
-        data = _serialize(state_dict, vocab)
+        data = _serialize(state_dict, vocab, temperature, checkpoint_round=round_num)
         sha256 = hashlib.sha256(data).hexdigest()
         created_at = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self._db_path) as conn:
@@ -111,14 +136,14 @@ class SQLiteCheckpointStore(CheckpointStore):
                 (round_num, accuracy, loss, data, sha256, len(vocab), created_at),
             )
         logger.info(
-            "checkpoint_saved_sqlite round=%d accuracy=%.4f vocab_size=%d sha256=%s",
-            round_num, accuracy, len(vocab), sha256[:12],
+            "checkpoint_saved_sqlite round=%d accuracy=%.4f T=%.4f vocab_size=%d sha256=%s",
+            round_num, accuracy, temperature, len(vocab), sha256[:12],
         )
 
     def load_latest(self) -> Optional[Dict]:
         with sqlite3.connect(self._db_path) as conn:
             row = conn.execute(
-                "SELECT model_bytes, sha256 FROM fl_checkpoints ORDER BY round DESC LIMIT 1"
+                "SELECT model_bytes, sha256 FROM fl_checkpoints ORDER BY id DESC LIMIT 1"
             ).fetchone()
         if row is None:
             return None
@@ -146,9 +171,10 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         vocab: Dict[str, int],
         accuracy: float = 0.0,
         loss: float = 0.0,
+        temperature: float = 1.0,
     ) -> None:
         import sqlalchemy as sa
-        data = _serialize(state_dict, vocab)
+        data = _serialize(state_dict, vocab, temperature, checkpoint_round=round_num)
         sha256 = hashlib.sha256(data).hexdigest()
         with self._engine.begin() as conn:
             conn.execute(
@@ -167,8 +193,8 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                 },
             )
         logger.info(
-            "checkpoint_saved_postgres round=%d accuracy=%.4f vocab_size=%d sha256=%s",
-            round_num, accuracy, len(vocab), sha256[:12],
+            "checkpoint_saved_postgres round=%d accuracy=%.4f T=%.4f vocab_size=%d sha256=%s",
+            round_num, accuracy, temperature, len(vocab), sha256[:12],
         )
 
     def load_latest(self) -> Optional[Dict]:
@@ -177,7 +203,7 @@ class PostgreSQLCheckpointStore(CheckpointStore):
             row = conn.execute(
                 sa.text(
                     "SELECT model_bytes, sha256 FROM metrics.fl_checkpoints "
-                    "ORDER BY round DESC LIMIT 1"
+                    "ORDER BY id DESC LIMIT 1"
                 )
             ).fetchone()
         if row is None:

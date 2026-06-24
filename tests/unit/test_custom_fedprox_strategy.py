@@ -13,16 +13,17 @@ from mosaicfl.core.model import SimplifiedBEHRT
 class TestCustomFedProxStrategy:
 
     def _make_strategy(self, tmp_path):
+        from unittest.mock import MagicMock
         tracker = ConvergenceTracker(threshold=0.01, patience=2)
         history = {"rounds": [], "accuracy": [], "communication_mb": [], "last_checkpoint": None}
         with patch("experiments.experiment_server.FedProx.__init__", return_value=None):
             strategy = CustomFedProxStrategy.__new__(CustomFedProxStrategy)
             strategy.tracker = tracker
             strategy.history = history
-            strategy.save_dir = str(tmp_path)
+            strategy.checkpoint_store = MagicMock()
+            strategy.vocab = {}
             strategy.on_converged = None
             strategy._round_counter = 0
-            import os; os.makedirs(str(tmp_path), exist_ok=True)
         return strategy, tracker, history
 
     def test_aggregate_evaluate_populates_history(self, tmp_path):
@@ -63,8 +64,11 @@ class TestCustomFedProxStrategy:
         with patch.object(type(strategy).__bases__[0], "aggregate_fit",
                           return_value=(params, {})):
             strategy.aggregate_fit(3, [], [])
-        assert (tmp_path / "round_3.pt").exists()
-        assert history["last_checkpoint"] is not None
+        # checkpoint_store.save() deve ter sido chamado com round_num=3
+        strategy.checkpoint_store.save.assert_called_once()
+        call_kwargs = strategy.checkpoint_store.save.call_args
+        assert call_kwargs.kwargs.get("round_num", call_kwargs.args[0] if call_kwargs.args else None) == 3
+        assert history["last_checkpoint"] == "db:round_3"
 
     def test_history_grows_across_rounds(self, tmp_path):
         strategy, tracker, history = self._make_strategy(tmp_path)
