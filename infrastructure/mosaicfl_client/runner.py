@@ -94,8 +94,8 @@ def _split_loader(loader: DataLoader, val_ratio: float = 0.2) -> Tuple[DataLoade
     )
 
 
-# Cache de DataLoaders por tipo de fonte — evita recarregar o banco a cada round
-_loader_cache: dict[str, Tuple[DataLoader, DataLoader]] = {}
+# Cache de DataLoaders por (source_type, hospital_id) — evita recarregar o banco a cada round
+_loader_cache: dict[tuple, Tuple[DataLoader, DataLoader]] = {}
 
 
 def _client_fn(context: Context) -> fl.client.Client:
@@ -113,23 +113,25 @@ def _client_fn(context: Context) -> fl.client.Client:
     data_source_type = str(
         context.node_config.get("data-source", os.getenv("FL_DATA_SOURCE", "simulated"))
     )
+    hospital_id   = str(context.node_config.get("hospital-id", os.getenv("FL_HOSPITAL_ID", client_id_str)))
     client_id_int = parse_client_id(client_id_str)
 
-    if data_source_type not in _loader_cache:
+    cache_key = (data_source_type, hospital_id)
+    if cache_key not in _loader_cache:
         logger.info(
             "data_loading_start",
-            extra={"client_id": client_id_str, "data_source": data_source_type},
+            extra={"client_id": client_id_str, "hospital_id": hospital_id, "data_source": data_source_type},
         )
-        source = DataSourceFactory.create(data_source_type)
-        _loader_cache[data_source_type] = _split_loader(source.load())
+        source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+        _loader_cache[cache_key] = _split_loader(source.load())
         logger.info(
             "data_loaded_and_cached",
-            extra={"client_id": client_id_str, "data_source": data_source_type},
+            extra={"client_id": client_id_str, "hospital_id": hospital_id, "data_source": data_source_type},
         )
     else:
-        logger.debug("data_cache_hit source=%s", data_source_type)
+        logger.debug("data_cache_hit source=%s hospital_id=%s", data_source_type, hospital_id)
 
-    train_loader, val_loader = _loader_cache[data_source_type]
+    train_loader, val_loader = _loader_cache[cache_key]
 
     return FedProxClient(
         client_id=client_id_int,
@@ -161,9 +163,9 @@ class ProductionClient:
     def _load_data_loaders(self) -> Tuple[DataLoader, DataLoader]:
         """Carrega treino/validação conforme FL_DATA_SOURCE ou --data-source."""
         source_type = self.data_source or os.getenv("FL_DATA_SOURCE", "simulated")
-        logger.info("Carregando dados locais (fonte=%s)...", source_type)
+        logger.info("Carregando dados locais (fonte=%s, hospital=%s)...", source_type, self.client_id)
 
-        source = DataSourceFactory.create(source_type)
+        source = DataSourceFactory.create(source_type, hospital_id=self.client_id)
 
         meta = source.get_metadata()
         logger.info("Metadata da fonte: %s", meta)

@@ -72,6 +72,7 @@ class SimulatedDataSource(DataSource):
         num_classes: int = 5,
         batch_size: int = DEFAULT_BATCH_SIZE,
         seed: int = 42,
+        hospital_id: Optional[str] = None,  # aceito mas ignorado — sem partição em modo sintético
     ):
         self.num_samples = num_samples
         self.seq_len = seq_len
@@ -246,6 +247,7 @@ class CSVDataSource(DataSource):
         sep: str = ",",
         encoding: str = "utf-8",
         batch_size: int = DEFAULT_BATCH_SIZE,
+        hospital_id: Optional[str] = None,  # aceito mas ignorado — CSV já contém dados de um hospital
     ):
         self.filepath = filepath or os.getenv("FL_CSV_PATH", "data/hospital.csv")
         self.sep = sep
