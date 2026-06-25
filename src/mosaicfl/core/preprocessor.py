@@ -281,18 +281,32 @@ from .config import MODEL_CFG
 # Mapeamento de outcome_class (FAPESP) → classe de prognóstico (4 classes).
 # outcome_class vem de classify_outcome() em integration/fapesp/transforms.py.
 # Classes excluídas na query SQL (2=alta administrativa, 3=transferência) não aparecem aqui.
-_OUTCOME_TO_PROGNOSIS: Dict[int, int] = {
-    0: 0,  # curado       → alta
-    1: 0,  # melhora      → alta
-    4: 1,  # em atendimento → internacao_prolongada
-    5: 2,  # uti          → uti
-    6: 3,  # obito        → obito
-}
+def _map_outcome(outcome_class: int, duration_days: float, attendance_type: str) -> int:
+    """
+    Converte (outcome_class, duration_days, attendance_type) em classe de prognóstico.
 
+    5 classes que cruzam desfecho clínico, tipo de atendimento e duração:
 
-def _map_outcome(outcome_class: int) -> int:
-    """Converte outcome_class do FAPESP em classe de prognóstico (0–3). Retorna -1 se desconhecido."""
-    return _OUTCOME_TO_PROGNOSIS.get(outcome_class, -1)
+      0 = curado_pronto           — outcome 0, não-internado (ambulatorial/pronto/externo)
+      1 = curado_internado        — outcome 0, internado (curso grave com recuperação completa)
+      2 = melhora_pronto          — outcome 1, não-internado (COVID moderado, melhora sem internação)
+      3 = melhora_internado_breve — outcome 1, internado, ≤ 10 dias
+      4 = melhora_internado_grave — outcome 1, internado, > 10 dias
+
+    O tipo de atendimento define a trajetória clínica: ambulatorial/pronto = acesso pontual;
+    internado = internação contínua com acompanhamento diário de exames.
+
+    Retorna -1 para outcome_class não mapeado (dado censurado ou excluído da análise).
+    """
+    internado = str(attendance_type).strip() == "Internado"
+
+    if outcome_class == 0:
+        return 1 if internado else 0
+    if outcome_class == 1:
+        if not internado:
+            return 2
+        return 3 if duration_days <= 10 else 4
+    return -1  # 4=censored, 5=uti, 6=obito — excluídos ou ausentes nos dados FAPESP
 
 
 class TokenMode:
@@ -329,29 +343,39 @@ def _make_token(analyte: str, classification: str, mode: str = TokenMode.FULL) -
     return f"{analyte}_{classification}"
 
 
-_SQL_INTERNADOS = """
-SELECT
-    a.patient_id,
-    a.attendance_id,
-    a.hospital_id,
-    p.sex,
-    p.birth_year,
-    co.outcome_class,
-    (co.outcome_at - a.attended_at)     AS duration_days,
-    e.analyte,
-    e.classification,
-    GREATEST(0, e.date - a.attended_at) AS dia_relativo
-FROM  clinical.attendances         a
-JOIN  clinical.patients            p  ON p.patient_id    = a.patient_id
-JOIN  metrics.clinical_outcomes    co ON co.attendance_id = a.attendance_id
-JOIN  metrics.exam_records         e  ON e.attendance_id  = a.attendance_id
-WHERE a.attendance_type      = 'Internado'
-  AND co.outcome_class NOT IN (2, 3)
-  AND a.hospital_id    IN ('HSL', 'BPSP')
-  AND e.analyte        IS NOT NULL
-  AND e.classification IS NOT NULL
-  AND (co.outcome_at - a.attended_at) >= 1
-ORDER BY a.patient_id, a.attendance_id, dia_relativo, e.analyte
+_SQL_ATENDIMENTOS = """
+WITH _ranked AS (
+    SELECT
+        a.patient_id,
+        a.attendance_id,
+        a.hospital_id,
+        a.attendance_type,
+        p.sex,
+        p.birth_year,
+        co.outcome_class,
+        (co.outcome_at - a.attended_at)     AS duration_days,
+        e.analyte,
+        e.classification,
+        GREATEST(0, e.date - a.attended_at) AS dia_relativo,
+        ROW_NUMBER() OVER (
+            PARTITION BY a.attendance_id
+            ORDER BY GREATEST(0, e.date - a.attended_at), e.analyte
+        ) AS _rn
+    FROM  clinical.attendances         a
+    JOIN  clinical.patients            p  ON p.patient_id    = a.patient_id
+    JOIN  metrics.clinical_outcomes    co ON co.attendance_id = a.attendance_id
+    JOIN  metrics.exam_records         e  ON e.attendance_id  = a.attendance_id
+    WHERE co.outcome_class NOT IN (2, 3, 4)
+      AND a.hospital_id    IN ('HSL', 'BPSP')
+      AND e.analyte        IS NOT NULL
+      AND e.classification IS NOT NULL
+      AND (co.outcome_at - a.attended_at) >= 0
+)
+SELECT patient_id, attendance_id, hospital_id, attendance_type, sex, birth_year,
+       outcome_class, duration_days, analyte, classification, dia_relativo
+FROM   _ranked
+WHERE  _rn <= :max_seq_len
+ORDER  BY patient_id, attendance_id, dia_relativo, analyte
 """
 
 
@@ -478,7 +502,7 @@ class SequencePipeline:
     desfechos não-clínicos ou com desfecho final desconhecido.
 
     Atenção: o modelo BEHRT usa ``MODEL_CFG.num_classes`` para dimensionar o
-    classificador. Para usar este pipeline, configure ``num_classes = 4`` antes
+    classificador. Para usar este pipeline, configure ``num_classes = 5`` antes
     de instanciar ``SimplifiedBEHRT``.
 
     Sequência temporal
@@ -665,10 +689,10 @@ class SequencePipeline:
         except Exception as e:
             raise RuntimeError(f"[pipeline] falha na conexão com o banco: {e}") from e
 
-        _log("[pipeline] executando query (JOIN de 3 tabelas — pode levar alguns minutos)...")
+        _log(f"[pipeline] executando query (max_seq_len={self.max_seq_len} — pode levar alguns minutos)...")
         t_q = time.time()
         with engine.connect() as conn:
-            df = pd.read_sql(text(_SQL_INTERNADOS), conn)
+            df = pd.read_sql(text(_SQL_ATENDIMENTOS), conn, params={"max_seq_len": self.max_seq_len})
         _log(f"[pipeline] query concluída em {time.time() - t_q:.1f}s — {len(df):,} linhas")
 
         if df.empty:
@@ -678,10 +702,23 @@ class SequencePipeline:
         return df
 
     def _build_vocab(self, df: pd.DataFrame) -> Dict[str, int]:
-        token_series = df.apply(
-            lambda r: _make_token(r["analyte"], r["classification"], self.token_mode),
-            axis=1,
-        )
+        has_class = "classification" in df.columns
+        if self.token_mode == TokenMode.ANALYTE_ONLY:
+            token_series = df["analyte"].astype(str)
+        elif self.token_mode == TokenMode.CLASS_ONLY:
+            token_series = df["classification"].astype(str) if has_class else df["analyte"].astype(str)
+        else:  # FULL — vectorized: avoids apply(axis=1)
+            if has_class:
+                token_series = pd.Series(
+                    np.where(
+                        df["classification"] == "NO_REF",
+                        df["analyte"].astype(str),
+                        df["analyte"].astype(str) + "_" + df["classification"].astype(str),
+                    )
+                )
+            else:
+                token_series = df["analyte"].astype(str)
+
         available = self.max_vocab_size - len(self._SPECIAL)
         top_tokens = token_series.value_counts().index[:available].tolist()
 
@@ -702,57 +739,71 @@ class SequencePipeline:
         """
         Retorna (sequences, labels, hospital_ids, demographics).
 
+        Token building e demográficos são computados vetorizadamente no DataFrame
+        inteiro antes do groupby — elimina iterrows() no inner loop.
+
         demographics: FloatTensor shape (N, 2) — [age_norm, sex_binary] por paciente.
             age_norm   = (REF_YEAR − birth_year) / 100.0, clamped [0.0, 1.0]
                          0.5 quando birth_year ausente
             sex_binary = 1.0 para 'M', 0.0 para 'F' ou desconhecido
         """
         unk_id = self._SPECIAL["<UNK>"]
+
+        # ── Vectorized token building ─────────────────────────────────────────
+        has_class = "classification" in df.columns
+        if self.token_mode == TokenMode.FULL and has_class:
+            raw_tokens = np.where(
+                df["classification"] == "NO_REF",
+                df["analyte"].astype(str),
+                df["analyte"].astype(str) + "_" + df["classification"].astype(str),
+            )
+        elif self.token_mode == TokenMode.ANALYTE_ONLY:
+            raw_tokens = df["analyte"].astype(str).values
+        else:
+            raw_tokens = df["classification"].astype(str).values if has_class else df["analyte"].astype(str).values
+
+        token_ids = pd.Series(raw_tokens, dtype=str).map(vocab).fillna(unk_id).astype(int).values
+        df = df.assign(_token_id=token_ids)
+
+        # ── Vectorized demographics ───────────────────────────────────────────
+        if "sex" in df.columns:
+            sex_bin_col = (df["sex"].astype(str).str.strip().str.upper() == "M").astype(float).values
+        else:
+            sex_bin_col = np.full(len(df), 0.0)
+
+        if "birth_year" in df.columns:
+            by_col = pd.to_numeric(df["birth_year"], errors="coerce")
+            age_norm_col = ((self._FAPESP_REF_YEAR - by_col) / 100.0).clip(0.0, 1.0).fillna(0.5).values
+        else:
+            age_norm_col = np.full(len(df), 0.5)
+
+        df = df.assign(_sex_bin=sex_bin_col, _age_norm=age_norm_col)
+
+        # ── Group and aggregate ───────────────────────────────────────────────
+        # SQL já retorna ORDER BY patient_id, attendance_id, dia_relativo, analyte
+        # — dentro de cada grupo os tokens já estão na ordem correta.
         sequences: List[List[int]] = []
         labels: List[int] = []
         hospital_ids: List[str] = []
         demographics: List[List[float]] = []
 
-        has_sex        = "sex"        in df.columns
-        has_birth_year = "birth_year" in df.columns
-
-        groups = list(df.groupby(["patient_id", "attendance_id"], sort=False))
-        total = len(groups)
+        grouped = df.groupby(["patient_id", "attendance_id"], sort=False)
+        total = grouped.ngroups
         checkpoint = max(1, total // 10)
 
-        for idx, ((_, _att_id), group) in enumerate(groups):
-            label = _map_outcome(int(group["outcome_class"].iloc[0]))
+        for idx, ((_, _att_id), group) in enumerate(grouped):
+            label = _map_outcome(
+                int(group["outcome_class"].iloc[0]),
+                float(group["duration_days"].iloc[0]),
+                str(group["attendance_type"].iloc[0]),
+            )
             if label < 0:
                 continue
 
-            group = group.sort_values(["dia_relativo", "analyte"])
-            tokens = [
-                vocab.get(
-                    _make_token(r["analyte"], r["classification"], self.token_mode),
-                    unk_id,
-                )
-                for _, r in group.iterrows()
-            ]
-            sequences.append(self._pad(tokens))
+            sequences.append(self._pad(group["_token_id"].tolist()))
             labels.append(label)
             hospital_ids.append(str(group["hospital_id"].iloc[0]))
-
-            # ── Demográficos ──────────────────────────────────────────────────
-            sex_val  = str(group["sex"].iloc[0]).strip().upper() if has_sex else ""
-            sex_bin  = 1.0 if sex_val == "M" else 0.0
-
-            if has_birth_year:
-                by = group["birth_year"].iloc[0]
-                if by is not None and not (isinstance(by, float) and pd.isna(by)):
-                    age_norm = (self._FAPESP_REF_YEAR - int(by)) / 100.0
-                    age_norm = max(0.0, min(1.0, age_norm))
-                else:
-                    age_norm = 0.5
-            else:
-                age_norm = 0.5
-
-            demographics.append([age_norm, sex_bin])
-            # ─────────────────────────────────────────────────────────────────
+            demographics.append([float(group["_age_norm"].iloc[0]), float(group["_sex_bin"].iloc[0])])
 
             if (idx + 1) % checkpoint == 0:
                 pct = (idx + 1) / total * 100

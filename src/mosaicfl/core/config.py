@@ -37,10 +37,11 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
 _DEFAULT_CLASS_LABELS = (
-    "alta",
-    "internacao_prolongada",
-    "uti",
-    "obito",
+    "curado_pronto",
+    "curado_internado",
+    "melhora_pronto",
+    "melhora_internado_breve",
+    "melhora_internado_grave",
 )
 
 
@@ -72,15 +73,15 @@ class FedConfig:
     fraction_fit:          float = 1.0
     fraction_evaluate:     float = 1.0
     proximal_mu:           float = 0.01
-    min_fit_clients:       int   = 3
-    min_evaluate_clients:  int   = 3
-    min_available_clients: int   = 3
+    min_fit_clients:       int   = 2
+    min_evaluate_clients:  int   = 2
+    min_available_clients: int   = 2
     convergence_threshold: float = 0.005
     convergence_patience:  int   = 3
     batch_size:            int   = 16
     local_epochs:          int   = 2
     lr:                    float = 0.001
-    num_clients:           int   = 5
+    num_clients:           int   = 2
     random_seed:           int   = 42
     top_k:                 int   = 3
     max_new_tokens:        int   = 64
@@ -108,7 +109,7 @@ MODEL_CFG = ModelConfig(
     num_layers   = int(os.getenv("FL_NUM_LAYERS",   "2")),
     num_heads    = int(os.getenv("FL_NUM_HEADS",    "4")),
     ff_dim       = int(os.getenv("FL_FF_DIM",       "128")),
-    num_classes  = int(os.getenv("FL_NUM_CLASSES",  "4")),
+    num_classes  = int(os.getenv("FL_NUM_CLASSES",  "5")),
     class_labels = tuple(
         os.getenv("FL_CLASS_LABELS", ",".join(_DEFAULT_CLASS_LABELS)).split(",")
     ),
