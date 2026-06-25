@@ -34,9 +34,9 @@ flowchart TD
     end
 
     subgraph PIPELINE["SequencePipeline"]
-        SQL[_SQL_INTERNADOS\nJOIN 3 tabelas]
-        TOKEN[_make_token\nanalito + bucket]
-        BIN[_map_outcome\n4 classes de prognóstico]
+        SQL[_SQL_ATENDIMENTOS\nJOIN 3 tabelas, todos os tipos]
+        TOKEN[_make_token\nanalito + classificação]
+        BIN[_map_outcome\n5 classes de prognóstico]
         VOCAB[_build_vocab\nvocabulário global]
         TENSORS[_build_tensors\nsequências temporais]
         SPLIT[build_per_hospital\ndivisão por hospital]
@@ -241,17 +241,25 @@ O token `<CLS>` (id=2) é inserido pelo `SimplifiedBEHRT` no início da sequênc
 durante o forward pass — não pelo pipeline. O embedding do `<CLS>` é usado como
 representação global da internação para a classificação final.
 
-### Distribuição esperada das 4 classes de prognóstico (label)
+### Distribuição esperada das 5 classes de prognóstico (label)
 
-| Classe | Nome | Derivado de `outcome_class` FAPESP | Interpretação clínica |
+As classes cruzam **desfecho clínico × tipo de atendimento × duração**, capturando a
+trajetória completa do paciente. O tipo de atendimento é label (não feature de entrada):
+o modelo aprende a inferir severidade a partir dos padrões de exame.
+
+| Classe | Nome | Critério | Interpretação clínica |
 |---|---|---|---|
-| 0 | alta | 0 (curado), 1 (melhora) | Resolução favorável, paciente recebe alta |
-| 1 | internacao_prolongada | 4 (em atendimento) | Quadro sem desfecho imediato — ainda internado |
-| 2 | uti | 5 (uti) | Agravamento, necessidade de terapia intensiva |
-| 3 | obito | 6 (óbito) | Desfecho fatal |
+| 0 | curado_pronto | outcome 0, não-internado | COVID leve — alta curado em atendimento pontual |
+| 1 | curado_internado | outcome 0, internado | Curso grave com recuperação completa |
+| 2 | melhora_pronto | outcome 1, não-internado | Melhora sem necessidade de internação |
+| 3 | melhora_internado_breve | outcome 1, internado ≤ 10d | Internação moderada, melhora |
+| 4 | melhora_internado_grave | outcome 1, internado > 10d | Internação prolongada, curso complexo |
+
+Exclusões: outcome_class 2 (alta administrativa), 3 (transferência), 4 (censored).
+Estimativa de pacientes de treino: ~33k (BPSP + HSL, todos os tipos de atendimento).
 
 > A distribuição entre classes é verificada a cada rodada federada nos logs:
-> `dist={0: n0, 1: n1, 2: n2, 3: n3}`
+> `dist={0: n0, 1: n1, 2: n2, 3: n3, 4: n4}`
 
 ---
 
@@ -435,16 +443,15 @@ flowchart TD
 ### Fase 1 — Carregamento e Tokenização
 
 4. Se `FL_DB_URL` está definido, `prepare_dataloaders_from_db()` instancia `SequencePipeline`.
-5. `SequencePipeline._load_dataframe()` abre conexão com PostgreSQL, testa com `SELECT 1`, executa `_SQL_INTERNADOS` (JOIN de `clinical.attendances`, `metrics.clinical_outcomes`, `metrics.exam_records`).
-6. Para cada linha do resultado, `_make_token()` gera o token semântico: `{analyte}_{baixo|normal|alto}` se houver referência, ou apenas `{analyte}`.
-7. `_build_vocab()` conta frequência de todos os tokens e mantém os `vocab_size − 3 = 9.997` mais frequentes. Tokens especiais: `PAD=0, UNK=1, CLS=2`.
-8. `_build_tensors()` agrupa por `(patient_id, attendance_id)`, ordena exames por `(dia_relativo, analyte)`, converte tokens em IDs, aplica padding/truncamento para `max_seq_len=128`. `_map_outcome()` converte `outcome_class` FAPESP em 4 classes de prognóstico.
-9. `build_per_hospital()` executa os passos 5–8 **uma única vez** e divide os tensores por `hospital_id`: HSL → cliente 0, BPSP → cliente 1.
+5. `SequencePipeline._load_dataframe()` abre conexão com PostgreSQL, testa com `SELECT 1`, executa `_SQL_ATENDIMENTOS` (CTE com ROW_NUMBER OVER PARTITION limitando a `max_seq_len` linhas por atendimento; JOIN de `clinical.attendances`, `metrics.clinical_outcomes`, `metrics.exam_records`; todos os tipos de atendimento — Internado, Ambulatorial, Pronto, Externo).
+6. `_build_vocab()` e `_build_tensors()` operam vetorizadamente sobre o DataFrame completo (sem `iterrows()`). Tokens especiais: `PAD=0, UNK=1, CLS=2`. Vocabulário: `vocab_size − 3 = 9.997` tokens mais frequentes.
+7. `_build_tensors()` agrupa por `(patient_id, attendance_id)`, tokens já ordenados pelo SQL por `(dia_relativo, analyte)`. `_map_outcome(outcome_class, duration_days, attendance_type)` converte os três critérios em 5 classes de prognóstico.
+8. `build_per_hospital()` executa os passos 5–7 **uma única vez** e divide os tensores por `hospital_id`: HSL → cliente 0, BPSP → cliente 1.
 10. `prepare_dataloaders_from_db()` embaralha cada hospital, divide 80% treino / 10% validação / 10% holdout global, e cria `DataLoader`s com `batch_size=16`.
 
 ### Fase 2 — Inicialização do Servidor
 
-11. `SimplifiedBEHRT` é instanciado com `vocab_size=10.000`, `embed_dim=64`, `max_seq_len=128`, `num_layers=2`, `num_heads=4`, `num_classes=4`, `dropout=0.1`. Seed `42` garante reprodutibilidade.
+11. `SimplifiedBEHRT` é instanciado com `vocab_size=10.000`, `embed_dim=64`, `max_seq_len=128`, `num_layers=2`, `num_heads=4`, `num_classes=5`, `dropout=0.1`. Seed `42` garante reprodutibilidade.
 12. O estado do modelo global (`state_dict`) é extraído como lista de arrays NumPy — formato de comunicação com os clientes.
 
 ### Fase 3 — Rodada Federada (repetida até NUM_ROUNDS=20 ou convergência)
@@ -458,7 +465,7 @@ flowchart TD
 
 ### Fase 4 — RAG e Explicabilidade
 
-19. `BEHRTPatternExtractor` realiza forward pass no `test_loader` com o modelo final, extrai pesos de atenção por cabeça/camada e identifica os tokens mais ativados para cada uma das 4 classes de prognóstico.
+19. `BEHRTPatternExtractor` realiza forward pass no `test_loader` com o modelo final, extrai pesos de atenção por cabeça/camada e identifica os tokens mais ativados para cada uma das 5 classes de prognóstico.
 20. Os perfis prototípicos são vetorizados pelo `sentence-transformers/all-MiniLM-L6-v2` e armazenados no ChromaDB.
 21. Para um caso de teste, `ClinicalRAG.explain()` recupera os `top_k=3` padrões mais similares, monta um prompt estruturado e o `DistilGPT-2` gera a justificativa (máx. `64` tokens).
 22. O sistema verifica alucinação (tokens de alta incerteza ou ausência de evidência clínica no contexto) e sinaliza `confiavel=True/False`.
@@ -562,8 +569,8 @@ O `InferenceEngine` já carregou esse checkpoint ao iniciar a `mosaicfl_api`.
    usando o mesmo vocabulário do `SequencePipeline` (`analito_baixo`, `analito_alto`,
    `analito_normal`), constrói a sequência temporal e passa pelo BEHRT com MC Dropout
    (50 passes). Retorna a **distribuição de probabilidade por prognóstico** (alta,
-   internacao_prolongada, uti, obito) com incerteza, e o `risk_score` escalar
-   derivado como média ponderada: `Σ(p_i × w_i)`, `w_i = linspace(0, 1, 4)`.
+   melhora_internado_grave etc.) com incerteza, e o `risk_score` escalar
+   derivado como média ponderada: `Σ(p_i × w_i)`, `w_i = linspace(0, 1, 5)`.
 
 3. **Exportação dos arquivos** — O `ClinicalPathExporter.export()` grava
    **5 arquivos plain-text** no diretório configurado por `FL_CLINICALPATH_OUTPUT`:

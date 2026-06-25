@@ -278,9 +278,9 @@ def split_by_institution(
 from .config import MODEL_CFG
 
 
-# Mapeamento de outcome_class (FAPESP) → classe de prognóstico (4 classes).
 # outcome_class vem de classify_outcome() em integration/fapesp/transforms.py.
-# Classes excluídas na query SQL (2=alta administrativa, 3=transferência) não aparecem aqui.
+# O mapeamento para 5 classes é feito por _map_outcome() combinando outcome_class,
+# duration_days e attendance_type. Classes 2, 3, 4 são excluídas na query SQL.
 def _map_outcome(outcome_class: int, duration_days: float, attendance_type: str) -> int:
     """
     Converte (outcome_class, duration_days, attendance_type) em classe de prognóstico.
@@ -462,16 +462,15 @@ class SequencePipelineInicial:
 
 class SequencePipeline:
     """
-    Pipeline de série temporal clínica para BEHRT — Abordagem de Tempo de Internação.
+    Pipeline de série temporal clínica para BEHRT — Trajetória Clínica por Tipo de Atendimento.
 
     Motivação
     ---------
     A base FAPESP COVID-19 não contém códigos diagnósticos (ICD-10) por decisão de
-    privacidade (LGPD). Na ausência de diagnóstico como label, o tempo de internação
-    é utilizado como proxy da complexidade clínica: pacientes mais graves apresentam
-    alteração persistente dos marcadores laboratoriais, resultando em internações mais
-    longas. A sequência temporal dos exames captura a trajetória de estabilização
-    (ou agravamento) desses marcadores ao longo dos dias de internação.
+    privacidade (LGPD). Na ausência de diagnóstico como label, a combinação de
+    tipo de atendimento + desfecho clínico + duração é usada como proxy de severidade:
+    a sequência temporal dos exames captura a trajetória de evolução (ou agravamento)
+    dos marcadores laboratoriais ao longo do atendimento.
 
     O aprendizado federado (FL) viabiliza compartilhar esse padrão entre hospitais
     sem expor dados individuais, permitindo que instituições menores se beneficiem
@@ -481,25 +480,30 @@ class SequencePipeline:
     --------------
     - Hospitais: HSL e BPSP — únicos com vínculo ``attendance_id`` nos exames
       (HEI: 0 % de vinculação; HFL/HCSP: sem exames vinculados a atendimentos).
-    - Tipo de atendimento: ``attendance_type = 'Internado'``
-    - Exclusões: ``outcome_class IN (2, 3)``
+    - Todos os tipos de atendimento: Internado, Ambulatorial, Pronto Socorro / Pronto
+      Atendimento, Externo.
+    - Exclusões: ``outcome_class IN (2, 3, 4)``
         • 2 = alta administrativa (saída burocrática, sem relação com evolução clínica)
-        • 3 = transferência (desfecho clínico desconhecido — paciente continua em outro serviço)
-    - Duração mínima: ≥ 1 dia (exclui entradas e saídas no mesmo dia calendário)
+        • 3 = transferência (desfecho clínico desconhecido)
+        • 4 = em atendimento (dado censurado — desfecho final desconhecido)
+    - Duração mínima: ≥ 0 dias (inclui atendimentos de mesmo dia, ex.: pronto socorro)
 
-    Label — cenários de evolução clínica (4 classes de prognóstico)
-    ----------------------------------------------------------------
-    +--------+------------------------+------------------------------+
-    | Classe | Nome                   | outcome_class FAPESP         |
-    +--------+------------------------+------------------------------+
-    |   0    | alta                   | 0 (curado) + 1 (melhora)     |
-    |   1    | internacao_prolongada  | 4 (em atendimento)           |
-    |   2    | uti                    | 5 (internado em UTI)         |
-    |   3    | obito                  | 6 (óbito)                    |
-    +--------+------------------------+------------------------------+
+    Label — 5 classes que cruzam desfecho × tipo de atendimento × duração
+    -----------------------------------------------------------------------
+    +--------+---------------------------+-----------------------------------------------+
+    | Classe | Nome                      | Critério                                      |
+    +--------+---------------------------+-----------------------------------------------+
+    |   0    | curado_pronto             | outcome 0, não-internado (pronto/ambul/ext)   |
+    |   1    | curado_internado          | outcome 0, internado (qualquer duração)        |
+    |   2    | melhora_pronto            | outcome 1, não-internado                       |
+    |   3    | melhora_internado_breve   | outcome 1, internado, ≤ 10 dias               |
+    |   4    | melhora_internado_grave   | outcome 1, internado, > 10 dias               |
+    +--------+---------------------------+-----------------------------------------------+
 
-    Classes excluídas na query: 2 (alta administrativa) e 3 (transferência) —
-    desfechos não-clínicos ou com desfecho final desconhecido.
+    O tipo de atendimento define a trajetória clínica e é parte do label (não feature de
+    entrada): o modelo aprende a inferir severidade do caso a partir dos padrões de exame.
+
+    Classes excluídas na query: 2 (alta administrativa), 3 (transferência), 4 (censurado).
 
     Atenção: o modelo BEHRT usa ``MODEL_CFG.num_classes`` para dimensionar o
     classificador. Para usar este pipeline, configure ``num_classes = 5`` antes

@@ -6,8 +6,8 @@ ATENÇÃO — Dois modos de carregamento coexistem neste projeto:
 1. **Modo banco de dados (recomendado para dados reais)**
    Usar diretamente: `SequencePipeline(FL_DB_URL).build_per_hospital()`
    Gera tensores temporais ordenados por dia_relativo, tokenizados semanticamente
-   ({analyte}_{baixo|normal|alto}), com label de 4 classes de prognóstico clínico
-   (alta, internacao_prolongada, uti, obito).
+   ({analyte}_{HIGH|NORMAL|LOW|NO_REF}), com label de 5 classes de prognóstico clínico
+   (curado_pronto, curado_internado, melhora_pronto, melhora_internado_breve, melhora_internado_grave).
    Configurar via variável de ambiente: `FL_DB_URL` (preferencial) ou `MOSAICFL_DB_URL` (legado).
 
 2. **Modo arquivo/sintético (desenvolvimento)**

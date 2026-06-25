@@ -97,7 +97,7 @@ ambiente sem alterar o código (ex.: `FL_BATCH_SIZE=32`, `FL_NUM_ROUNDS=50`).
 Fonte: repositório USP-FAPESP Data Sharing COVID-19
 ([uspdigital.usp.br](https://repositoriodatasharingfapesp.uspdigital.usp.br/handle/item/1)).
 Ambos os hospitais possuem tabela `Desfechos`, requisito para geração do label de prognóstico
-clínico (4 classes: alta, internação prolongada, UTI, óbito).
+clínico (5 classes: curado_pronto, curado_internado, melhora_pronto, melhora_internado_breve, melhora_internado_grave).
 
 ---
 
