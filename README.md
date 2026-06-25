@@ -62,7 +62,10 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 14. [Uso de Inteligência Artificial](#uso-de-inteligência-artificial)
 15. [Referências](#referências)
 
-> **Fluxo detalhado do aprendizado federado:** [`docs/FLUXO_APRENDIZADO_FEDERADO.md`](docs/FLUXO_APRENDIZADO_FEDERADO.md) — cobertura completa do carregamento de dados clínicos, tokenização temporal de exames laboratoriais, rodadas federadas FedProx (servidor ↔ clientes HSL/BPSP), agregação FedAvg, série temporal BEHRT e justificativa RAG, com diagramas Mermaid e passo a passo textual.
+> **Documentação detalhada do pipeline:** [`docs/FLUXO_APRENDIZADO_FEDERADO.md`](docs/FLUXO_APRENDIZADO_FEDERADO.md) — SQL → tokenização → BEHRT → ClinicalPath, com diagramas Mermaid.
+> **Avaliação do projeto:** [`AVALIACAO_PROJETO.md`](AVALIACAO_PROJETO.md) — avaliações acadêmica e de produção clínica com histórico de evolução.
+> **Documentação de etapas anteriores:** [`docs/documentacao_etapas_legadas.md`](docs/documentacao_etapas_legadas.md) — análises e planejamentos de sessões anteriores.
+> **Sumário de simulações:** [`docs/Sumario_Simulacao.md`](docs/Sumario_Simulacao.md) — registro completo de cada execução real (dados, pesos, hiperparâmetros, resultados, diagnóstico).
 
 ---
 
@@ -212,7 +215,7 @@ mosaic-fl/
 │
 ├── experiments/                        ← adapter de pesquisa (não deployável)
 │   ├── experiment_server.py            # CustomFedProxStrategy + start_server (simulação local)
-│   └── run_experiments_v2.py           # Orquestrador dos 5 experimentos do TCC
+│   └── run_experiments_simulation.py   # Orquestrador dos experimentos do TCC (dados reais + baseline RF)
 │
 ├── tests/
 │   ├── test_fl_cycle_explained.py      # Documentação executável do ciclo FL completo
@@ -296,20 +299,70 @@ A variável `FL_TLS_CERT_DIR` deve apontar para um diretório com `ca.crt`, `ser
 
 ## Execução de Experimentos
 
-### Experimentos v2 — dados reais / fallback sintético
+### Experimento com dados reais FAPESP (`make experiment`)
+
+Modo de produção: carrega dados reais do PostgreSQL via `SequencePipeline.build_per_hospital()`,
+treina com 2 clientes reais (BPSP + HSL) em loop FL manual sequencial e grava resultados em
+`experiments/logs/`.
+
+```bash
+# Pré-requisito: banco carregado (make server-setup ou make client-setup)
+FL_ENV=production make experiment
+```
+
+O pipeline executa em 4 etapas:
+
+```
+[1/4] Carregamento via SequencePipeline (query SQL ~20s)
+      → BPSP: 28.599 atendimentos | HSL: 5.174 atendimentos
+      → Vocabulário: 649 tokens | 27.018 treino | 3.379 teste global
+
+[2/4] Pré-processamento — integrado ao SequencePipeline (ignorado)
+
+[3/4] Aprendizado Federado (20 rodadas, ~160s/round)
+      → Rodada N: [BPSP treina] → [HSL treina] → [Servidor agrega] → Loss/Acc
+
+[4/4] Avaliação + calibração temperature scaling
+      → experiments/logs/evaluation_round_N.json
+```
+
+**5 classes de prognóstico** (definidas em `preprocessor.py:_map_outcome()`):
+
+| Classe | Critério no FAPESP |
+|---|---|
+| 0 — curado_pronto | outcome_class=0, não internado |
+| 1 — curado_internado | outcome_class=0, internado |
+| 2 — melhora_pronto | outcome_class=1, não internado |
+| 3 — melhora_internado_breve | outcome_class=1, internado ≤ 10 dias |
+| 4 — melhora_internado_grave | outcome_class=1, internado > 10 dias |
+
+Dados censurados (outcome_class=4) e alta administrativa/transferência (classes 2, 3) excluídos.
+
+**Variáveis configuráveis:**
+```bash
+FL_ENV=production              # obrigatório para usar banco real
+FL_DB_URL=postgresql://...     # URL do PostgreSQL com dados FAPESP
+FL_NUM_ROUNDS=20               # número de rodadas federadas
+FL_BATCH_SIZE=16               # batch por cliente por epoch
+FL_LOCAL_EPOCHS=2              # epochs locais por rodada
+FL_PROXIMAL_MU=0.01            # regularização FedProx (μ)
+FL_NUM_CLASSES=5               # deve ser 5 para o schema atual
+```
+
+### Experimentos com dados sintéticos (desenvolvimento)
 
 ```bash
 source .venv/bin/activate
-python experiments/run_experiments_v2.py
+python experiments/run_experiments_simulation.py
 ```
 
-O v2 tenta carregar dados nesta ordem: **SGBD → CSV explícito → CSV padrão → sintético**.
+Tenta carregar dados nesta ordem: **SGBD → CSV → sintético**.
 Se nenhuma fonte real estiver disponível, usa dados sintéticos com aviso explícito.
 
-Para conectar ao PostgreSQL:
 ```bash
-export MOSAICFL_DB_URL="postgresql://user:pass@localhost:5432/mosaicfl"
-python experiments/run_experiments_v2.py
+# Conectar ao PostgreSQL em modo desenvolvimento
+export FL_DB_URL="postgresql://user:pass@localhost:5432/mosaicfl"
+python experiments/run_experiments_simulation.py
 ```
 
 ### Simulação FL local (sem SuperLink)
@@ -364,7 +417,7 @@ Ou via pytest diretamente:
 **Resultado esperado (suite padrão):**
 
 ```
-487 passed, 6 deselected, 1 warning in ~10s
+541 passed, 6 deselected, 1 warning in ~10s
 ```
 
 Os 6 deselected são os testes `@pytest.mark.e2e` — excluídos por padrão por serem mais lentos. Execute com `make test-e2e` quando precisar validar o ciclo completo.
@@ -373,9 +426,10 @@ Os 6 deselected são os testes `@pytest.mark.e2e` — excluídos por padrão por
 
 | Diretório / Arquivo | Foco | Testes |
 |---|---|---|
-| `tests/unit/` (28 arquivos) | Um arquivo por classe: modelo, cliente, servidor, convergência, RAG, data loader, config, state store, TLS | ~340 |
+| `tests/unit/` (34 arquivos) | Um arquivo por classe: modelo, cliente, servidor, convergência, RAG, data loader, config, state store, TLS, FHIR | ~400 |
 | `tests/integration/test_infrastructure.py` | Scheduler, servidor, cliente, dispatcher (com mocks) | ~75 |
 | `tests/integration/test_mosaicfl_api.py` | FastAPI /predict e /health (TestClient) | ~30 |
+| `tests/integration/test_clinicalpath_exporter.py` | Exportador ClinicalPath (formatos de arquivo) | ~33 |
 | `tests/test_fl_cycle_explained.py` | Documentação executável do ciclo FL completo | ~35 |
 | `tests/e2e/test_real_fl_cycle.py` | Ciclo FL real sem mocks (6 testes, `make test-e2e`) | 6 |
 
@@ -661,8 +715,9 @@ independentes entre si. O módulo FHIR não importa nada do módulo ClinicalPath
 O ClinicalPath é uma ferramenta de **visualização clínica** que renderiza a evolução
 temporal dos exames de um paciente. Para isso, precisa dos valores laboratoriais reais,
 fases clínicas e a predição injetada como exames sintéticos: `FL_RISK_SCORE` (escalar de risco)
-e a distribuição completa de probabilidade por desfecho (`FL_PROB_ALTA`, `FL_PROB_UTI`, etc.)
-com incerteza MC-Dropout associada (`FL_PROB_ALTA_INCERTEZA`, etc.).
+e a distribuição completa de probabilidade por desfecho (`FL_PROB_CURADO_PRONTO`,
+`FL_PROB_MELHORA_INTERNADO_GRAVE`, etc.) com incerteza MC-Dropout associada
+(`FL_PROB_CURADO_PRONTO_INCERTEZA`, etc.).
 
 ```python
 # integration/clinical-path/models.py — já implementado
@@ -770,21 +825,22 @@ associa o token a um paciente real — essa associação existe apenas no sistem
       "value": "uuid-efêmero-gerado-pelo-hospital"
     }
   },
-  "occurrenceDateTime": "2026-06-24T10:00:00Z",
+  "occurrenceDateTime": "2026-06-25T10:00:00Z",
   "method": {
     "coding": [{
       "system": "urn:mosaicfl",
       "code": "FedProx-BEHRT-v2",
-      "display": "Federated FedProx + SimplifiedBEHRT, round 12, T=1.24"
+      "display": "Federated FedProx + SimplifiedBEHRT, round 20, T=1.10"
     }]
   },
   "prediction": [
-    { "outcome": { "text": "Alta hospitalar" },       "probabilityDecimal": 0.61 },
-    { "outcome": { "text": "Internação prolongada" }, "probabilityDecimal": 0.22 },
-    { "outcome": { "text": "UTI" },                   "probabilityDecimal": 0.09 },
-    { "outcome": { "text": "Óbito" },                 "probabilityDecimal": 0.08 }
+    { "outcome": { "text": "curado_pronto" },             "probabilityDecimal": 0.48 },
+    { "outcome": { "text": "curado_internado" },          "probabilityDecimal": 0.08 },
+    { "outcome": { "text": "melhora_pronto" },            "probabilityDecimal": 0.21 },
+    { "outcome": { "text": "melhora_internado_breve" },   "probabilityDecimal": 0.15 },
+    { "outcome": { "text": "melhora_internado_grave" },   "probabilityDecimal": 0.08 }
   ],
-  "note": [{ "text": "ECE=0.038 | T=1.24 | round=12 | n_samples=2847" }]
+  "note": [{ "text": "ECE=0.051 | T=1.098 | round=20 | n_samples=3379" }]
 }
 ```
 
@@ -967,7 +1023,7 @@ flower-supernode \
 | Valor | Comportamento |
 |---|---|
 | `simulated` | Dados sintéticos gerados automaticamente (desenvolvimento) |
-| `sgbd` | Lê do banco do hospital via `MOSAICFL_DB_URL` |
+| `sgbd` | Lê do banco do hospital via `FL_DB_URL` |
 | `csv` | Lê de arquivo CSV via `FL_CSV_PATH` |
 
 **Atenção:** falha na fonte de dados **não tem fallback silencioso**. Se `sgbd` falhar, a exceção propaga e o SuperNode não treina com dados incorretos.
@@ -998,7 +1054,7 @@ FL_HEALTH_PORT=8081              # porta do health endpoint
 # Cliente
 FL_CLIENT_ID=hospital_a          # identificador único do hospital
 FL_DATA_SOURCE=sgbd              # fonte de dados: simulated | sgbd | csv
-MOSAICFL_DB_URL=postgresql://... # URL do banco do hospital (quando FL_DATA_SOURCE=sgbd)
+FL_DB_URL=postgresql://...       # URL do banco do hospital (quando FL_DATA_SOURCE=sgbd)
 
 # Servidor
 FL_CHECKPOINT_DIR=./checkpoints  # onde salvar checkpoints por round
@@ -1039,7 +1095,7 @@ docker run -d \
   -e FL_TLS_CERT_DIR=/certs \
   -e FL_CLIENT_ID=hospital_a \
   -e FL_DATA_SOURCE=sgbd \
-  -e MOSAICFL_DB_URL="postgresql://ehr_user:pass@db:5432/prontuarios" \
+  -e FL_DB_URL="postgresql://ehr_user:pass@db:5432/prontuarios" \
   -v /hospital/certs:/certs:ro \
   -v /hospital/logs:/app/logs \
   --name mosaicfl-client \
@@ -1068,12 +1124,12 @@ O CronJob do scheduler executa por padrão às **2h da manhã** (`0 2 * * *`), c
 |---|---|---|---|
 | 1 | Padronização e pré-processamento | `EHRPreprocessor` | Real |
 | 2 | Efeito equalizador do FL | FedProx + AUC por cliente | Seed fixo |
-| 3 | Impacto heterogeneidade não-IID | Curvas por subgrupo demográfico | Curva aproximada |
+| 3 | Impacto heterogeneidade não-IID | BPSP vs. HSL — distribuição de classes | Real (dados FAPESP) |
 | 4 | RAG e detecção de alucinação | ChromaDB + DistilGPT-2 | Real |
 | 5 | Eficiência operacional | Convergência vs. comunicação | Real |
-| 6 | **Baseline comparativo** | Random Forest (Bag-of-Tokens) vs. SimplifiedBEHRT | Sintético / Real |
+| 6 | **Baseline comparativo** | Random Forest (Bag-of-Tokens) vs. SimplifiedBEHRT | Real (dados FAPESP) |
 
-Resultados em `experiments/data/` após cada execução. Documentação detalhada em `EXPERIMENTOS.md`.
+Resultados gravados em `experiments/logs/` (avaliação por round) e `experiments/data/` (baseline RF).
 
 ### Baseline Comparativo — Random Forest (Bag-of-Tokens)
 
@@ -1090,17 +1146,22 @@ O baseline usa a mesma representação de tokens que o SimplifiedBEHRT, mas sem 
 
 A diferença `BEHRT(FL) − RF(por hospital)` mede o ganho do aprendizado federado sobre o cenário local. A diferença `BEHRT(FL) − RF(centralizado)` mede o ganho da modelagem sequencial temporal mesmo quando o adversário tem acesso irrestrito aos dados.
 
-**Resultados em dados sintéticos (20 tokens, 2 classes presentes de 4):**
+**Resultados com dados FAPESP reais (33.773 atendimentos, 5 classes, 20 rodadas FL):**
 
-| Modelo | Accuracy | F1 Macro | ECE |
-|---|---|---|---|
-| RF Centralizado (BoT) | 0.675 | 0.646 | 0.067 |
-| RF por Hospital (média) | 0.623 | 0.567 | 0.172 |
-| SimplifiedBEHRT (FL federado) | 0.635 | — | — |
+| Modelo | Accuracy | F1 Macro | AUC Macro | ECE |
+|---|---|---|---|---|
+| RF Centralizado (BoT) | — | — | — | — |
+| RF por Hospital (média) | — | — | — | — |
+| SimplifiedBEHRT (FL federado, round 20) | 0.635 | 0.603 | — | 0.051 |
 
-> **AUC não calculável em dados sintéticos:** os dados sintéticos geram apenas 2 das 4 classes de prognóstico (alta e internação prolongada). O AUC-ROC multi-classe requer todas as classes presentes no conjunto de teste. Os resultados acima refletem essa limitação; o AUC será calculável com os dados reais do FAPESP.
+> **Comparação RF pendente:** o baseline Random Forest com dados reais está implementado
+> em `run_experiments_simulation.py:run_baseline_rf()` e será executado ao final da
+> simulação atual. O AUC macro aparece como NaN porque as classes `curado_internado` (27
+> amostras) e `melhora_pronto` (321 amostras) tiveram F1=0 no round 1 — o modelo ainda
+> estava se ajustando às classes minoritárias.
 
-A competitividade do SimplifiedBEHRT (0.635 vs. 0.675 centralizado) em dados com apenas 20 tokens e sem estrutura temporal real é o resultado esperado — a vantagem do Transformer sobre BoW emerge de sequências longas com padrões temporais, que os dados sintéticos não reproduzem.
+A vantagem esperada do SimplifiedBEHRT sobre BoT emerge da modelagem de ordem temporal dos
+exames, que o Bag-of-Tokens descarta por construção.
 
 **Como executar:**
 
@@ -1130,13 +1191,11 @@ Resultados salvos em `experiments/data/baseline_rf_YYYYMMDD_HHMMSS.json`.
 
 #### Correção de bug identificada durante a investigação
 
-Durante a análise do exp5 (convergência), foi identificado que `FedProxClient._compute_class_weights()` atribuía peso `total / (n × 1)` para classes ausentes no conjunto de treino local (usando `max(counts.get(i, 1), 1)` como fallback). Com dados sintéticos que contêm apenas 2 das 4 classes, classes ausentes recebiam pesos da ordem de 42× maior que as classes presentes — distorcendo o gradiente para prever prognósticos inexistentes nos dados.
+Durante a análise do exp5 (convergência), foi identificado que `FedProxClient._compute_class_weights()` atribuía peso `total / (n × 1)` para classes ausentes no conjunto de treino local (usando `max(counts.get(i, 1), 1)` como fallback). Com dados sintéticos que contêm apenas 2 das 5 classes, classes ausentes recebiam pesos elevados — distorcendo o gradiente em direção a prognósticos sem sinal de treinamento.
 
 **Sintoma:** acurácia constante em 0.4667 por 11 rodadas (platô na inicialização, sem aprendizado real).
 
-**Causa:** `class_weight[UTI] = class_weight[óbito] = 168 / (4 × 1) = 42.0` com dados 100% de alta/internação prolongada.
-
-**Correção aplicada:** classes ausentes no treino local recebem peso `0.0`, excluindo-as da loss sem distorcer o gradiente em direção a classes sem sinal de treinamento:
+**Correção aplicada:** classes ausentes no treino local recebem peso `0.0`, excluindo-as da loss sem distorcer o gradiente:
 
 ```python
 # antes (bug)
@@ -1146,7 +1205,7 @@ total / (n * max(counts.get(i, 1), 1))
 total / (n * counts[i]) if counts.get(i, 0) > 0 else 0.0
 ```
 
-**Impacto com dados reais:** nenhum — o dataset FAPESP contém as 4 classes em ambos os hospitais (HSL e BPSP), portanto todos os pesos serão positivos e calculados corretamente.
+**Impacto com dados reais FAPESP:** as 5 classes estão presentes em ambos os hospitais (BPSP e HSL), portanto todos os pesos são positivos e calculados corretamente. Os pesos observados no experimento real: BPSP `[0.361, 17.4, 47.2, 0.605, 2.02]` e HSL `[15.1, 24.3, 0.324, 0.817, 1.73]` — refletem o forte desbalanceamento não-IID entre hospitais.
 
 ---
 

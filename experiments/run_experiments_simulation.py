@@ -547,6 +547,7 @@ def prepare_dataloaders_from_db(
     # Usados pelo run_ablation_demographics() — não entram no loop FL padrão.
     demographics_by_client: Dict = {}
     test_seqs_list, test_lbls_list, test_demo_list = [], [], []
+    cal_seqs_list, cal_lbls_list = [], []
     total_train_samples = 0
 
     for cid, (hospital_id, (seqs, labels, _, demo)) in enumerate(hospital_data.items()):
@@ -555,10 +556,12 @@ def prepare_dataloaders_from_db(
             logger.warning(f"[db] Hospital {hospital_id}: apenas {n} amostras — pulando.")
             continue
 
-        # Embaralha e divide 80% treino / 10% validação / 10% teste global
+        # Embaralha e divide 70% treino / 10% validação / 10% calibração / 10% teste global
+        # cal é reservado exclusivamente para temperature scaling — não passa pelo FL.
         perm = torch.randperm(n, generator=rng)
-        n_train = int(0.8 * n)
+        n_train = int(0.7 * n)
         n_val   = int(0.1 * n)
+        n_cal   = int(0.1 * n)
 
         train_seqs = seqs[perm[:n_train]]
         train_lbls = labels[perm[:n_train]]
@@ -566,9 +569,11 @@ def prepare_dataloaders_from_db(
         val_seqs   = seqs[perm[n_train:n_train + n_val]]
         val_lbls   = labels[perm[n_train:n_train + n_val]]
         val_demo   = demo[perm[n_train:n_train + n_val]]
-        test_seqs_list.append(seqs[perm[n_train + n_val:]])
-        test_lbls_list.append(labels[perm[n_train + n_val:]])
-        test_demo_list.append(demo[perm[n_train + n_val:]])
+        cal_seqs   = seqs[perm[n_train + n_val:n_train + n_val + n_cal]]
+        cal_lbls   = labels[perm[n_train + n_val:n_train + n_val + n_cal]]
+        test_seqs_list.append(seqs[perm[n_train + n_val + n_cal:]])
+        test_lbls_list.append(labels[perm[n_train + n_val + n_cal:]])
+        test_demo_list.append(demo[perm[n_train + n_val + n_cal:]])
 
         # Loop FL padrão usa apenas sequências + labels (sem demographics).
         # Demographics ficam em demographics_by_client para uso no ablation.
@@ -580,10 +585,12 @@ def prepare_dataloaders_from_db(
             DataLoader(TensorDataset(train_seqs, train_lbls, train_demo), batch_size=batch_size, shuffle=True),
             DataLoader(TensorDataset(val_seqs, val_lbls, val_demo), batch_size=batch_size),
         )
+        cal_seqs_list.append(cal_seqs)
+        cal_lbls_list.append(cal_lbls)
         total_train_samples += len(train_seqs)
         logger.info(
             f"[db] Hospital {hospital_id} → cliente {cid}: "
-            f"{len(train_seqs)} treino | {len(val_seqs)} val | "
+            f"{len(train_seqs)} treino | {len(val_seqs)} val | {len(cal_seqs)} cal | "
             f"age_mean={train_demo[:, 0].mean():.2f} sex_M={int((train_demo[:, 1] == 1.0).sum())}"
         )
 
@@ -593,11 +600,19 @@ def prepare_dataloaders_from_db(
     test_seqs  = torch.cat(test_seqs_list, dim=0)
     test_lbls  = torch.cat(test_lbls_list, dim=0)
     test_demo  = torch.cat(test_demo_list, dim=0)
+    cal_seqs_all = torch.cat(cal_seqs_list, dim=0)
+    cal_lbls_all = torch.cat(cal_lbls_list, dim=0)
+
     test_loader = DataLoader(TensorDataset(test_seqs, test_lbls), batch_size=batch_size)
     test_loader_demo = DataLoader(TensorDataset(test_seqs, test_lbls, test_demo), batch_size=batch_size)
-    logger.info(f"[db] Teste global: {len(test_seqs)} amostras | {len(client_loaders)} clientes FL")
+    cal_loader = DataLoader(TensorDataset(cal_seqs_all, cal_lbls_all), batch_size=batch_size)
 
-    return client_loaders, test_loader, vocab, total_train_samples, demographics_by_client, test_loader_demo
+    logger.info(
+        f"[db] Teste global: {len(test_seqs)} amostras | Cal global: {len(cal_seqs_all)} amostras "
+        f"| {len(client_loaders)} clientes FL"
+    )
+
+    return client_loaders, test_loader, vocab, total_train_samples, demographics_by_client, test_loader_demo, cal_loader
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -649,6 +664,7 @@ def run_federated_learning_manual(
     test_loader: DataLoader,
     total_train_samples: int,
     vocab: Dict[str, int] = None,
+    cal_loader: DataLoader = None,
 ) -> Tuple[Dict, SimplifiedBEHRT]:
     """Simula FL manualmente, sem Ray — sequencial, leve, didático."""
     logger.info("=" * 60)
@@ -752,6 +768,18 @@ def run_federated_learning_manual(
     logger.info(f"  Tempo total:  {overall_duration:.2f}s ({overall_duration/60:.2f} min)")
     logger.info(f"{'='*60}")
 
+    # Marcador estruturado pesquisável por ferramentas de observabilidade
+    logger.info(
+        "FL_TRAINING_COMPLETE rounds=%d converged=%s accuracy=%.4f loss=%.4f "
+        "duration_s=%.1f traffic_mb=%.2f",
+        round_num,
+        bool(converged_round),
+        history["accuracy"][-1],
+        history["loss"][-1],
+        overall_duration,
+        sum(history["communication_mb"]),
+    )
+
     hist_path = f"experiments/data/history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(hist_path, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2, ensure_ascii=False)
@@ -771,17 +799,21 @@ def run_federated_learning_manual(
         logger.warning(f"Avaliação pré-calibração falhou: {exc}")
         report_raw = None
 
-    # Temperature scaling
-    # Nota: em simulação acadêmica reutilizamos o test_loader como calibration set.
-    # Em produção (dados reais), FL_TEST_HOLDOUT_FRACTION reserva um holdout separado.
+    # Temperature scaling — usa cal_loader reservado no pipeline (split 70/10/10/10).
+    # O cal set é completamente independente: nunca foi exposto ao modelo durante FL.
+    # Fallback: se cal_loader não foi fornecido (modo sintético), usa test_loader com aviso.
+    _calib_loader = cal_loader if cal_loader is not None else test_loader
+    if cal_loader is None:
+        logger.warning("calibration_set_fallback: cal_loader ausente — usando test_loader (modo sintético)")
     scaler = TemperatureScaler()
     try:
-        scaler.fit(global_model, test_loader, device=str(DEVICE))
-        logger.info(f"Calibração concluída — T={scaler.T:.4f}")
+        scaler.fit(global_model, _calib_loader, device=str(DEVICE))
+        n_cal = len(_calib_loader.dataset) if hasattr(_calib_loader, "dataset") else "?"
+        logger.info(f"Calibração concluída — T={scaler.T:.4f} (cal_set={n_cal} amostras)")
     except Exception as exc:
         logger.warning(f"Calibração falhou ({exc}) — T mantido em 1.0")
 
-    # Avaliação APÓS calibração
+    # Avaliação APÓS calibração (test_loader exclusivo para avaliação final)
     try:
         report_cal = evaluate(global_model, test_loader, class_labels=MODEL_CFG.class_labels,
                               device=str(DEVICE), temperature=scaler.T)
@@ -971,6 +1003,7 @@ def run_federated_learning(
     test_loader: DataLoader,
     total_train_samples: int,
     vocab: Dict[str, int] = None,
+    cal_loader: DataLoader = None,
 ) -> Tuple[Dict, SimplifiedBEHRT]:
     """Executa o treinamento federado via Flower simulation."""
 
@@ -1027,7 +1060,7 @@ def run_federated_learning(
         return run_federated_learning_ray(client_loaders, test_loader, total_train_samples, vocab=vocab)
     else:
         logger.info("Modo manual ativado (USE_RAY=False). Ray NÃO é necessário.")
-        return run_federated_learning_manual(client_loaders, test_loader, total_train_samples, vocab=vocab)
+        return run_federated_learning_manual(client_loaders, test_loader, total_train_samples, vocab=vocab, cal_loader=cal_loader)
 
 
 
@@ -1684,12 +1717,13 @@ def main():
 
     demographics_by_client: Dict = {}
     test_loader_demo = None
+    cal_loader = None
 
     if FL_DB_URL:
         logger.info("[1/4] Carregando dados do banco (SequencePipeline)...")
         try:
             (client_loaders, test_loader, vocab_map, total,
-             demographics_by_client, test_loader_demo) = prepare_dataloaders_from_db(FL_DB_URL)
+             demographics_by_client, test_loader_demo, cal_loader) = prepare_dataloaders_from_db(FL_DB_URL)
             loaded_from_db = True
         except Exception as e:
             logger.error(f"Falha ao carregar dados do banco: {e}")
@@ -1727,20 +1761,37 @@ def main():
 
     # ── 3. Aprendizado Federado ───────────────────────────────────────────────
     logger.info("[3/5] Aprendizado Federado...")
-    history, global_model = run_federated_learning(client_loaders, test_loader, total, vocab=vocab_map)
+    history, global_model = run_federated_learning(client_loaders, test_loader, total, vocab=vocab_map, cal_loader=cal_loader)
 
     # Persiste métricas do último round FL
     if history:
-        last_round = max(history.keys()) if isinstance(history, dict) else len(history)
-        last_metrics = history[last_round] if isinstance(history, dict) else history[-1]
+        # run_federated_learning_manual retorna dict de listas {"rounds":[], "accuracy":[], ...}
+        # em vez de dict de dicts {round_num: {metrics}}
+        if isinstance(history, dict) and "rounds" in history:
+            last_round = history["rounds"][-1] if history["rounds"] else 0
+            last_metrics = {
+                "accuracy":      history["accuracy"][-1] if history.get("accuracy") else None,
+                "loss":          history["loss"][-1] if history.get("loss") else None,
+                "macro_auc":     None,
+                "macro_f1":      None,
+                "ece":           None,
+                "per_class_auc": None,
+                "per_class_f1":  None,
+            }
+        elif isinstance(history, dict):
+            last_round = max(history.keys())
+            last_metrics = history[last_round]
+        else:
+            last_round = len(history)
+            last_metrics = history[-1]
         metrics_store.save(
             round_num=last_round,
             metrics={
-                "accuracy": last_metrics.get("accuracy"),
-                "loss":     last_metrics.get("loss"),
-                "macro_auc": last_metrics.get("macro_auc"),
-                "macro_f1":  last_metrics.get("macro_f1"),
-                "ece":       last_metrics.get("ece"),
+                "accuracy":      last_metrics.get("accuracy"),
+                "loss":          last_metrics.get("loss"),
+                "macro_auc":     last_metrics.get("macro_auc"),
+                "macro_f1":      last_metrics.get("macro_f1"),
+                "ece":           last_metrics.get("ece"),
                 "per_class_auc": last_metrics.get("per_class_auc"),
                 "per_class_f1":  last_metrics.get("per_class_f1"),
             },
@@ -1832,6 +1883,17 @@ def main():
         logger.info(f"  Ablation Δ Acc: {delta.get('accuracy', 'n/a'):+}")
     logger.info(f"  Logs em:        {log_file}")
     logger.info("=" * 60)
+
+    # Marcador estruturado de conclusão total — todas as etapas finalizadas.
+    # Pesquisável por: grep TREINAMENTO_COMPLETO <log>
+    logger.info(
+        "TREINAMENTO_COMPLETO status=ok fl_rounds=%d rag_ok=%s baseline_rf_ok=%s ablation_ok=%s log=%s",
+        history["rounds"][-1] if (history and history.get("rounds")) else 0,
+        not bool(rag_result.get("erro")),
+        not bool(baseline_result.get("erro")),
+        not bool(ablation_result.get("erro")),
+        log_file,
+    )
 
 
 if __name__ == "__main__":

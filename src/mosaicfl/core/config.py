@@ -115,7 +115,15 @@ MODEL_CFG = ModelConfig(
     ),
     dropout      = float(os.getenv("FL_DROPOUT",    "0.1")),
 )
-FED_CFG     = FedConfig()
+FED_CFG = FedConfig(
+    num_rounds   = int(os.getenv("FL_NUM_ROUNDS",   "20")),
+    batch_size   = int(os.getenv("FL_BATCH_SIZE",   "16")),
+    local_epochs = int(os.getenv("FL_LOCAL_EPOCHS", "2")),
+    lr           = float(os.getenv("FL_LR",         "0.001")),
+    proximal_mu  = float(os.getenv("FL_PROXIMAL_MU","0.01")),
+    num_clients  = int(os.getenv("FL_NUM_CLIENTS",  "2")),
+    random_seed  = int(os.getenv("FL_RANDOM_SEED",  "42")),
+)
 RUNTIME_CFG = RuntimeConfig()
 
 # Aliases de compatibilidade para testes e scripts legados — não usar em código novo

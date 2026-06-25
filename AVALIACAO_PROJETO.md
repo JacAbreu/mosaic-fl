@@ -649,3 +649,197 @@ O caminho mais curto para elevar a nota acadêmica é documentar explicitamente 
 ---
 
 *Próxima reavaliação recomendada: após (a) execução dos experimentos com dados FAPESP reais, ou (b) resolução formal do label `internacao_prolongada` com análise de sobrevivência ou reclassificação.*
+
+---
+
+## Pontos para Alinhar com a Orientadora — 2026-06-25
+
+> Esta seção registra as questões abertas que requerem validação acadêmica ou clínica externa.
+> Atualizar após cada reunião com a orientadora.
+
+### Questões metodológicas que precisam de resposta
+
+**Q1 — Threshold de 10 dias para "internação grave" tem respaldo na literatura?**
+
+O label `melhora_internado_grave` é definido como internação com duração > 10 dias. Esse valor foi escolhido por critério técnico (distribuição do dataset), não por evidência clínica. Em COVID-19 há referências ao percentil 75 de tempo de internação como marcador de gravidade? O SOFA score ou algum critério de consenso define internação prolongada? Sem referência, o threshold é uma limitação metodológica a declarar na monografia.
+
+**Q2 — Incluir atendimentos de pronto-socorro muda a pergunta clínica do modelo?**
+
+O pipeline foi expandido de internados-only (~14k) para todos os atendimentos (~33k), incluindo pronto-socorro. Com essa mudança, o modelo passa a responder duas perguntas distintas ao mesmo tempo:
+- Para pacientes de pronto: *"este paciente vai precisar internar, e qual será o desfecho?"*
+- Para pacientes internados: *"qual será a evolução desta internação?"*
+
+Perguntar à orientadora: faz sentido misturar esses dois contextos clínicos num único modelo de prognóstico para o TCC? Ou é melhor manter dois modelos separados, ou restringir ao contexto de admissão hospitalar?
+
+**Q3 — O ablation de late fusion demográfica deve entrar nos resultados ou é suficiente como trabalho futuro?**
+
+A late fusion (idade + sexo concatenados ao CLS antes do classifier head) está implementada em `model.py` com parâmetro `demo_dim`. O experimento comparativo `demo_dim=0` vs `demo_dim=2` não foi rodado. Em COVID-19, idade é o preditor dominante de mortalidade — se o ablation mostrar AUC +5%, é um resultado com valor para a defesa. Perguntar: vale rodar antes da entrega, ou declarar como trabalho futuro com a justificativa de que o sinal demográfico está arquiteturalmente preparado?
+
+### Resultados para apresentar na reunião
+
+**R1 — Distribuição não-IID entre hospitais (evidência empírica de necessidade de FL)**
+
+Do dry-run com dados FAPESP reais:
+
+| Hospital | N pacientes | Classe dominante | % |
+|---|---|---|---|
+| BPSP | 28.599 | curado_pronto | 55,6% |
+| HSL | 5.174 | melhora_pronto | 61,5% |
+
+Esses dois hospitais têm populações completamente diferentes. BPSP atende majoritariamente casos leves de pronto-socorro; HSL tem maior proporção de internações com melhora. Num modelo centralizado, a distribuição do BPSP (5,5x maior) dominaria o treino e apagaria o perfil do HSL. O FedProx com class weights por hospital preserva as distribuições locais. Este é o argumento empírico mais forte para a escolha de FL.
+
+**R2 — Resultados da simulação de 20 rodadas** *(pendente — simulação em andamento)*
+
+Incluir após conclusão: accuracy, macro_F1, AUC por classe, ECE pré/pós-calibração.
+
+### Status de alinhamento
+
+| Questão | Status |
+|---|---|
+| Q1 — Threshold 10 dias | Aberta — pendente resposta da orientadora |
+| Q2 — Escopo pronto vs internado | Aberta — pendente resposta da orientadora |
+| Q3 — Ablation late fusion | Aberta — pendente decisão da orientadora |
+| R1 — Não-IID BPSP/HSL | Pronto para apresentar |
+| R2 — Resultados simulação | Pendente conclusão da simulação |
+
+---
+
+## Avaliação 4 — 2026-06-25 (pós-redesign de labels e expansão de escopo)
+
+### Prompt utilizado
+
+Mesmo das avaliações anteriores (2026-06-24). Reavaliação motivada pelo redesign completo do esquema de labels e expansão do dataset de internados-only para todos os atendimentos.
+
+### Estado do projeto na data desta avaliação
+
+- **Branch:** main — commits da sessão de 2026-06-24/25 não commitados ainda
+- **Labels:** 5 classes de prognóstico (redesign desta sessão)
+- **Dataset:** todos os atendimentos FAPESP (~33.773 pacientes: BPSP 28.599 + HSL 5.174)
+- **Simulação:** em andamento (20 rodadas, dados reais FAPESP)
+- **Testes:** 541 passando (sem alteração desde Avaliação 3)
+- **Arquivos modificados (não commitados):** `preprocessor.py`, `config.py`, `model.py`, docs
+
+### Fontes consultadas para a avaliação
+
+| Fonte | O que revelou |
+|---|---|
+| `src/mosaicfl/core/preprocessor.py` | `_SQL_ATENDIMENTOS` (sem filtro de internação), `_map_outcome(outcome_class, duration_days, attendance_type)` → 5 classes, exclusão de outcome_class=4 |
+| `src/mosaicfl/core/config.py` | `_DEFAULT_CLASS_LABELS` = 5 classes; `FED_CFG` lendo env vars (fix do FL_NUM_ROUNDS) |
+| `src/mosaicfl/core/model.py` | `demo_dim` parâmetro para late fusion; classifier head condicional |
+| `experiments/logs/dryrun.log` | Distribuição não-IID: BPSP 55,6% curado_pronto; HSL 61,5% melhora_pronto |
+| `experiments/logs/evaluation_round_1.json` | Round 1 da simulação em andamento: acc=0.513, macro_AUC=0.755, ECE=0.079 |
+| `experiments/run_experiments_simulation.py` | Baseline RF real implementado; ablation demográfica documentada |
+| `AVALIACAO_PROJETO.md` (Avaliação 3) | Penalidades da avaliação holística anterior como baseline de comparação |
+
+---
+
+## AVALIAÇÃO ACADÊMICA — 8,3 / 10 *(+1,3 em relação à Avaliação 3)*
+
+### Mudanças que elevaram a nota
+
+**1. Resolução do problema central de label (penalidade −1,5 → −0,4)**
+
+O label `internacao_prolongada = outcome_class 4` (dado censurado) foi completamente eliminado.
+O novo esquema crosses três dimensões clinicamente observáveis no momento do desfecho:
+`outcome_class` (curado/melhora) × `attendance_type` (internado/pronto) × `duration_days` (≤10d / >10d).
+
+Resultado: 5 classes com critérios determinísticos a partir de campos FAPESP observados — sem dados censurados, sem imputação, sem ambiguidade sobre o que o modelo está aprendendo.
+
+Fonte: `preprocessor.py:_map_outcome()` — função pura de 3 argumentos sem estado.
+
+Penalidade residual (−0,4): o threshold de 10 dias para separar `melhora_internado_breve` de `melhora_internado_grave` é tecnicamente arbitrário. Nenhuma referência clínica foi citada no código ou na documentação. Além disso, a mistura de atendimentos de pronto-socorro e internados no mesmo modelo levanta a questão de qual pergunta clínica está sendo respondida — dois contextos de admissão distintos tratados como um problema único.
+
+**2. Baseline com dados reais FAPESP (penalidade −0,2 → −0,1)**
+
+O Random Forest em `run_experiments_simulation.py:run_baseline_rf()` roda com os mesmos
+27.018 amostras de treino reais que o FL. A comparação SimplifiedBEHRT vs RF com dados FAPESP
+reais estará disponível ao final da simulação em andamento.
+
+Penalidade residual (−0,1): comparação numérica pendente — a simulação ainda está em andamento
+no momento desta avaliação.
+
+**3. Evidência empírica de não-IID (novo resultado positivo)**
+
+O dry-run revelou distribuição fortemente não-IID entre BPSP e HSL. Isso é um resultado
+acadêmico relevante: demonstra empiricamente — com dados hospitalares reais — que o cenário
+que justifica FL (heterogeneidade de dados entre instituições) está presente neste dataset.
+O FedProx com class weights por hospital é a resposta metodologicamente correta para este achado.
+
+Fonte: `dryrun.log` — distribuições `{0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821}` (BPSP) vs
+`{0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600}` (HSL).
+
+---
+
+### Penalidades remanescentes
+
+**1. Label scheme — threshold clínico sem referência (−0,4)**
+
+O corte de 10 dias em `_map_outcome()` não tem referência citada. Em COVID-19, a literatura
+de gravidade usa critérios como SOFA ≥ 2, necessidade de UTI ou ventilação mecânica —
+não diretamente dias de internação. O threshold de 10 dias pode ser correto empiricamente
+mas precisa de justificativa clínica ou deve ser declarado como limitação. Adicionalmente,
+a mistura de pronto-socorro e internação num mesmo modelo levanta questão de escopo clínico
+ainda não respondida.
+
+**2. SimplifiedBEHRT — late fusion implementada, ablation não executado (−0,4)**
+
+`model.py` tem `demo_dim` parâmetro funcional. O classifier head usa `embed_dim + demo_dim`
+quando demográficos são passados. Mas sem o experimento `demo_dim=0` vs `demo_dim=2`
+com dados reais, não há evidência quantitativa de que a inclusão de idade e sexo melhora
+o modelo. A justificativa de simplificação (dataset pequeno, CPU-only, internação única vs
+multi-visita) está documentada no TODO mas não em ablation executável.
+
+**3. Baseline comparativo — resultado pendente (−0,1)**
+
+Implementação correta, dados reais carregados, comparação numericamente pendente.
+
+**4. RAG DistilGPT-2 — sem avaliação formal (−0,5)**
+
+Inalterado desde a Avaliação 3. DistilGPT-2 (82M parâmetros, pré-treinado em inglês)
+gerando justificativas clínicas em português não tem ROUGE, BERTScore ou avaliação por
+especialista. Fonte: `src/mosaicfl/core/rag.py`.
+
+### Cálculo da nota acadêmica
+
+| Item | Valor |
+|---|---|
+| Nota base | 10,0 |
+| Label scheme — threshold sem referência + escopo misto | −0,4 |
+| SimplifiedBEHRT — ablation não executado | −0,4 |
+| Baseline — resultado numérico pendente | −0,1 |
+| RAG sem avaliação formal | −0,5 |
+| Ajuste positivo: evidência empírica não-IID com dados reais | +0,3 |
+| **NOTA FINAL** | **8,3 / 10** |
+
+Nota: o ajuste +0,3 reflete que o projeto agora demonstra com dados reais o fenômeno central que justifica FL. Nenhuma avaliação anterior tinha esse resultado.
+
+---
+
+## AVALIAÇÃO DE PRODUÇÃO CLÍNICA — 8,0 / 10 *(sem alteração)*
+
+Nenhuma mudança nos módulos de infraestrutura, segurança ou observabilidade nesta sessão.
+As penalidades remanescentes da Avaliação 3 permanecem inalteradas:
+
+| Penalidade | Peso |
+|---|---|
+| Rate limiter in-process (4 workers = 480 req/min efetivos) | −0,8 |
+| Generalização clínica (COVID-19 / 2 hospitais SP / 2020-2021) | −0,7 |
+| Prometheus ausente | −0,3 |
+| Audit trail — imutabilidade (RotatingFileHandler, não WORM) | −0,1 |
+
+---
+
+## Síntese comparativa — evolução das avaliações
+
+| Dimensão | Av. 1 | Av. 2 | Av. 3 (holística) | **Av. 4** | Δ total |
+|---|---|---|---|---|---|
+| **Acadêmica** | 6,5 | 6,5 | 7,0 | **8,3** | +1,8 |
+| **Produção clínica** | 7,5 | 8,0 | 8,0 | **8,0** | +0,5 |
+
+**Principal alavanca desta sessão:** eliminação do dado censurado e redesign para 5 classes com critérios observáveis. Essa mudança sozinha foi responsável por +1,1 pontos acadêmicos.
+
+**Próxima alavanca disponível (maior retorno sobre esforço):** executar o ablation `demo_dim=0` vs `demo_dim=2` após a simulação atual. Se late fusion mostrar AUC ≥ +3%, justifica +0,3 adicional e resolve parcialmente a penalidade de SimplifiedBEHRT.
+
+---
+
+*Próxima reavaliação recomendada: após conclusão da simulação de 20 rodadas com dados FAPESP reais e alinhamento com a orientadora sobre Q1 (threshold 10 dias) e Q2 (escopo pronto vs internado).*
