@@ -65,7 +65,7 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 > **Documentação detalhada do pipeline:** [`docs/FLUXO_APRENDIZADO_FEDERADO.md`](docs/FLUXO_APRENDIZADO_FEDERADO.md) — SQL → tokenização → BEHRT → ClinicalPath, com diagramas Mermaid.
 > **Avaliação do projeto:** [`AVALIACAO_PROJETO.md`](AVALIACAO_PROJETO.md) — avaliações acadêmica e de produção clínica com histórico de evolução.
 > **Documentação de etapas anteriores:** [`docs/documentacao_etapas_legadas.md`](docs/documentacao_etapas_legadas.md) — análises e planejamentos de sessões anteriores.
-> **Sumário de simulações:** [`docs/Sumario_Simulacao.md`](docs/Sumario_Simulacao.md) — registro completo de cada execução real (dados, pesos, hiperparâmetros, resultados, diagnóstico).
+> **Sumário de treinamentos:** [`docs/Sumario_Treinamento.md`](docs/Sumario_Treinamento.md) — registro completo de cada execução real (dados, pesos, hiperparâmetros, resultados, diagnóstico).
 
 ---
 

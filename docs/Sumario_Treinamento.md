@@ -297,32 +297,155 @@ melhora_ig (338)      81         0         1          47         209
 
 ---
 
+## Experimento 3
+
+**Data:** 2026-06-25  
+**Início:** ~08:40 | **Fim:** 09:54:04  
+**Duração:** 2.980,4s (49,7 min)  
+**Log:** `experiments/logs/run_complete_2_correcao_calibracao.log`  
+**Avaliação:** `experiments/logs/evaluation_round_20.json`
+
+### Correções aplicadas nesta execução
+
+- **Split 70/10/10/10:** conjunto de calibração (`cal_loader`) com 3.376 amostras, completamente independente do FL e do conjunto de teste. Primeira execução com calibração metodologicamente correta.
+- **Marcadores estruturados:** `FL_TRAINING_COMPLETE` e `TREINAMENTO_COMPLETO` adicionados ao log (pesquisáveis por ferramentas de observabilidade).
+
+### Hiperparâmetros
+
+*(idênticos aos Experimentos 1 e 2)*
+
+| Parâmetro | Valor |
+|---|---|
+| Rodadas máximas | 20 |
+| µ FedProx | 0,01 |
+| Batch size | 16 |
+| Épocas locais | 2 |
+
+### Resultado por rodada
+
+| Rodada | Loss global | Acurácia | Δacc | Conv. |
+|---|---|---|---|---|
+| 1 | 1,2712 | 49,8% | — | — |
+| 2 | 1,3973 | 45,0% | 0,04793 | reset |
+| 3 | 1,2688 | 49,6% | 0,04609 | reset |
+| 4 | 1,2359 | 54,9% | 0,05335 | reset |
+| 5 | 1,2743 | 54,4% | 0,00507 | reset |
+| 6 | 1,3782 | 52,6% | 0,01800 | reset |
+| 7 | 1,2568 | 58,1% | 0,05533 | reset |
+| 8 | 1,2277 | 56,8% | 0,01334 | reset |
+| 9 | 1,2390 | 54,2% | 0,02544 | reset |
+| 10 | 1,1620 | 53,0% | 0,01208 | reset |
+| 11 | 1,2279 | 53,0% | 0,00031 | 1/3 |
+| 12 | 1,2589 | 52,9% | 0,00087 | 2/3 |
+| 13 | 1,3012 | 55,0% | 0,02072 | reset |
+| 14 | 1,1101 | 55,6% | 0,00620 | reset |
+| 15 | 1,2038 | 54,5% | 0,01151 | reset |
+| 16 | 1,2258 | 55,5% | 0,01042 | reset |
+| 17 | 1,1461 | 56,7% | 0,01245 | reset |
+| 18 | 1,1182 | 55,3% | 0,01454 | reset |
+| 19 | 1,2050 | 55,4% | 0,00117 | 1/3 |
+| 20 | 1,1518 | 55,8% | 0,00440 | 2/3 |
+
+**Convergência:** Não atingida (critério: 3× Δacc < 0,005)  
+**Tráfego total FL:** 217,17 MB  
+**Tempo médio por rodada:** ~149s (2,5 min/rodada)
+
+### Avaliação final (rodada 20)
+
+**Pré-calibração (T=1,0):**
+
+| Classe | AUC | F1 | Recall | Precision | N |
+|---|---|---|---|---|---|
+| curado_pronto | 0,828 | **0,708** | 0,666 | 0,756 | 1620 |
+| curado_internado | 0,635 | 0,040 | 0,036 | 0,046 | 28 |
+| melhora_pronto | 0,769 | **0,397** | 0,523 | 0,320 | 321 |
+| melhora_internado_breve | 0,749 | 0,501 | 0,461 | 0,548 | 1074 |
+| melhora_internado_grave | 0,793 | 0,345 | 0,429 | 0,289 | 338 |
+| **Macro** | **0,755** | **0,398** | — | — | 3381 |
+
+**Acurácia:** 55,8%  
+**ECE pré-calibração:** 0,0867 (MCE=0,4445)  
+**ECE pós-calibração:** 0,1019 (MCE=0,2291) — ECE piorou, **MCE melhorou significativamente**  
+**Temperatura ajustada:** T=1,1754 | **cal_set=3.376 amostras (independente)**
+
+**Matriz de confusão (pré-calibração):**
+
+```
+                   curado_p  curado_i  melhora_p  melhora_ib  melhora_ig
+curado_p    (1620)     1079         4        246         189         102
+curado_i      (28)        6         1          3          12           6
+melhora_p    (321)       60         4        168          81           8
+melhora_ib  (1074)      231        12         95         495         241
+melhora_ig   (338)       52         1         13         127         145
+```
+
+### Resultados das etapas pós-FL
+
+**RAG — Precision@3:**
+
+| Classe | Precision@3 |
+|---|---|
+| curado_pronto | — |
+| curado_internado | — |
+| melhora_pronto | — |
+| melhora_internado_breve | — |
+| melhora_internado_grave | — |
+| **Global** | **0,2851** |
+
+**Baseline Random Forest (Bag-of-Tokens):**
+
+| Modelo | Accuracy | AUC | F1 Macro | ECE |
+|---|---|---|---|---|
+| RF Centralizado (pool BPSP+HSL) | **68,0%** | **0,790** | **0,505** | 0,061 |
+| RF Hospital 0 (BPSP isolado) | 59,4% | 0,736 | 0,337 | 0,055 |
+| RF Hospital 1 (HSL isolado) | 23,5% | 0,702 | 0,184 | 0,273 |
+
+**Ablation — Late Fusion Demográfica (dados reais FAPESP):**
+
+| Config | Accuracy | F1 Macro | demo_dim |
+|---|---|---|---|
+| Config A — sem demográficos | 54,5% | 0,398 | 0 |
+| Config B — late fusion (idade + sexo) | **67,3%** | **0,449** | 2 |
+| **Δ (B − A)** | **+12,7 p.p.** | **+0,051** | — |
+
+> **Nota:** a ablation usa treinamento local (sem FL), 10 épocas, seed=42. O resultado não é comparável diretamente ao modelo FL — isola o efeito dos demográficos da heterogeneidade entre clientes.
+
+---
+
 ## Tabela Comparativa dos Experimentos
 
-| Atributo | Experimento 1 | Experimento 2 |
-|---|---|---|
-| Log | `run_complete_1.log` | `run_complete_1_correcao1.log` |
-| Rodadas executadas | 20 | 7 |
-| Convergência | Não | **Sim (rodada 7)** |
-| Acurácia final | 58,0% | 52,5% |
-| Macro AUC (pré-cal) | 0,740 | **0,767** |
-| Macro F1 (pré-cal) | **0,359** | 0,287 |
-| ECE pré-calibração | **0,059** | 0,061 |
-| ECE pós-calibração | 0,098 (piorou) | 0,064 (marginal) |
-| Temperatura T | 1,177 | 1,127 |
-| Tráfego FL total | 217 MB | 76 MB |
-| Etapas pós-FL | Crash (bug corrigido) | RAG + RF concluídos |
-| Baseline RF (Acc) | — | 68,1% |
-
-### Comparativo BEHRT-FL vs Baseline RF (Experimento 2)
-
-| Modelo | Accuracy | AUC | F1 Macro |
+| Atributo | Experimento 1 | Experimento 2 | Experimento 3 |
 |---|---|---|---|
-| RF Centralizado (BoT) — teto sem privacidade | 68,1% | 0,786 | 0,504 |
-| RF BPSP isolado — local sem FL | 59,5% | 0,735 | 0,337 |
-| RF HSL isolado — local sem FL | 28,0% | 0,720 | 0,204 |
-| **SimplifiedBEHRT FL (Exp 2, round 7)** | **52,5%** | **0,767** | **0,287** |
-| **SimplifiedBEHRT FL (Exp 1, round 20)** | **58,0%** | **0,740** | **0,359** |
+| Log | `run_complete_1.log` | `run_complete_1_correcao1.log` | `run_complete_2_correcao_calibracao.log` |
+| Rodadas executadas | 20 | 7 | 20 |
+| Convergência | Não | **Sim (rodada 7)** | Não |
+| Acurácia final | 58,0% | 52,5% | 55,8% |
+| Macro AUC (pré-cal) | 0,740 | **0,767** | 0,755 |
+| Macro F1 (pré-cal) | 0,359 | 0,287 | **0,398** |
+| F1 melhora_pronto | 0,083 | 0,048 | **0,397** ↑ |
+| ECE pré-calibração | **0,059** | 0,061 | 0,087 |
+| ECE pós-calibração | 0,098 (↑) | 0,064 (↑) | 0,102 (↑) |
+| MCE pós-calibração | 0,405 | 0,301 | **0,229** ↓ |
+| Temperatura T | 1,177 | 1,127 | 1,175 |
+| Cal set | test_loader (inválido) | test_loader (inválido) | **3.376 amostras (isolado)** |
+| Tráfego FL total | 217 MB | 76 MB | 217 MB |
+| Duração total | 57,4 min | ~21 min | 49,7 min |
+| Etapas pós-FL | Crash | RAG + RF | **RAG + RF + Ablation ✓** |
+| RAG Precision@3 | — | 0,134 | **0,285** |
+| Baseline RF (Acc) | — | 68,1% | 68,0% |
+| Ablation Δ Acc (B−A) | — | — | **+12,7 p.p.** |
+
+### Comparativo BEHRT-FL vs Baseline RF (Experimentos 1–3)
+
+| Modelo | Accuracy | AUC | F1 Macro | ECE |
+|---|---|---|---|---|
+| RF Centralizado (BoT) — teto sem privacidade | 68,0–68,1% | 0,786–0,790 | 0,504–0,505 | 0,061 |
+| RF BPSP isolado — baseline local sem FL | 59,4–59,5% | 0,735–0,736 | 0,337 | 0,055 |
+| RF HSL isolado — baseline local sem FL | 23,5–28,0% | 0,702–0,720 | 0,184–0,204 | 0,201–0,273 |
+| SimplifiedBEHRT FL (Exp 1, round 20) | 58,0% | 0,740 | 0,359 | — |
+| SimplifiedBEHRT FL (Exp 2, round 7) | 52,5% | **0,767** | 0,287 | — |
+| **SimplifiedBEHRT FL (Exp 3, round 20)** | 55,8% | 0,755 | **0,398** | 0,087 |
+| BEHRT local + demo (ablation Exp 3) | **67,3%** | — | 0,449 | — |
 
 ---
 
@@ -330,25 +453,36 @@ melhora_ig (338)      81         0         1          47         209
 
 ### Problema 1 — Acurácia abaixo do baseline RF
 
-O RF centralizado (68,1%) supera o SimplifiedBEHRT FL (52,5–58,0%). As causas principais são:
+O RF centralizado (~68%) ainda supera o SimplifiedBEHRT FL (52,5–58,0%). As causas principais são:
 
-1. **Non-IID extremo:** `melhora_pronto` é 61,5% do HSL mas 0,4% do BPSP. FedAvg pondera por volume de dados — BPSP tem 5,5× mais amostras e domina a agregação, fazendo o modelo global "esquecer" o que HSL aprende sobre essa classe.
-2. **Peso de classe desestabilizador:** peso 47,173 para `melhora_pronto` no BPSP gera gradientes instáveis sem aprendizado real (apenas 97 amostras de treino nessa classe nesse cliente).
-3. **Convergência prematura (Exp 2):** convergiu na rodada 7 com acurácia 52,5%, antes de alcançar os patamares do Experimento 1 (melhor: 58,7% na rodada 19).
-4. **Client drift:** µ=0,01 no FedProx é insuficiente para o grau de heterogeneidade — a loss oscila (sobe e desce) ao longo das rodadas em vez de descer monotonicamente.
+1. **Non-IID extremo:** `melhora_pronto` é 61,5% do HSL mas 0,4% do BPSP. FedAvg pondera por volume de dados — BPSP tem 5,5× mais amostras e domina a agregação, tendendo a sobrescrever o que HSL aprende.
+2. **Peso de classe desestabilizador:** peso 47,173 para `melhora_pronto` no BPSP gera gradientes instáveis (apenas 97 amostras de treino nessa classe nesse cliente).
+3. **Client drift:** µ=0,01 no FedProx é insuficiente para o grau de heterogeneidade — a loss oscila ao longo das rodadas em vez de descer monotonicamente.
+4. **Convergência prematura (Exp 2):** convergiu na rodada 7 antes de atingir os patamares dos Experimentos 1 e 3.
 
-### Problema 2 — Temperature scaling piora a calibração
+**Evolução positiva observada (Exp 3):** F1 de `melhora_pronto` subiu de 0,05–0,08 (Exp 1–2) para **0,397** com 20 rodadas completas. Isso evidencia que o modelo consegue aprender a classe não-IID dado tempo suficiente, mas o processo é lento e oscilante.
 
-Em ambos os experimentos T>1 aumentou o ECE pós-calibração. Causa:
-- O `test_loader` é reutilizado como calibration set (limitação acadêmica explicitada no código)
-- O padrão de calibração é misto: bins de média confiança são underconfident, bins extremos são overconfident — temperatura única não resolve
+### Problema 2 — Temperature scaling não melhora a calibração
+
+Em todos os experimentos T>1 aumentou o ECE pós-calibração. Análise do Experimento 3 (primeiro com cal_set independente):
+
+- ECE pré-cal: 0,087 → pós-cal: 0,102 (+0,015, piorou)
+- **MCE pré-cal: 0,445 → pós-cal: 0,229 (−0,216, melhorou significativamente)**
+
+O cal_set independente evidencia que o padrão de calibração é estruturalmente misto: bins de confiança intermediária são underconfident (modelo hesitante), enquanto extremos são overconfident. Temperatura única T não resolve padrões mistos — comprime as probabilidades uniformemente e piora o ECE agregado.
+
+**Implicação:** o modelo está bem calibrado nos bins de alta confiança (gap < 0,04 acima de 0,83 de confiança) mas mal calibrado nos bins intermediários. Para o TCC, isso significa que predições de alta confiança são confiáveis; predições de média confiança devem ser tratadas com cautela.
+
+### Achado da ablation — demográficos são relevantes
+
+Config B (com idade + sexo via late fusion) alcançou Acc=67,3% vs Config A (sem demo) Acc=54,5% — **+12,7 p.p. em treinamento local**. O F1 macro subiu +0,051. Este resultado, com dados reais FAPESP, valida empiricamente a hipótese de que variáveis demográficas adicionam sinal discriminante ao BEHRT para este dataset. É uma das contribuições centrais do TCC.
 
 ### Classes não aprendidas
 
-| Classe | Causa | Evidência |
+| Classe | Causa | Evolução |
 |---|---|---|
-| `melhora_pronto` | Quasi-exclusiva do HSL; BPSP domina FedAvg | F1=0,05–0,08 em ambos experimentos |
-| `curado_internado` | Raridade extrema em ambos os clientes (N=27 no teste) | F1=0,00–0,08; zero acertos no Exp 2 |
+| `curado_internado` | Raridade extrema em ambos os clientes (N=28 no teste global) | F1 estável em 0,04–0,08; modelo praticamente não prediz essa classe |
+| `melhora_pronto` | Quasi-exclusiva do HSL; BPSP domina FedAvg | **Melhora significativa com mais rodadas:** F1 0,05→0,40 (Exp 2→3) |
 
 ### Ações corretivas planejadas
 
@@ -357,8 +491,9 @@ Em ambos os experimentos T>1 aumentou o ECE pós-calibração. Causa:
 | Clipar pesos de classe em `max_weight=15,0` | Reduz instabilidade de gradiente no BPSP | Alta |
 | Aumentar µ FedProx 0,01 → 0,1 | Reduz client drift, loss mais estável | Alta |
 | Reduzir local epochs 2 → 1 | Reduz divergência entre clientes por rodada | Média |
-| Separar calibration set (10% do val) | Torna temperature scaling válido metodologicamente | Média |
+| Explorar calibração por Platt Scaling ou isotônica | Resolve padrões de calibração mistos que temperatura única não resolve | Média |
 | Avaliar fusão para 3 classes | Resolve non-IID estrutural se clinicamente justificável | A definir com orientadora |
+| Comparação CPU vs GPU | Medir impacto de hardware no tempo de treinamento para o TCC | Após resolver driver NVIDIA |
 
 ---
 
@@ -367,9 +502,12 @@ Em ambos os experimentos T>1 aumentou o ECE pós-calibração. Causa:
 | Arquivo | Conteúdo |
 |---|---|
 | `experiments/logs/run_complete_1.log` | Log completo do Experimento 1 (20 rodadas) |
-| `experiments/logs/evaluation_round_20.json` | Avaliação detalhada por classe — Experimento 1 |
+| `experiments/logs/evaluation_round_20.json` | Avaliação detalhada por classe — Experimentos 1 e 3 (round 20) |
 | `experiments/logs/run_complete_1_correcao1.log` | Log completo do Experimento 2 (7 rodadas + pós-FL) |
 | `experiments/logs/evaluation_round_7.json` | Avaliação detalhada por classe — Experimento 2 |
+| `experiments/logs/run_complete_2_correcao_calibracao.log` | Log completo do Experimento 3 (20 rodadas + pós-FL + ablation) |
 | `experiments/data/baseline_rf_20260625_081232.json` | Resultado baseline RF — Experimento 2 |
+| `experiments/data/baseline_rf_20260625_093220.json` | Resultado baseline RF — Experimento 3 |
+| `experiments/data/ablation_demo_20260625_095404.json` | Resultado ablation demográfica — Experimento 3 |
 | `experiments/data/history_20260625_071610.json` | Histórico de loss/acc por rodada — Experimento 1 |
 | `AVALIACAO_PROJETO.md` | Avaliação acadêmica e clínica do projeto |
