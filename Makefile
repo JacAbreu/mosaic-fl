@@ -31,8 +31,8 @@ FL_DATA_DIR      ?= $(HOME)/studies/usp/mba-bigdata-art-int/tcc/data/Dados/Covid
 HSL_SEED         ?= scripts/db/seeds/hsl_seed.sql.gz
 BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
 
-.PHONY: setup test test-integration test-e2e test-all test-cov experiment clean \
-        superlink server-app supernode sim test-pipeline \
+.PHONY: setup test test-integration test-e2e test-all test-cov experiment training clean \
+        superlink server-app supernode sim test-pipeline behrt-pooled \
         db-up db-down db-wait fl-server fl-client fl-check \
         client-generate-seed client-db-up client-migrate client-load-hsl client-setup \
         server-generate-seed server-db-reset server-load-bpsp server-setup
@@ -70,6 +70,12 @@ training:
 ## Simulação demonstrativa com dados sintéticos (não requer banco)
 experiment:
 	FL_LOG_FILE="$(FL_LOG_SIMULATION)" $(PYTHON) experiments/run_experiments_simulation.py
+
+## Pooled baseline — BEHRT com pool BPSP+HSL (artefato de pesquisa, nunca em produção)
+## Quantifica o custo de privacidade da federação com a mesma arquitetura do modelo FL.
+## Requer FL_DB_URL. Saída: experiments/data/behrt_pooled_<timestamp>.json
+behrt-pooled:
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_behrt_pooled.py
 
 # ── Banco de dados (PostgreSQL via Docker) ────────────────────────────────────
 

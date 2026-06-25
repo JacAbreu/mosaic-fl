@@ -1,0 +1,375 @@
+"""
+Ablation study de late fusion demográfica e pooled baseline (artefato de pesquisa).
+
+  run_ablation_demographics — ablation_A_sem_demo vs ablation_B_late_fusion
+  run_pooled_behrt          — behrt_pooled_A_sem_demo vs behrt_pooled_B_late_fusion
+"""
+import logging
+from typing import Dict, Optional, Tuple
+
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+
+from mosaicfl.core.config import (
+    BATCH_SIZE, DEVICE, LOCAL_EPOCHS, LR, MODEL_CFG, NUM_ROUNDS, RANDOM_SEED,
+)
+from mosaicfl.core.model import SimplifiedBEHRT
+
+logger = logging.getLogger(__name__)
+
+
+def _make_correlated_demo(labels: torch.Tensor, noise_std: float = 0.15, seed: int = 42) -> torch.Tensor:
+    """Gera demográficos sintéticos correlacionados com os labels de prognóstico."""
+    rng = np.random.default_rng(seed)
+    age_means = {0: 0.45, 1: 0.55, 2: 0.65, 3: 0.70}
+    sex_probs  = {0: 0.45, 1: 0.50, 2: 0.60, 3: 0.65}
+
+    ages  = np.zeros(len(labels), dtype=np.float32)
+    sexes = np.zeros(len(labels), dtype=np.float32)
+    for i, lbl in enumerate(labels.tolist()):
+        lbl = min(int(lbl), 3)
+        ages[i]  = float(np.clip(rng.normal(age_means[lbl], noise_std), 0.18, 0.95))
+        sexes[i] = 1.0 if rng.random() < sex_probs[lbl] else 0.0
+
+    return torch.from_numpy(np.stack([ages, sexes], axis=1))
+
+
+def run_ablation_demographics(
+    client_loaders: Dict,
+    test_loader: DataLoader,
+    demographics_by_client: Optional[Dict] = None,
+    test_loader_demo: Optional[DataLoader] = None,
+    n_epochs: int = 10,
+    random_seed: Optional[int] = None,
+) -> Dict:
+    """
+    Ablation study: late fusion demográfica (age_norm + sex_binary) no SimplifiedBEHRT.
+
+    ablation_A_sem_demo:    demo_dim=0 (modelo base)
+    ablation_B_late_fusion: demo_dim=2 (late fusion com age_norm + sex_binary)
+    """
+    from mosaicfl.core.evaluation import evaluate, print_report
+
+    random_seed   = random_seed   if random_seed   is not None else RANDOM_SEED
+    use_real_demo = demographics_by_client is not None
+
+    logger.info("=" * 60)
+    logger.info("ABLATION — Late Fusion Demográfica")
+    logger.info(f"  Fonte dos demográficos: {'dados reais (FAPESP)' if use_real_demo else 'sintéticos correlacionados'}")
+    logger.info("  ablation_A_sem_demo:    SimplifiedBEHRT sem demográficos (demo_dim=0)")
+    logger.info("  ablation_B_late_fusion: SimplifiedBEHRT + late fusion (demo_dim=2)")
+    logger.info(f"  Épocas locais: {n_epochs} | seed: {random_seed}")
+    logger.info("=" * 60)
+
+    def _train_local(model: nn.Module, loaders: Dict, with_demo: bool, demo_loaders: Optional[Dict]) -> None:
+        optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+        criterion = nn.CrossEntropyLoss()
+        model.train()
+
+        synth_demo_cache: Dict[int, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = {}
+        if with_demo and not use_real_demo:
+            for cid, (train_loader, _) in loaders.items():
+                all_x, all_y = [], []
+                for bx, by in train_loader:
+                    all_x.append(bx); all_y.append(by)
+                all_x = torch.cat(all_x); all_y = torch.cat(all_y)
+                synth_demo_cache[cid] = (all_x, all_y, _make_correlated_demo(all_y, seed=random_seed + cid))
+
+        for _ in range(n_epochs):
+            if with_demo and use_real_demo and demo_loaders:
+                for cid, (demo_train_loader, _) in demo_loaders.items():
+                    for batch_x, batch_y, batch_demo in demo_train_loader:
+                        batch_x, batch_y, batch_demo = (
+                            batch_x.to(DEVICE), batch_y.to(DEVICE), batch_demo.to(DEVICE)
+                        )
+                        optimizer.zero_grad()
+                        criterion(model(batch_x, demographics=batch_demo), batch_y).backward()
+                        optimizer.step()
+            elif with_demo and not use_real_demo:
+                for cid, (all_x, all_y, all_demo) in synth_demo_cache.items():
+                    for bx, by, bd in DataLoader(TensorDataset(all_x, all_y, all_demo),
+                                                  batch_size=BATCH_SIZE, shuffle=True):
+                        bx, by, bd = bx.to(DEVICE), by.to(DEVICE), bd.to(DEVICE)
+                        optimizer.zero_grad()
+                        criterion(model(bx, demographics=bd), by).backward()
+                        optimizer.step()
+            else:
+                for cid, (train_loader, _) in loaders.items():
+                    for batch_x, batch_y in train_loader:
+                        batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
+                        optimizer.zero_grad()
+                        criterion(model(batch_x), batch_y).backward()
+                        optimizer.step()
+
+    def _eval_with_demo(model: nn.Module, t_loader_demo: DataLoader) -> Dict:
+        model.eval()
+        all_preds, all_labels = [], []
+        criterion = nn.CrossEntropyLoss()
+        total_loss, total_n = 0.0, 0
+
+        with torch.no_grad():
+            for batch in t_loader_demo:
+                if len(batch) == 3:
+                    bx, by, bd = batch
+                else:
+                    bx, by = batch
+                    bd = _make_correlated_demo(by, seed=random_seed + 99)
+                bx, by, bd = bx.to(DEVICE), by.to(DEVICE), bd.to(DEVICE)
+                logits = model(bx, demographics=bd)
+                total_loss += criterion(logits, by).item() * by.size(0)
+                total_n += by.size(0)
+                all_preds.extend(torch.argmax(logits, 1).cpu().tolist())
+                all_labels.extend(by.cpu().tolist())
+
+        from sklearn.metrics import accuracy_score, f1_score
+        return {
+            "accuracy": round(float(accuracy_score(all_labels, all_preds)), 4),
+            "macro_f1": round(float(f1_score(all_labels, all_preds, average="macro", zero_division=0)), 4),
+            "loss":     round(total_loss / total_n, 4) if total_n > 0 else None,
+        }
+
+    results: Dict = {}
+
+    for config_name, demo_dim, with_demo in [
+        ("ablation_A_sem_demo",    0, False),
+        ("ablation_B_late_fusion", 2, True),
+    ]:
+        logger.info(f"\n[Ablação] Treinando {config_name} (demo_dim={demo_dim}, épocas={n_epochs})...")
+        torch.manual_seed(random_seed)
+        model = SimplifiedBEHRT(use_cls_token=True, demo_dim=demo_dim).to(DEVICE)
+
+        _train_local(model, client_loaders, with_demo, demographics_by_client)
+
+        if with_demo:
+            t_loader = test_loader_demo if (use_real_demo and test_loader_demo is not None) else test_loader
+            metrics = _eval_with_demo(model, t_loader)
+            metrics["descricao"] = (
+                "SimplifiedBEHRT + late fusion demográfica "
+                f"({'dados reais FAPESP' if use_real_demo else 'sintéticos correlacionados'})"
+            )
+        else:
+            try:
+                report = evaluate(model, test_loader, class_labels=MODEL_CFG.class_labels,
+                                  device=str(DEVICE), temperature=1.0)
+                metrics = {
+                    "accuracy":  round(report.accuracy, 4),
+                    "macro_f1":  round(report.macro_f1, 4),
+                    "macro_auc": round(report.macro_auc, 4) if report.macro_auc else None,
+                    "ece":       round(report.calibration.ece, 4),
+                    "descricao": "SimplifiedBEHRT sem demográficos (baseline)",
+                }
+            except Exception as exc:
+                logger.warning(f"evaluate() falhou para {config_name}: {exc}")
+                metrics = {"erro": str(exc)}
+
+        metrics["demo_dim"] = demo_dim
+        metrics["n_epochs"] = n_epochs
+        results[config_name] = metrics
+        logger.info(f"  {config_name}: Acc={metrics.get('accuracy','n/a')} | F1={metrics.get('macro_f1','n/a')}")
+
+    a = results.get("ablation_A_sem_demo",    {})
+    b = results.get("ablation_B_late_fusion", {})
+    if "accuracy" in a and "accuracy" in b:
+        delta_acc = round(b["accuracy"] - a["accuracy"], 4)
+        delta_f1  = round(b["macro_f1"] - a["macro_f1"], 4) if "macro_f1" in a and "macro_f1" in b else None
+        results["delta_B_minus_A"] = {"accuracy": delta_acc, "macro_f1": delta_f1}
+        logger.info(f"\n[Ablação] Δ (B − A): Acc={delta_acc:+.4f}"
+                    + (f" | F1={delta_f1:+.4f}" if delta_f1 is not None else ""))
+
+    logger.info("\n" + "=" * 70)
+    logger.info("RESULTADO ABLAÇÃO — Late Fusion Demográfica")
+    logger.info("=" * 70)
+    logger.info(f"{'Config':<35} {'Accuracy':>8} {'F1 Macro':>8}")
+    logger.info("-" * 55)
+    for key in ["ablation_A_sem_demo", "ablation_B_late_fusion"]:
+        m = results.get(key, {})
+        logger.info(f"{key:<35} {m.get('accuracy','n/a'):>8} {m.get('macro_f1','n/a'):>8}")
+    if "delta_B_minus_A" in results:
+        d = results["delta_B_minus_A"]
+        logger.info(
+            f"{'Δ (B − A)':<35} {d.get('accuracy','n/a'):>+8} "
+            + (f"{d.get('macro_f1','n/a'):>+8}" if d.get('macro_f1') is not None else "     n/a")
+        )
+    logger.info("=" * 70)
+
+    results["meta"] = {
+        "fonte_demo":    "real_fapesp" if use_real_demo else "sintetico_correlacionado",
+        "n_epochs":      n_epochs,
+        "random_seed":   random_seed,
+        "demo_features": ["age_norm (birth_year / ref_year=2021)", "sex_binary (M=1, F=0)"],
+    }
+    return results
+
+
+def run_pooled_behrt(
+    client_loaders: Dict,
+    test_loader: DataLoader,
+    demographics_by_client: Optional[Dict] = None,
+    test_loader_demo: Optional[DataLoader] = None,
+    n_epochs: Optional[int] = None,
+    random_seed: Optional[int] = None,
+) -> Dict:
+    """
+    Pooled baseline: SimplifiedBEHRT treinado no pool de todos os dados de treino.
+
+    ARTEFATO METODOLÓGICO — quantifica o custo de privacidade da arquitetura federada
+    isolando-o de diferenças de arquitetura (BEHRT × BEHRT, não BEHRT × RF).
+    Nunca deve ser chamado no pipeline de produção nem em run_training.py.
+
+    behrt_pooled_A_sem_demo:    demo_dim=0
+    behrt_pooled_B_late_fusion: demo_dim=2
+    """
+    from mosaicfl.core.evaluation import evaluate
+
+    random_seed   = random_seed if random_seed is not None else RANDOM_SEED
+    n_epochs      = n_epochs    if n_epochs    is not None else (NUM_ROUNDS * LOCAL_EPOCHS)
+    use_real_demo = demographics_by_client is not None
+
+    logger.info("=" * 60)
+    logger.info("POOLED BASELINE — SimplifiedBEHRT (artefato de pesquisa)")
+    logger.info("  Este experimento NUNCA deve rodar em produção.")
+    logger.info(f"  Épocas: {n_epochs} (= NUM_ROUNDS × LOCAL_EPOCHS) | seed: {random_seed}")
+    logger.info(f"  Fonte demográficos: {'dados reais FAPESP' if use_real_demo else 'sintéticos'}")
+    logger.info("=" * 60)
+
+    all_seqs, all_lbls, all_demo = [], [], []
+    for cid, (train_loader, _) in client_loaders.items():
+        for bx, by in train_loader:
+            all_seqs.append(bx)
+            all_lbls.append(by)
+
+    if use_real_demo:
+        for cid, (demo_train_loader, _) in demographics_by_client.items():
+            for bx, by, bd in demo_train_loader:
+                all_demo.append(bd)
+
+    pool_seqs = torch.cat(all_seqs, dim=0)
+    pool_lbls = torch.cat(all_lbls, dim=0)
+    pool_demo = torch.cat(all_demo, dim=0) if all_demo else None
+    n_pool    = len(pool_seqs)
+    logger.info(f"  Pool total: {n_pool} amostras (BPSP + HSL combinados)")
+
+    results: Dict = {}
+
+    for variant_name, demo_dim in [
+        ("behrt_pooled_A_sem_demo",    0),
+        ("behrt_pooled_B_late_fusion", 2),
+    ]:
+        with_demo = (demo_dim > 0)
+        logger.info(f"\n[Pooled] Treinando {variant_name} (demo_dim={demo_dim})...")
+
+        torch.manual_seed(random_seed)
+        model     = SimplifiedBEHRT(use_cls_token=True, demo_dim=demo_dim).to(DEVICE)
+        optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+        counts    = torch.bincount(pool_lbls, minlength=MODEL_CFG.num_classes).float()
+        weights   = (n_pool / (MODEL_CFG.num_classes * counts.clamp(min=1))).to(DEVICE)
+        criterion = nn.CrossEntropyLoss(weight=weights)
+
+        dataset = (
+            TensorDataset(pool_seqs, pool_lbls, pool_demo)
+            if (with_demo and pool_demo is not None)
+            else TensorDataset(pool_seqs, pool_lbls)
+        )
+        loader = DataLoader(
+            dataset, batch_size=BATCH_SIZE, shuffle=True,
+            generator=torch.Generator().manual_seed(random_seed),
+        )
+
+        model.train()
+        for epoch in range(n_epochs):
+            epoch_loss = 0.0
+            for batch in loader:
+                if with_demo and pool_demo is not None and len(batch) == 3:
+                    bx, by, bd = batch[0].to(DEVICE), batch[1].to(DEVICE), batch[2].to(DEVICE)
+                    logits = model(bx, demographics=bd)
+                else:
+                    bx, by = batch[0].to(DEVICE), batch[1].to(DEVICE)
+                    logits = model(bx)
+                loss = criterion(logits, by)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+            if (epoch + 1) % max(1, n_epochs // 5) == 0:
+                logger.info(f"    época {epoch+1}/{n_epochs} loss={epoch_loss/len(loader):.4f}")
+
+        if with_demo and test_loader_demo is not None:
+            model.eval()
+            all_preds, all_labels_eval = [], []
+            eval_loss, eval_n = 0.0, 0
+            with torch.no_grad():
+                for batch in test_loader_demo:
+                    bx, by = batch[0].to(DEVICE), batch[1].to(DEVICE)
+                    bd = batch[2].to(DEVICE) if len(batch) == 3 else None
+                    logits = model(bx, demographics=bd)
+                    eval_loss += nn.CrossEntropyLoss()(logits, by).item() * by.size(0)
+                    eval_n += by.size(0)
+                    all_preds.extend(torch.argmax(logits, 1).cpu().tolist())
+                    all_labels_eval.extend(by.cpu().tolist())
+            from sklearn.metrics import accuracy_score, f1_score
+            metrics: Dict = {
+                "accuracy": round(float(accuracy_score(all_labels_eval, all_preds)), 4),
+                "macro_f1": round(float(f1_score(all_labels_eval, all_preds,
+                                                  average="macro", zero_division=0)), 4),
+                "loss":     round(eval_loss / eval_n, 4) if eval_n > 0 else None,
+            }
+        else:
+            try:
+                report = evaluate(model, test_loader, class_labels=MODEL_CFG.class_labels,
+                                  device=str(DEVICE), temperature=1.0)
+                metrics = {
+                    "accuracy":     round(report.accuracy, 4),
+                    "macro_f1":     round(report.macro_f1, 4),
+                    "macro_auc":    round(report.macro_auc, 4) if report.macro_auc else None,
+                    "ece":          round(report.calibration.ece, 4),
+                    "per_class_f1": {
+                        lbl: round(f, 4)
+                        for lbl, f in zip(MODEL_CFG.class_labels, report.per_class_f1)
+                    } if report.per_class_f1 is not None else None,
+                }
+            except Exception as exc:
+                logger.warning(f"evaluate() falhou para {variant_name}: {exc}")
+                metrics = {"erro": str(exc)}
+
+        metrics["demo_dim"]  = demo_dim
+        metrics["n_epochs"]  = n_epochs
+        metrics["n_pool"]    = n_pool
+        metrics["descricao"] = (
+            "BEHRT pooled baseline — artefato de pesquisa. "
+            "Dados BPSP+HSL combinados. Nunca implantado."
+        )
+        results[variant_name] = metrics
+        logger.info(f"  {variant_name}: Acc={metrics.get('accuracy','n/a')} | F1={metrics.get('macro_f1','n/a')}")
+
+    a = results.get("behrt_pooled_A_sem_demo",    {})
+    b = results.get("behrt_pooled_B_late_fusion",  {})
+    if "accuracy" in a and "accuracy" in b:
+        results["delta_B_minus_A"] = {
+            "accuracy": round(b["accuracy"] - a["accuracy"], 4),
+            "macro_f1": round(b.get("macro_f1", 0) - a.get("macro_f1", 0), 4),
+        }
+
+    logger.info("\n" + "=" * 70)
+    logger.info("RESULTADO POOLED BASELINE")
+    logger.info("=" * 70)
+    logger.info(f"{'Variante':<40} {'Accuracy':>8} {'F1 Macro':>8}")
+    logger.info("-" * 60)
+    for key in ["behrt_pooled_A_sem_demo", "behrt_pooled_B_late_fusion"]:
+        m = results.get(key, {})
+        logger.info(f"{key:<40} {m.get('accuracy','n/a'):>8} {m.get('macro_f1','n/a'):>8}")
+    if "delta_B_minus_A" in results:
+        d = results["delta_B_minus_A"]
+        logger.info(f"{'Δ (B − A)':<40} {d.get('accuracy','n/a'):>+8} {d.get('macro_f1','n/a'):>+8}")
+    logger.info("=" * 70)
+
+    results["meta"] = {
+        "tipo":        "behrt_pooled_baseline",
+        "aviso":       "Artefato metodológico. Nunca executar em produção.",
+        "n_epochs":    n_epochs,
+        "random_seed": random_seed,
+        "n_pool":      n_pool,
+        "fonte_demo":  "real_fapesp" if use_real_demo else "sintetico",
+    }
+    return results
