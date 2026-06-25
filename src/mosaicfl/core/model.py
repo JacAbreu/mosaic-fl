@@ -96,9 +96,19 @@ class BEHRTEncoderLayer(nn.Module):
 
 
 class SimplifiedBEHRT(nn.Module):
-    def __init__(self, use_cls_token: bool = True):
+    def __init__(self, use_cls_token: bool = True, demo_dim: int = 0):
+        """
+        Args:
+            demo_dim: dimensão do vetor demográfico para late fusion.
+                      0 = sem demográficos (comportamento original).
+                      2 = late fusion com [age_norm, sex_binary] concatenados
+                          ao CLS poolado antes do classifier head.
+                      Quando demo_dim > 0 e nenhum tensor é passado em forward(),
+                      as dimensões demográficas são zero-padded automaticamente.
+        """
         super().__init__()
         self.use_cls_token = use_cls_token
+        self.demo_dim = demo_dim
         self.cls_token = nn.Parameter(torch.empty(1, 1, MODEL_CFG.embed_dim))
         nn.init.trunc_normal_(self.cls_token, std=0.02)
         self.embedding = nn.Embedding(MODEL_CFG.vocab_size, MODEL_CFG.embed_dim, padding_idx=0)
@@ -122,8 +132,11 @@ class SimplifiedBEHRT(nn.Module):
             nn.Dropout(MODEL_CFG.dropout),
         )
 
+        # Late fusion: classifier head recebe embed_dim + demo_dim features.
+        # Quando demo_dim=0, comportamento idêntico ao original.
+        classifier_input_dim = MODEL_CFG.embed_dim + demo_dim
         self.classifier = nn.Sequential(
-            nn.Linear(MODEL_CFG.embed_dim, 64),
+            nn.Linear(classifier_input_dim, 64),
             nn.ReLU(),
             nn.Dropout(MODEL_CFG.dropout),
             nn.Linear(64, MODEL_CFG.num_classes),
@@ -151,12 +164,16 @@ class SimplifiedBEHRT(nn.Module):
         self,
         x: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
+        demographics: Optional[torch.Tensor] = None,
         return_attention: bool = False,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Args:
             x:                (batch, seq_len) — índices do vocabulário
             mask:             (batch, seq_len) — True onde há padding
+            demographics:     (batch, demo_dim) — features demográficas para late fusion
+                              [age_norm, sex_binary] quando demo_dim=2.
+                              None = sem demográficos; se demo_dim > 0, zero-pad automático.
             return_attention: se True, retorna (logits, all_attn_weights)
 
         Returns:
@@ -199,6 +216,19 @@ class SimplifiedBEHRT(nn.Module):
             pooled = self._masked_mean_pool(out, mask)  # (batch, embed_dim)
 
         pooled = self.pre_classifier(pooled)
+
+        # Late fusion: concatena demográficos ao CLS poolado antes do classifier.
+        # O Transformer aprende a representação da sequência sem interferência demográfica;
+        # o classifier pondera ambas as fontes de sinal de forma independente.
+        if demographics is not None:
+            pooled = torch.cat([pooled, demographics.to(pooled.device)], dim=-1)
+        elif self.demo_dim > 0:
+            zeros = torch.zeros(
+                pooled.size(0), self.demo_dim,
+                device=pooled.device, dtype=pooled.dtype,
+            )
+            pooled = torch.cat([pooled, zeros], dim=-1)
+
         logits = self.classifier(pooled)
 
         if return_attention:

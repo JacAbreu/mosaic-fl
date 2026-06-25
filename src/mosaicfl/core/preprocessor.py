@@ -585,15 +585,19 @@ class SequencePipeline:
 
         _log(f"[pipeline] construindo tensores para {n_atendimentos:,} sequências...")
         t_t = time.time()
-        sequences, labels, _ = self._build_tensors(df, vocab)
+        sequences, labels, _, demographics = self._build_tensors(df, vocab)
         _log(f"[pipeline] tensores prontos em {time.time() - t_t:.1f}s")
 
         label_dist = {i: int((labels == i).sum()) for i in range(MODEL_CFG.num_classes)}
+        n_with_sex = int((demographics[:, 1] != 0).sum()) + int((demographics[:, 1] == 0).sum())
+        n_male = int((demographics[:, 1] == 1.0).sum())
         _log(
             f"[pipeline] concluído em {time.time() - t0:.1f}s total — "
-            f"{len(sequences):,} pacientes | dist={label_dist}"
+            f"{len(sequences):,} pacientes | dist={label_dist} | "
+            f"demográficos: age_mean={demographics[:, 0].mean():.2f} "
+            f"sex_M={n_male}/{n_with_sex}"
         )
-        return sequences, labels, vocab
+        return sequences, labels, vocab, demographics
 
     def build_per_hospital(self) -> Dict[str, Tuple[torch.Tensor, torch.Tensor, Dict[str, int]]]:
         """
@@ -631,13 +635,14 @@ class SequencePipeline:
             n = df_h.groupby(["patient_id", "attendance_id"]).ngroups
             _log(f"[pipeline/per_hospital] {hosp}: construindo tensores ({n:,} atendimentos)...")
             t_h = time.time()
-            seqs, lbls, _ = self._build_tensors(df_h, vocab)
+            seqs, lbls, _, demo = self._build_tensors(df_h, vocab)
             dist = {i: int((lbls == i).sum()) for i in range(MODEL_CFG.num_classes)}
             _log(
                 f"[pipeline/per_hospital] {hosp}: {len(seqs):,} sequências "
-                f"em {time.time() - t_h:.1f}s | dist={dist}"
+                f"em {time.time() - t_h:.1f}s | dist={dist} | "
+                f"age_mean={demo[:, 0].mean():.2f} sex_M={int((demo[:, 1] == 1.0).sum())}"
             )
-            result[hosp] = (seqs, lbls, vocab)
+            result[hosp] = (seqs, lbls, vocab, demo)
 
         _log(f"[pipeline/per_hospital] concluído em {time.time() - t0:.1f}s total")
         return result
@@ -687,15 +692,29 @@ class SequencePipeline:
         logger.info("vocab_built mode=%s tokens=%d total=%d", self.token_mode, len(top_tokens), len(vocab))
         return vocab
 
+    # Ano de referência do dataset FAPESP COVID-19 (internações 2020-2021).
+    # Usado para calcular age_at_admission = _FAPESP_REF_YEAR - birth_year.
+    _FAPESP_REF_YEAR: int = 2021
+
     def _build_tensors(
         self, df: pd.DataFrame, vocab: Dict[str, int]
-    ) -> Tuple[torch.Tensor, torch.Tensor, List[str]]:
-        """Retorna (sequences, labels, hospital_ids) onde hospital_ids[i] é o hospital
-        do i-ésimo paciente — necessário para build_per_hospital() e rastreabilidade."""
+    ) -> Tuple[torch.Tensor, torch.Tensor, List[str], torch.Tensor]:
+        """
+        Retorna (sequences, labels, hospital_ids, demographics).
+
+        demographics: FloatTensor shape (N, 2) — [age_norm, sex_binary] por paciente.
+            age_norm   = (REF_YEAR − birth_year) / 100.0, clamped [0.0, 1.0]
+                         0.5 quando birth_year ausente
+            sex_binary = 1.0 para 'M', 0.0 para 'F' ou desconhecido
+        """
         unk_id = self._SPECIAL["<UNK>"]
         sequences: List[List[int]] = []
         labels: List[int] = []
         hospital_ids: List[str] = []
+        demographics: List[List[float]] = []
+
+        has_sex        = "sex"        in df.columns
+        has_birth_year = "birth_year" in df.columns
 
         groups = list(df.groupby(["patient_id", "attendance_id"], sort=False))
         total = len(groups)
@@ -718,6 +737,23 @@ class SequencePipeline:
             labels.append(label)
             hospital_ids.append(str(group["hospital_id"].iloc[0]))
 
+            # ── Demográficos ──────────────────────────────────────────────────
+            sex_val  = str(group["sex"].iloc[0]).strip().upper() if has_sex else ""
+            sex_bin  = 1.0 if sex_val == "M" else 0.0
+
+            if has_birth_year:
+                by = group["birth_year"].iloc[0]
+                if by is not None and not (isinstance(by, float) and pd.isna(by)):
+                    age_norm = (self._FAPESP_REF_YEAR - int(by)) / 100.0
+                    age_norm = max(0.0, min(1.0, age_norm))
+                else:
+                    age_norm = 0.5
+            else:
+                age_norm = 0.5
+
+            demographics.append([age_norm, sex_bin])
+            # ─────────────────────────────────────────────────────────────────
+
             if (idx + 1) % checkpoint == 0:
                 pct = (idx + 1) / total * 100
                 msg = f"[pipeline] tensores: {idx + 1:,}/{total:,} ({pct:.0f}%)"
@@ -728,6 +764,7 @@ class SequencePipeline:
             torch.tensor(sequences, dtype=torch.long),
             torch.tensor(labels, dtype=torch.long),
             hospital_ids,
+            torch.tensor(demographics, dtype=torch.float32),
         )
 
     def _pad(self, tokens: List[int]) -> List[int]:
