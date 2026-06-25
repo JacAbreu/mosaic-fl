@@ -52,7 +52,7 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 4. [Execução de Experimentos](#execução-de-experimentos)
 5. [Testes](#testes)
 6. [Rodando Localmente](#rodando-localmente)
-7. [Rede Federada Real (Desktop + Notebook)](#rede-federada-real-desktop--notebook)
+7. [Rede Federada Real (Desktop + Notebook)](#rede-federada-real-desktop--notebook) — ([hardware detalhado](docs/ambiente_simulacao.md))
 8. [Padrões de Interoperabilidade (FHIR R4 + LOINC)](#padrões-de-interoperabilidade-fhir-r4--loinc)
 9. [Infraestrutura de Produção (SuperLink)](#infraestrutura-de-produção-superlink)
 10. [Docker](#docker)

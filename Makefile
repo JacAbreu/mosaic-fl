@@ -24,9 +24,18 @@ FL_NUM_ROUNDS    ?= 20
 FL_DB_PASSWORD   ?= senhaForte
 FL_DB_PORT       ?= 5432
 
+# Simulação cliente — geração e carregamento do seed HSL
+# FL_DATA_DIR: diretório com os ZIPs FAPESP (usado no desktop para gerar o seed)
+# HSL_SEED:    arquivo .sql.gz gerado no desktop e transferido para o notebook
+FL_DATA_DIR      ?= $(HOME)/studies/usp/mba-bigdata-art-int/tcc/data/Dados/Covid-19
+HSL_SEED         ?= scripts/db/seeds/hsl_seed.sql.gz
+BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
+
 .PHONY: setup test test-integration test-e2e test-all test-cov experiment clean \
         superlink server-app supernode sim test-pipeline \
-        db-up db-down db-wait fl-server fl-client fl-check
+        db-up db-down db-wait fl-server fl-client fl-check \
+        client-generate-seed client-db-up client-migrate client-load-hsl client-setup \
+        server-generate-seed server-db-reset server-load-bpsp server-setup
 
 setup:
 	bash setup.sh
@@ -139,6 +148,113 @@ supernode:
 # Simulação local com run_simulation (sem SuperLink, sem rede, sem TLS).
 sim:
 	$(FLWR) run . local-sim
+
+# ── Simulação cliente — seed HSL ──────────────────────────────────────────────
+#
+# DESKTOP (onde estão os ZIPs FAPESP):
+#   make client-generate-seed                  # gera scripts/db/seeds/hsl_seed.sql.gz
+#   make client-generate-seed FL_DATA_DIR=...  # se os ZIPs estiverem em outro diretório
+#   # Transfira hsl_seed.sql.gz para o notebook (git, scp, pendrive etc.)
+#
+# NOTEBOOK (cliente FL — após receber o arquivo):
+#   make client-setup                          # sobe banco + aplica migrations + carrega HSL
+#
+
+## Gera o seed SQL do HSL a partir dos ZIPs FAPESP (executar no DESKTOP).
+## Produz scripts/db/seeds/hsl_seed.sql.gz (~20-40 MB comprimido).
+##   make client-generate-seed
+##   make client-generate-seed FL_DATA_DIR=/outro/caminho FL_DB_URL=postgresql://...
+client-generate-seed:
+	$(PYTHON) scripts/db/generate_hsl_seed.py \
+		--data-dir "$(FL_DATA_DIR)" \
+		--output   "$(HSL_SEED)" \
+		$(if $(FL_DB_URL),--db-url "$(FL_DB_URL)",)
+
+## Sobe o PostgreSQL do cliente (mesmo compose do servidor — banco isolado).
+client-db-up:
+	FL_DB_PASSWORD="$(FL_DB_PASSWORD)" FL_DB_PORT="$(FL_DB_PORT)" \
+	docker compose -f docker-compose.db.yml up -d
+	@$(MAKE) --no-print-directory db-wait
+
+## Aplica todas as migrations (001→010) no banco do cliente.
+## A migration 010 registra este nó como cliente HSL da simulação.
+client-migrate:
+	FL_DB_URL="$(FL_DB_URL)" bash scripts/db/migrate.sh upgrade head
+
+## Carrega o seed HSL no banco do cliente.
+## Requer que hsl_seed.sql.gz exista em $(HSL_SEED).
+client-load-hsl:
+	@test -f "$(HSL_SEED)" || \
+	  (echo "ERRO: $(HSL_SEED) não encontrado." \
+	       "Gere no desktop com 'make client-generate-seed' e transfira para este equipamento." \
+	   && exit 1)
+	@echo "Carregando $(HSL_SEED) no banco..."
+	zcat "$(HSL_SEED)" | \
+	  docker exec -i mosaicfl-db \
+	    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
+	@echo "Seed HSL carregado com sucesso."
+
+## Sequência completa para o notebook cliente:
+##   1. Sobe o banco Docker
+##   2. Aplica migrations 001→010
+##   3. Carrega dados do HSL
+##   make client-setup
+##   make client-setup FL_DB_PASSWORD=outrasenha HSL_SEED=outro/caminho.sql.gz
+client-setup: client-db-up client-migrate client-load-hsl
+	@echo "Cliente HSL pronto. Execute 'make fl-client FL_SERVER=<IP_DESKTOP>:8080' para iniciar o treinamento federado."
+
+# ── Simulação servidor — seed BPSP ────────────────────────────────────────────
+#
+# Por que BPSP e não Einstein?
+#   O Einstein possui mais exames (3,4M), mas não tem arquivo de desfechos.
+#   O SequencePipeline exige desfechos para gerar os labels de prognóstico.
+#   O BPSP tem o maior volume dentre os hospitais com desfechos (6,3M exames).
+#
+# DESKTOP (servidor FL):
+#   make server-generate-seed   # gera scripts/db/seeds/bpsp_seed.sql.gz
+#   make server-setup           # apaga dados anteriores + aplica migrations + carrega BPSP
+#
+
+## Gera o seed SQL do BPSP a partir dos ZIPs FAPESP (executar no DESKTOP).
+## Produz scripts/db/seeds/bpsp_seed.sql.gz.
+##   make server-generate-seed
+##   make server-generate-seed FL_DB_URL=postgresql://... FL_DATA_DIR=/outro/caminho
+server-generate-seed:
+	$(PYTHON) scripts/db/generate_bpsp_seed.py \
+		--data-dir "$(FL_DATA_DIR)" \
+		--output   "$(BPSP_SEED)" \
+		$(if $(FL_DB_URL),--db-url "$(FL_DB_URL)",)
+
+## Apaga todos os dados clínicos do banco do servidor (preserva schema e migrations).
+## Use antes de recarregar com um novo hospital.
+server-db-reset:
+	@echo "Apagando dados clínicos do banco do servidor..."
+	docker exec -i mosaicfl-db psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1 <<'SQL'
+	TRUNCATE clinical.patients CASCADE;
+	TRUNCATE metrics.risk_history;
+	SQL
+	@echo "Banco resetado. Schema e migrations preservados."
+
+## Carrega o seed BPSP no banco do servidor.
+server-load-bpsp:
+	@test -f "$(BPSP_SEED)" || \
+	  (echo "ERRO: $(BPSP_SEED) não encontrado. Execute 'make server-generate-seed' primeiro." \
+	   && exit 1)
+	@echo "Carregando $(BPSP_SEED) no banco..."
+	zcat "$(BPSP_SEED)" | \
+	  docker exec -i mosaicfl-db \
+	    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
+	@echo "Seed BPSP carregado com sucesso."
+
+## Sequência completa para o servidor desktop:
+##   1. Sobe o banco Docker (se não estiver rodando)
+##   2. Aplica migrations 001→010
+##   3. Apaga dados anteriores
+##   4. Carrega dados do BPSP
+##   make server-setup
+##   make server-setup FL_DB_PASSWORD=outrasenha
+server-setup: db-up client-migrate server-db-reset server-load-bpsp
+	@echo "Servidor BPSP pronto. Execute 'make fl-server' para iniciar o treinamento federado."
 
 clean:
 	rm -rf .venv __pycache__ .pytest_cache .coverage htmlcov

@@ -334,12 +334,15 @@ SELECT
     a.patient_id,
     a.attendance_id,
     a.hospital_id,
+    p.sex,
+    p.birth_year,
     co.outcome_class,
     (co.outcome_at - a.attended_at)     AS duration_days,
     e.analyte,
     e.classification,
     GREATEST(0, e.date - a.attended_at) AS dia_relativo
 FROM  clinical.attendances         a
+JOIN  clinical.patients            p  ON p.patient_id    = a.patient_id
 JOIN  metrics.clinical_outcomes    co ON co.attendance_id = a.attendance_id
 JOIN  metrics.exam_records         e  ON e.attendance_id  = a.attendance_id
 WHERE a.attendance_type      = 'Internado'
