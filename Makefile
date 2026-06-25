@@ -60,8 +60,16 @@ test-e2e:
 test-all:
 	$(PYTEST) tests/ -v --tb=short -m ""
 
+FL_LOG_TRAINING   ?= experiments/logs/run_complete_$(shell date +%Y%m%d_%H%M%S).log
+FL_LOG_SIMULATION ?= experiments/logs/simulation_$(shell date +%Y%m%d_%H%M%S).log
+
+## Treinamento federado com dados reais FAPESP (requer FL_DB_URL)
+training:
+	FL_ENV=production FL_LOG_FILE="$(FL_LOG_TRAINING)" $(PYTHON) experiments/run_training.py
+
+## Simulação demonstrativa com dados sintéticos (não requer banco)
 experiment:
-	$(PYTHON) experiments/run_experiments_simulation.py
+	FL_LOG_FILE="$(FL_LOG_SIMULATION)" $(PYTHON) experiments/run_experiments_simulation.py
 
 # ── Banco de dados (PostgreSQL via Docker) ────────────────────────────────────
 

@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-run_experiments_simulation.py — Orquestrador da simulação MOSAIC-FL com dados sintéticos.
+run_training.py — Orquestrador do treinamento federado com dados reais FAPESP.
 
-Demonstra o pipeline federado completo sem banco de dados real. Ideal para
-apresentações, testes de ambiente e verificação do fluxo completo.
-Para treinamento com dados reais FAPESP, use run_training.py.
+Requer FL_DB_URL configurado. Não há fallback sintético — se o banco não estiver
+acessível, o script aborta. Para demonstração com dados sintéticos, use
+run_experiments_simulation.py.
 
 Uso:
-    python experiments/run_experiments_simulation.py
+    export FL_DB_URL='postgresql://mosaicfl:senhaForte@localhost:5432/mosaicfl'
+    python experiments/run_training.py
     # ou via Makefile:
-    make experiment
+    make training
 """
 import os
 import sys
@@ -26,7 +27,7 @@ os.makedirs("experiments/data", exist_ok=True)
 
 log_file = os.environ.get(
     "FL_LOG_FILE",
-    f"experiments/logs/simulation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
+    f"experiments/logs/run_complete_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
 )
 logging.basicConfig(
     level=logging.INFO,
@@ -38,22 +39,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from mosaicfl.core.config import FL_DB_URL, FL_ENV
 from experiments.federated_training import FederatedTraining
 
 
 def main() -> None:
     logger.info("=" * 60)
-    logger.info("MOSAIC-FL — Simulação com Dados Sintéticos")
+    logger.info("MOSAIC-FL — Treinamento Federado com Dados Reais FAPESP")
     logger.info("Autora: Jacqueline Abreu | ICMC/USP")
     logger.info("=" * 60)
-    logger.info(f"Log: {log_file}")
+    logger.info(f"Ambiente: {FL_ENV} | Log: {log_file}")
 
-    ft = FederatedTraining(log_file=log_file, db_url=None, data_source="synthetic")
+    if not FL_DB_URL:
+        logger.error("FL_DB_URL não configurado — treinamento real requer banco de dados.")
+        logger.error("Configure: export FL_DB_URL='postgresql://user:pass@host:5432/db'")
+        logger.error("Para simulação sem banco, use: python experiments/run_experiments_simulation.py")
+        sys.exit(1)
 
-    logger.info("[1/5] Gerando dados sintéticos...")
-    ft.load_synthetic()
+    ft = FederatedTraining(log_file=log_file, db_url=FL_DB_URL, data_source="fapesp")
 
-    logger.info("[2/5] Aprendizado Federado (simulação)...")
+    logger.info("[1/5] Carregando dados do banco (SequencePipeline)...")
+    ft.load_from_db(FL_DB_URL)
+
+    logger.info("[2/5] Aprendizado Federado...")
     ft.train()
 
     logger.info("[3/5] Pipeline RAG...")
