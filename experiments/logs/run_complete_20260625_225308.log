@@ -1,0 +1,1793 @@
+2026-06-25 22:53:09,107 [INFO] setup plugin alembic.autogenerate.schemas
+2026-06-25 22:53:09,107 [INFO] setup plugin alembic.autogenerate.tables
+2026-06-25 22:53:09,107 [INFO] setup plugin alembic.autogenerate.types
+2026-06-25 22:53:09,107 [INFO] setup plugin alembic.autogenerate.constraints
+2026-06-25 22:53:09,107 [INFO] setup plugin alembic.autogenerate.defaults
+2026-06-25 22:53:09,107 [INFO] setup plugin alembic.autogenerate.comments
+2026-06-25 22:53:10,754 [INFO] ============================================================
+2026-06-25 22:53:10,754 [INFO] MOSAIC-FL — Treinamento Federado com Dados Reais FAPESP
+2026-06-25 22:53:10,754 [INFO] Autora: Jacqueline Abreu | ICMC/USP
+2026-06-25 22:53:10,754 [INFO] ============================================================
+2026-06-25 22:53:10,754 [INFO] Ambiente: production | Log: experiments/logs/run_complete_20260625_225308.log
+2026-06-25 22:53:10,772 [INFO] postgres_metrics_store_ready
+2026-06-25 22:53:10,773 [INFO] [1/5] Carregando dados do banco (SequencePipeline)...
+2026-06-25 22:53:10,773 [INFO] [db] Iniciando carregamento via SequencePipeline...
+2026-06-25 22:53:10,773 [INFO] [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+2026-06-25 22:53:10,779 [INFO] [pipeline] conexão OK
+2026-06-25 22:53:10,779 [INFO] [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+2026-06-25 22:53:31,943 [INFO] [pipeline] query concluída em 21.2s — 4,145,906 linhas
+2026-06-25 22:53:32,125 [INFO] [pipeline/per_hospital] hospitais encontrados: ['BPSP', 'HSL']
+2026-06-25 22:53:32,125 [INFO] [pipeline/per_hospital] construindo vocabulário global...
+2026-06-25 22:53:33,208 [INFO] vocab_built mode=FULL tokens=645 total=648
+2026-06-25 22:53:33,230 [INFO] [pipeline/per_hospital] vocabulário: 648 tokens em 1.1s
+2026-06-25 22:53:34,327 [INFO] [pipeline/per_hospital] BPSP: construindo tensores (28,599 atendimentos)...
+2026-06-25 22:53:36,250 [INFO] [pipeline] tensores: 2,859/28,599 (10%)
+2026-06-25 22:53:36,489 [INFO] [pipeline] tensores: 5,718/28,599 (20%)
+2026-06-25 22:53:36,727 [INFO] [pipeline] tensores: 8,577/28,599 (30%)
+2026-06-25 22:53:36,967 [INFO] [pipeline] tensores: 11,436/28,599 (40%)
+2026-06-25 22:53:37,208 [INFO] [pipeline] tensores: 14,295/28,599 (50%)
+2026-06-25 22:53:37,449 [INFO] [pipeline] tensores: 17,154/28,599 (60%)
+2026-06-25 22:53:37,691 [INFO] [pipeline] tensores: 20,013/28,599 (70%)
+2026-06-25 22:53:37,932 [INFO] [pipeline] tensores: 22,872/28,599 (80%)
+2026-06-25 22:53:38,172 [INFO] [pipeline] tensores: 25,731/28,599 (90%)
+2026-06-25 22:53:38,415 [INFO] [pipeline] tensores: 28,590/28,599 (100%)
+2026-06-25 22:53:38,718 [INFO] [pipeline/per_hospital] BPSP: 28,599 sequências em 4.4s | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | age_mean=0.51 sex_M=13664
+2026-06-25 22:53:39,164 [INFO] [pipeline/per_hospital] HSL: construindo tensores (5,174 atendimentos)...
+2026-06-25 22:53:39,514 [INFO] [pipeline] tensores: 517/5,174 (10%)
+2026-06-25 22:53:39,559 [INFO] [pipeline] tensores: 1,034/5,174 (20%)
+2026-06-25 22:53:39,602 [INFO] [pipeline] tensores: 1,551/5,174 (30%)
+2026-06-25 22:53:39,647 [INFO] [pipeline] tensores: 2,068/5,174 (40%)
+2026-06-25 22:53:39,691 [INFO] [pipeline] tensores: 2,585/5,174 (50%)
+2026-06-25 22:53:39,735 [INFO] [pipeline] tensores: 3,102/5,174 (60%)
+2026-06-25 22:53:39,780 [INFO] [pipeline] tensores: 3,619/5,174 (70%)
+2026-06-25 22:53:39,823 [INFO] [pipeline] tensores: 4,136/5,174 (80%)
+2026-06-25 22:53:39,868 [INFO] [pipeline] tensores: 4,653/5,174 (90%)
+2026-06-25 22:53:39,911 [INFO] [pipeline] tensores: 5,170/5,174 (100%)
+2026-06-25 22:53:39,966 [INFO] [pipeline/per_hospital] HSL: 5,174 sequências em 0.8s | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | age_mean=0.52 sex_M=2859
+2026-06-25 22:53:39,966 [INFO] [pipeline/per_hospital] concluído em 29.2s total
+2026-06-25 22:53:40,174 [INFO] [db] Hospital BPSP → cliente 0: 20019 treino | 2859 val | 2859 cal | age_mean=0.51 sex_M=9591
+2026-06-25 22:53:40,175 [INFO] [db] Hospital HSL → cliente 1: 3621 treino | 517 val | 517 cal | age_mean=0.52 sex_M=1981
+2026-06-25 22:53:40,175 [INFO] [db] Teste global: 3381 amostras | Cal global: 3376 amostras | 2 clientes FL
+2026-06-25 22:53:40,180 [INFO] [2/5] Aprendizado Federado...
+2026-06-25 22:53:40,180 [INFO] Modo manual ativado (USE_RAY=False). Ray NÃO é necessário.
+2026-06-25 22:53:40,180 [INFO] ============================================================
+2026-06-25 22:53:40,180 [INFO] APRENDIZADO FEDERADO — SIMULAÇÃO MANUAL (SEM RAY)
+2026-06-25 22:53:40,180 [INFO] ============================================================
+2026-06-25 22:53:40,180 [INFO] Clientes: 2 | Rodadas: até 120
+2026-06-25 22:53:40,184 [INFO] 
+============================================================
+2026-06-25 22:53:40,184 [INFO] RODADA 1/120
+2026-06-25 22:53:40,184 [INFO] ============================================================
+2026-06-25 22:53:40,184 [INFO]   [Cliente 0] Treinando...
+2026-06-25 22:53:40,258 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-25 22:55:45,617 [INFO]   [Cliente 0] Loss: 1.4692 | Amostras: 20019
+2026-06-25 22:55:45,617 [INFO]   [Cliente 1] Treinando...
+2026-06-25 22:55:45,632 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 1: 28, 0: 46}
+2026-06-25 22:56:06,857 [INFO]   [Cliente 1] Loss: 1.5099 | Amostras: 3621
+2026-06-25 22:56:06,857 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 22:56:08,300 [INFO]   [Servidor] Rodada 1 em 148.12s | Loss: 1.1446 | Acc: 0.5445
+2026-06-25 22:56:08,300 [INFO] 
+============================================================
+2026-06-25 22:56:08,301 [INFO] RODADA 2/120
+2026-06-25 22:56:08,301 [INFO] ============================================================
+2026-06-25 22:56:08,301 [INFO]   [Cliente 0] Treinando...
+2026-06-25 22:56:08,378 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-25 22:58:10,818 [INFO]   [Cliente 0] Loss: 1.3933 | Amostras: 20019
+2026-06-25 22:58:10,819 [INFO]   [Cliente 1] Treinando...
+2026-06-25 22:58:10,833 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-25 22:58:38,381 [INFO]   [Cliente 1] Loss: 1.4865 | Amostras: 3621
+2026-06-25 22:58:38,382 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 22:58:39,836 [INFO]   [Servidor] Rodada 2 em 151.54s | Loss: 1.1339 | Acc: 0.5871
+2026-06-25 22:58:39,836 [INFO]   [Warm-up 2/20] Δ=0.04259 — convergência suspensa até rodada 20
+2026-06-25 22:58:39,836 [INFO] 
+============================================================
+2026-06-25 22:58:39,836 [INFO] RODADA 3/120
+2026-06-25 22:58:39,837 [INFO] ============================================================
+2026-06-25 22:58:39,837 [INFO]   [Cliente 0] Treinando...
+2026-06-25 22:58:39,915 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 2: 85, 4: 1995, 1: 229}
+2026-06-25 23:00:46,630 [INFO]   [Cliente 0] Loss: 1.3732 | Amostras: 20019
+2026-06-25 23:00:46,631 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:00:46,645 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 3: 891, 2: 2236, 1: 28, 0: 46}
+2026-06-25 23:01:06,339 [INFO]   [Cliente 1] Loss: 1.4690 | Amostras: 3621
+2026-06-25 23:01:06,339 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:01:07,677 [INFO]   [Servidor] Rodada 3 em 147.84s | Loss: 1.1679 | Acc: 0.5623
+2026-06-25 23:01:07,677 [INFO]   [Warm-up 3/20] Δ=0.02484 — convergência suspensa até rodada 20
+2026-06-25 23:01:07,677 [INFO] 
+============================================================
+2026-06-25 23:01:07,677 [INFO] RODADA 4/120
+2026-06-25 23:01:07,677 [INFO] ============================================================
+2026-06-25 23:01:07,677 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:01:07,766 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 3: 6599, 0: 11111, 1: 229, 2: 85}
+2026-06-25 23:03:01,969 [INFO]   [Cliente 0] Loss: 1.3587 | Amostras: 20019
+2026-06-25 23:03:01,969 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:03:01,984 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:03:28,632 [INFO]   [Cliente 1] Loss: 1.4503 | Amostras: 3621
+2026-06-25 23:03:28,633 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:03:30,092 [INFO]   [Servidor] Rodada 4 em 142.41s | Loss: 1.1283 | Acc: 0.5371
+2026-06-25 23:03:30,092 [INFO]   [Warm-up 4/20] Δ=0.02514 — convergência suspensa até rodada 20
+2026-06-25 23:03:30,092 [INFO] 
+============================================================
+2026-06-25 23:03:30,092 [INFO] RODADA 5/120
+2026-06-25 23:03:30,092 [INFO] ============================================================
+2026-06-25 23:03:30,092 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:03:30,180 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-25 23:05:46,430 [INFO]   [Cliente 0] Loss: 1.3449 | Amostras: 20019
+2026-06-25 23:05:46,430 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:05:46,455 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:06:08,925 [INFO]   [Cliente 1] Loss: 1.4523 | Amostras: 3621
+2026-06-25 23:06:08,925 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:06:10,387 [INFO]   [Servidor] Rodada 5 em 160.29s | Loss: 1.1052 | Acc: 0.5747
+2026-06-25 23:06:10,387 [INFO]   [Warm-up 5/20] Δ=0.03756 — convergência suspensa até rodada 20
+2026-06-25 23:06:10,387 [INFO] 
+============================================================
+2026-06-25 23:06:10,387 [INFO] RODADA 6/120
+2026-06-25 23:06:10,387 [INFO] ============================================================
+2026-06-25 23:06:10,387 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:06:10,469 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 4: 1995, 0: 11111, 1: 229, 2: 85}
+2026-06-25 23:08:33,459 [INFO]   [Cliente 0] Loss: 1.3332 | Amostras: 20019
+2026-06-25 23:08:33,459 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:08:33,475 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-25 23:08:54,302 [INFO]   [Cliente 1] Loss: 1.4381 | Amostras: 3621
+2026-06-25 23:08:54,331 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:08:55,823 [INFO]   [Servidor] Rodada 6 em 165.44s | Loss: 1.0996 | Acc: 0.5945
+2026-06-25 23:08:55,823 [INFO]   [Warm-up 6/20] Δ=0.01982 — convergência suspensa até rodada 20
+2026-06-25 23:08:55,823 [INFO] 
+============================================================
+2026-06-25 23:08:55,823 [INFO] RODADA 7/120
+2026-06-25 23:08:55,823 [INFO] ============================================================
+2026-06-25 23:08:55,823 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:08:55,901 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-25 23:11:00,195 [INFO]   [Cliente 0] Loss: 1.3249 | Amostras: 20019
+2026-06-25 23:11:00,195 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:11:00,218 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:11:19,763 [INFO]   [Cliente 1] Loss: 1.4413 | Amostras: 3621
+2026-06-25 23:11:19,763 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:11:21,101 [INFO]   [Servidor] Rodada 7 em 145.28s | Loss: 1.1029 | Acc: 0.5623
+2026-06-25 23:11:21,101 [INFO]   [Warm-up 7/20] Δ=0.03224 — convergência suspensa até rodada 20
+2026-06-25 23:11:21,101 [INFO] 
+============================================================
+2026-06-25 23:11:21,101 [INFO] RODADA 8/120
+2026-06-25 23:11:21,101 [INFO] ============================================================
+2026-06-25 23:11:21,101 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:11:21,176 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 2: 85, 1: 229}
+2026-06-25 23:13:34,963 [INFO]   [Cliente 0] Loss: 1.3131 | Amostras: 20019
+2026-06-25 23:13:34,963 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:13:34,979 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-25 23:13:54,515 [INFO]   [Cliente 1] Loss: 1.4347 | Amostras: 3621
+2026-06-25 23:13:54,515 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:13:55,852 [INFO]   [Servidor] Rodada 8 em 154.75s | Loss: 1.1158 | Acc: 0.5995
+2026-06-25 23:13:55,852 [INFO]   [Warm-up 8/20] Δ=0.03727 — convergência suspensa até rodada 20
+2026-06-25 23:13:55,852 [INFO] 
+============================================================
+2026-06-25 23:13:55,852 [INFO] RODADA 9/120
+2026-06-25 23:13:55,852 [INFO] ============================================================
+2026-06-25 23:13:55,852 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:13:55,921 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-25 23:16:01,270 [INFO]   [Cliente 0] Loss: 1.3065 | Amostras: 20019
+2026-06-25 23:16:01,271 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:16:01,296 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:16:23,193 [INFO]   [Cliente 1] Loss: 1.4271 | Amostras: 3621
+2026-06-25 23:16:23,194 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:16:24,653 [INFO]   [Servidor] Rodada 9 em 148.80s | Loss: 1.1243 | Acc: 0.5924
+2026-06-25 23:16:24,653 [INFO]   [Warm-up 9/20] Δ=0.00710 — convergência suspensa até rodada 20
+2026-06-25 23:16:24,653 [INFO] 
+============================================================
+2026-06-25 23:16:24,653 [INFO] RODADA 10/120
+2026-06-25 23:16:24,653 [INFO] ============================================================
+2026-06-25 23:16:24,654 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:16:24,732 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-25 23:18:34,695 [INFO]   [Cliente 0] Loss: 1.2997 | Amostras: 20019
+2026-06-25 23:18:34,695 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:18:34,709 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:18:59,309 [INFO]   [Cliente 1] Loss: 1.4031 | Amostras: 3621
+2026-06-25 23:18:59,309 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:19:00,671 [INFO]   [Servidor] Rodada 10 em 156.02s | Loss: 1.0358 | Acc: 0.6111
+2026-06-25 23:19:00,671 [INFO]   [Warm-up 10/20] Δ=0.01863 — convergência suspensa até rodada 20
+2026-06-25 23:19:00,671 [INFO] 
+============================================================
+2026-06-25 23:19:00,671 [INFO] RODADA 11/120
+2026-06-25 23:19:00,671 [INFO] ============================================================
+2026-06-25 23:19:00,671 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:19:00,746 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 0: 11111, 3: 6599, 2: 85, 1: 229}
+2026-06-25 23:20:59,781 [INFO]   [Cliente 0] Loss: 1.3006 | Amostras: 20019
+2026-06-25 23:20:59,781 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:20:59,796 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 1: 28, 0: 46, 4: 420}
+2026-06-25 23:21:19,320 [INFO]   [Cliente 1] Loss: 1.4134 | Amostras: 3621
+2026-06-25 23:21:19,320 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:21:20,705 [INFO]   [Servidor] Rodada 11 em 140.03s | Loss: 1.1497 | Acc: 0.5827
+2026-06-25 23:21:20,705 [INFO]   [Warm-up 11/20] Δ=0.02839 — convergência suspensa até rodada 20
+2026-06-25 23:21:20,705 [INFO] 
+============================================================
+2026-06-25 23:21:20,705 [INFO] RODADA 12/120
+2026-06-25 23:21:20,705 [INFO] ============================================================
+2026-06-25 23:21:20,705 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:21:20,776 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-25 23:23:21,459 [INFO]   [Cliente 0] Loss: 1.2986 | Amostras: 20019
+2026-06-25 23:23:21,459 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:23:21,474 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:23:41,005 [INFO]   [Cliente 1] Loss: 1.3896 | Amostras: 3621
+2026-06-25 23:23:41,005 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:23:42,392 [INFO]   [Servidor] Rodada 12 em 141.69s | Loss: 1.0449 | Acc: 0.5445
+2026-06-25 23:23:42,392 [INFO]   [Warm-up 12/20] Δ=0.03815 — convergência suspensa até rodada 20
+2026-06-25 23:23:42,392 [INFO] 
+============================================================
+2026-06-25 23:23:42,392 [INFO] RODADA 13/120
+2026-06-25 23:23:42,392 [INFO] ============================================================
+2026-06-25 23:23:42,392 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:23:42,468 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-25 23:25:35,196 [INFO]   [Cliente 0] Loss: 1.2988 | Amostras: 20019
+2026-06-25 23:25:35,196 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:25:35,211 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-25 23:25:54,831 [INFO]   [Cliente 1] Loss: 1.4016 | Amostras: 3621
+2026-06-25 23:25:54,831 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:25:56,213 [INFO]   [Servidor] Rodada 13 em 133.82s | Loss: 1.0246 | Acc: 0.5584
+2026-06-25 23:25:56,213 [INFO]   [Warm-up 13/20] Δ=0.01390 — convergência suspensa até rodada 20
+2026-06-25 23:25:56,213 [INFO] 
+============================================================
+2026-06-25 23:25:56,213 [INFO] RODADA 14/120
+2026-06-25 23:25:56,213 [INFO] ============================================================
+2026-06-25 23:25:56,213 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:25:56,282 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-25 23:28:02,751 [INFO]   [Cliente 0] Loss: 1.2910 | Amostras: 20019
+2026-06-25 23:28:02,751 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:28:02,766 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={0: 46, 2: 2236, 4: 420, 3: 891, 1: 28}
+2026-06-25 23:28:22,199 [INFO]   [Cliente 1] Loss: 1.3936 | Amostras: 3621
+2026-06-25 23:28:22,199 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:28:23,590 [INFO]   [Servidor] Rodada 14 em 147.38s | Loss: 1.1164 | Acc: 0.5652
+2026-06-25 23:28:23,590 [INFO]   [Warm-up 14/20] Δ=0.00680 — convergência suspensa até rodada 20
+2026-06-25 23:28:23,590 [INFO] 
+============================================================
+2026-06-25 23:28:23,590 [INFO] RODADA 15/120
+2026-06-25 23:28:23,590 [INFO] ============================================================
+2026-06-25 23:28:23,590 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:28:23,662 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 2: 85, 1: 229}
+2026-06-25 23:30:13,092 [INFO]   [Cliente 0] Loss: 1.2917 | Amostras: 20019
+2026-06-25 23:30:13,092 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:30:13,107 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:30:32,300 [INFO]   [Cliente 1] Loss: 1.3974 | Amostras: 3621
+2026-06-25 23:30:32,300 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:30:33,692 [INFO]   [Servidor] Rodada 15 em 130.10s | Loss: 1.0677 | Acc: 0.5995
+2026-06-25 23:30:33,692 [INFO]   [Warm-up 15/20] Δ=0.03431 — convergência suspensa até rodada 20
+2026-06-25 23:30:33,692 [INFO] 
+============================================================
+2026-06-25 23:30:33,692 [INFO] RODADA 16/120
+2026-06-25 23:30:33,692 [INFO] ============================================================
+2026-06-25 23:30:33,692 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:30:33,762 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-25 23:32:34,008 [INFO]   [Cliente 0] Loss: 1.3003 | Amostras: 20019
+2026-06-25 23:32:34,008 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:32:34,024 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:32:54,471 [INFO]   [Cliente 1] Loss: 1.3797 | Amostras: 3621
+2026-06-25 23:32:54,471 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:32:55,990 [INFO]   [Servidor] Rodada 16 em 142.30s | Loss: 1.0893 | Acc: 0.5972
+2026-06-25 23:32:55,990 [INFO]   [Warm-up 16/20] Δ=0.00237 — convergência suspensa até rodada 20
+2026-06-25 23:32:55,991 [INFO] 
+============================================================
+2026-06-25 23:32:55,991 [INFO] RODADA 17/120
+2026-06-25 23:32:55,991 [INFO] ============================================================
+2026-06-25 23:32:55,991 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:32:56,069 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 2: 85, 1: 229}
+2026-06-25 23:35:05,556 [INFO]   [Cliente 0] Loss: 1.2867 | Amostras: 20019
+2026-06-25 23:35:05,556 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:35:05,582 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 1: 28, 4: 420, 0: 46}
+2026-06-25 23:35:27,859 [INFO]   [Cliente 1] Loss: 1.3971 | Amostras: 3621
+2026-06-25 23:35:27,859 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:35:29,266 [INFO]   [Servidor] Rodada 17 em 153.28s | Loss: 1.0710 | Acc: 0.5880
+2026-06-25 23:35:29,266 [INFO]   [Warm-up 17/20] Δ=0.00917 — convergência suspensa até rodada 20
+2026-06-25 23:35:29,266 [INFO] 
+============================================================
+2026-06-25 23:35:29,266 [INFO] RODADA 18/120
+2026-06-25 23:35:29,266 [INFO] ============================================================
+2026-06-25 23:35:29,266 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:35:29,337 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-25 23:37:44,407 [INFO]   [Cliente 0] Loss: 1.2808 | Amostras: 20019
+2026-06-25 23:37:44,408 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:37:44,435 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:38:07,406 [INFO]   [Cliente 1] Loss: 1.3752 | Amostras: 3621
+2026-06-25 23:38:07,406 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:38:08,812 [INFO]   [Servidor] Rodada 18 em 159.55s | Loss: 1.0843 | Acc: 0.5853
+2026-06-25 23:38:08,812 [INFO]   [Warm-up 18/20] Δ=0.00266 — convergência suspensa até rodada 20
+2026-06-25 23:38:08,812 [INFO] 
+============================================================
+2026-06-25 23:38:08,812 [INFO] RODADA 19/120
+2026-06-25 23:38:08,812 [INFO] ============================================================
+2026-06-25 23:38:08,812 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:38:08,884 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 2: 85, 1: 229}
+2026-06-25 23:40:04,177 [INFO]   [Cliente 0] Loss: 1.2901 | Amostras: 20019
+2026-06-25 23:40:04,177 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:40:04,193 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:40:22,872 [INFO]   [Cliente 1] Loss: 1.3825 | Amostras: 3621
+2026-06-25 23:40:22,872 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:40:24,308 [INFO]   [Servidor] Rodada 19 em 135.50s | Loss: 1.1149 | Acc: 0.5333
+2026-06-25 23:40:24,308 [INFO]   [Warm-up 19/20] Δ=0.05206 — convergência suspensa até rodada 20
+2026-06-25 23:40:24,308 [INFO] 
+============================================================
+2026-06-25 23:40:24,308 [INFO] RODADA 20/120
+2026-06-25 23:40:24,308 [INFO] ============================================================
+2026-06-25 23:40:24,308 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:40:24,378 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-25 23:42:15,434 [INFO]   [Cliente 0] Loss: 1.2829 | Amostras: 20019
+2026-06-25 23:42:15,434 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:42:15,449 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 1: 28, 0: 46}
+2026-06-25 23:42:34,328 [INFO]   [Cliente 1] Loss: 1.3947 | Amostras: 3621
+2026-06-25 23:42:34,328 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:42:35,821 [INFO]   [Servidor] Rodada 20 em 131.51s | Loss: 1.0930 | Acc: 0.5640
+2026-06-25 23:42:35,821 [INFO]   [Warm-up 20/20] Δ=0.03076 — convergência suspensa até rodada 20
+2026-06-25 23:42:35,821 [INFO] 
+============================================================
+2026-06-25 23:42:35,821 [INFO] RODADA 21/120
+2026-06-25 23:42:35,821 [INFO] ============================================================
+2026-06-25 23:42:35,821 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:42:35,892 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 1: 229, 4: 1995, 2: 85}
+2026-06-25 23:44:45,286 [INFO]   [Cliente 0] Loss: 1.2791 | Amostras: 20019
+2026-06-25 23:44:45,286 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:44:45,312 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:45:09,403 [INFO]   [Cliente 1] Loss: 1.3720 | Amostras: 3621
+2026-06-25 23:45:09,403 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:45:10,942 [INFO]   [Servidor] Rodada 21 em 155.12s | Loss: 1.0576 | Acc: 0.5626
+2026-06-25 23:45:10,942 [INFO]   [Convergência] Δ=0.00148 < 0.005 (1/3)
+2026-06-25 23:45:10,942 [INFO] 
+============================================================
+2026-06-25 23:45:10,942 [INFO] RODADA 22/120
+2026-06-25 23:45:10,942 [INFO] ============================================================
+2026-06-25 23:45:10,942 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:45:11,012 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 2: 85, 1: 229}
+2026-06-25 23:46:58,623 [INFO]   [Cliente 0] Loss: 1.2744 | Amostras: 20019
+2026-06-25 23:46:58,623 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:46:58,646 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-25 23:47:20,292 [INFO]   [Cliente 1] Loss: 1.3642 | Amostras: 3621
+2026-06-25 23:47:20,292 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:47:21,732 [INFO]   [Servidor] Rodada 22 em 130.79s | Loss: 1.0524 | Acc: 0.5791
+2026-06-25 23:47:21,732 [INFO] 
+============================================================
+2026-06-25 23:47:21,732 [INFO] RODADA 23/120
+2026-06-25 23:47:21,732 [INFO] ============================================================
+2026-06-25 23:47:21,732 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:47:21,804 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 2: 85, 1: 229}
+2026-06-25 23:49:30,986 [INFO]   [Cliente 0] Loss: 1.2783 | Amostras: 20019
+2026-06-25 23:49:30,986 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:49:31,001 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-25 23:49:49,379 [INFO]   [Cliente 1] Loss: 1.3893 | Amostras: 3621
+2026-06-25 23:49:49,379 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:49:50,827 [INFO]   [Servidor] Rodada 23 em 149.09s | Loss: 1.0722 | Acc: 0.5602
+2026-06-25 23:49:50,827 [INFO] 
+============================================================
+2026-06-25 23:49:50,827 [INFO] RODADA 24/120
+2026-06-25 23:49:50,827 [INFO] ============================================================
+2026-06-25 23:49:50,827 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:49:50,904 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-25 23:52:03,124 [INFO]   [Cliente 0] Loss: 1.2782 | Amostras: 20019
+2026-06-25 23:52:03,124 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:52:03,148 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 0: 46, 4: 420, 1: 28}
+2026-06-25 23:52:27,305 [INFO]   [Cliente 1] Loss: 1.3877 | Amostras: 3621
+2026-06-25 23:52:27,305 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:52:28,874 [INFO]   [Servidor] Rodada 24 em 158.05s | Loss: 1.1226 | Acc: 0.5942
+2026-06-25 23:52:28,874 [INFO] 
+============================================================
+2026-06-25 23:52:28,874 [INFO] RODADA 25/120
+2026-06-25 23:52:28,874 [INFO] ============================================================
+2026-06-25 23:52:28,874 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:52:28,959 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 3: 6599, 0: 11111, 1: 229, 2: 85}
+2026-06-25 23:54:37,300 [INFO]   [Cliente 0] Loss: 1.2790 | Amostras: 20019
+2026-06-25 23:54:37,300 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:54:37,331 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-25 23:55:02,798 [INFO]   [Cliente 1] Loss: 1.3830 | Amostras: 3621
+2026-06-25 23:55:02,798 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:55:04,418 [INFO]   [Servidor] Rodada 25 em 155.54s | Loss: 1.0538 | Acc: 0.5759
+2026-06-25 23:55:04,418 [INFO] 
+============================================================
+2026-06-25 23:55:04,418 [INFO] RODADA 26/120
+2026-06-25 23:55:04,418 [INFO] ============================================================
+2026-06-25 23:55:04,418 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:55:04,499 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-25 23:57:11,707 [INFO]   [Cliente 0] Loss: 1.2730 | Amostras: 20019
+2026-06-25 23:57:11,707 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:57:11,738 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 4: 420, 2: 2236, 1: 28, 0: 46}
+2026-06-25 23:57:36,918 [INFO]   [Cliente 1] Loss: 1.3604 | Amostras: 3621
+2026-06-25 23:57:36,918 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-25 23:57:38,549 [INFO]   [Servidor] Rodada 26 em 154.13s | Loss: 1.0287 | Acc: 0.5915
+2026-06-25 23:57:38,549 [INFO] 
+============================================================
+2026-06-25 23:57:38,549 [INFO] RODADA 27/120
+2026-06-25 23:57:38,549 [INFO] ============================================================
+2026-06-25 23:57:38,549 [INFO]   [Cliente 0] Treinando...
+2026-06-25 23:57:38,631 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-25 23:59:42,850 [INFO]   [Cliente 0] Loss: 1.2611 | Amostras: 20019
+2026-06-25 23:59:42,850 [INFO]   [Cliente 1] Treinando...
+2026-06-25 23:59:42,865 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 00:00:02,851 [INFO]   [Cliente 1] Loss: 1.3605 | Amostras: 3621
+2026-06-26 00:00:02,851 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:00:04,444 [INFO]   [Servidor] Rodada 27 em 145.89s | Loss: 1.0845 | Acc: 0.5812
+2026-06-26 00:00:04,444 [INFO] 
+============================================================
+2026-06-26 00:00:04,444 [INFO] RODADA 28/120
+2026-06-26 00:00:04,444 [INFO] ============================================================
+2026-06-26 00:00:04,445 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:00:04,523 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 00:02:07,650 [INFO]   [Cliente 0] Loss: 1.2677 | Amostras: 20019
+2026-06-26 00:02:07,650 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:02:07,676 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 1: 28, 0: 46}
+2026-06-26 00:02:26,948 [INFO]   [Cliente 1] Loss: 1.3551 | Amostras: 3621
+2026-06-26 00:02:26,948 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:02:28,454 [INFO]   [Servidor] Rodada 28 em 144.01s | Loss: 1.0953 | Acc: 0.5948
+2026-06-26 00:02:28,454 [INFO] 
+============================================================
+2026-06-26 00:02:28,454 [INFO] RODADA 29/120
+2026-06-26 00:02:28,454 [INFO] ============================================================
+2026-06-26 00:02:28,454 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:02:28,523 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 2: 85, 1: 229}
+2026-06-26 00:04:27,898 [INFO]   [Cliente 0] Loss: 1.2687 | Amostras: 20019
+2026-06-26 00:04:27,898 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:04:27,924 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 00:04:45,401 [INFO]   [Cliente 1] Loss: 1.3668 | Amostras: 3621
+2026-06-26 00:04:45,401 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:04:46,918 [INFO]   [Servidor] Rodada 29 em 138.46s | Loss: 1.0918 | Acc: 0.5818
+2026-06-26 00:04:46,918 [INFO] 
+============================================================
+2026-06-26 00:04:46,918 [INFO] RODADA 30/120
+2026-06-26 00:04:46,918 [INFO] ============================================================
+2026-06-26 00:04:46,918 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:04:46,988 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 2: 85, 1: 229, 4: 1995}
+2026-06-26 00:06:50,932 [INFO]   [Cliente 0] Loss: 1.2584 | Amostras: 20019
+2026-06-26 00:06:50,932 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:06:50,947 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 00:07:08,674 [INFO]   [Cliente 1] Loss: 1.3712 | Amostras: 3621
+2026-06-26 00:07:08,674 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:07:10,117 [INFO]   [Servidor] Rodada 30 em 143.20s | Loss: 1.1029 | Acc: 0.5966
+2026-06-26 00:07:10,117 [INFO] 
+============================================================
+2026-06-26 00:07:10,117 [INFO] RODADA 31/120
+2026-06-26 00:07:10,117 [INFO] ============================================================
+2026-06-26 00:07:10,117 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:07:10,198 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 1: 229, 4: 1995, 2: 85}
+2026-06-26 00:09:04,068 [INFO]   [Cliente 0] Loss: 1.2661 | Amostras: 20019
+2026-06-26 00:09:04,068 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:09:04,083 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 00:09:27,879 [INFO]   [Cliente 1] Loss: 1.3777 | Amostras: 3621
+2026-06-26 00:09:27,879 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:09:29,353 [INFO]   [Servidor] Rodada 31 em 139.24s | Loss: 1.0553 | Acc: 0.6057
+2026-06-26 00:09:29,353 [INFO] 
+============================================================
+2026-06-26 00:09:29,353 [INFO] RODADA 32/120
+2026-06-26 00:09:29,353 [INFO] ============================================================
+2026-06-26 00:09:29,353 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:09:29,425 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:11:29,008 [INFO]   [Cliente 0] Loss: 1.2633 | Amostras: 20019
+2026-06-26 00:11:29,008 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:11:29,023 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 0: 46, 4: 420, 1: 28}
+2026-06-26 00:11:46,060 [INFO]   [Cliente 1] Loss: 1.3699 | Amostras: 3621
+2026-06-26 00:11:46,060 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:11:47,508 [INFO]   [Servidor] Rodada 32 em 138.15s | Loss: 1.0873 | Acc: 0.5705
+2026-06-26 00:11:47,508 [INFO] 
+============================================================
+2026-06-26 00:11:47,508 [INFO] RODADA 33/120
+2026-06-26 00:11:47,508 [INFO] ============================================================
+2026-06-26 00:11:47,508 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:11:47,577 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 1: 229, 4: 1995, 3: 6599, 2: 85}
+2026-06-26 00:13:44,318 [INFO]   [Cliente 0] Loss: 1.2606 | Amostras: 20019
+2026-06-26 00:13:44,318 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:13:44,333 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 00:14:01,174 [INFO]   [Cliente 1] Loss: 1.3612 | Amostras: 3621
+2026-06-26 00:14:01,174 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:14:02,705 [INFO]   [Servidor] Rodada 33 em 135.20s | Loss: 1.0859 | Acc: 0.6043
+2026-06-26 00:14:02,705 [INFO] 
+============================================================
+2026-06-26 00:14:02,705 [INFO] RODADA 34/120
+2026-06-26 00:14:02,705 [INFO] ============================================================
+2026-06-26 00:14:02,705 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:14:02,778 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 00:15:56,343 [INFO]   [Cliente 0] Loss: 1.2550 | Amostras: 20019
+2026-06-26 00:15:56,343 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:15:56,375 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 00:16:15,373 [INFO]   [Cliente 1] Loss: 1.3817 | Amostras: 3621
+2026-06-26 00:16:15,373 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:16:16,817 [INFO]   [Servidor] Rodada 34 em 134.11s | Loss: 1.0682 | Acc: 0.6046
+2026-06-26 00:16:16,817 [INFO]   [Convergência] Δ=0.00030 < 0.005 (1/3)
+2026-06-26 00:16:16,817 [INFO] 
+============================================================
+2026-06-26 00:16:16,817 [INFO] RODADA 35/120
+2026-06-26 00:16:16,817 [INFO] ============================================================
+2026-06-26 00:16:16,817 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:16:16,888 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 1: 229, 4: 1995, 2: 85}
+2026-06-26 00:18:16,659 [INFO]   [Cliente 0] Loss: 1.2522 | Amostras: 20019
+2026-06-26 00:18:16,659 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:18:16,674 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-26 00:18:34,575 [INFO]   [Cliente 1] Loss: 1.3541 | Amostras: 3621
+2026-06-26 00:18:34,576 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:18:36,035 [INFO]   [Servidor] Rodada 35 em 139.22s | Loss: 1.0967 | Acc: 0.5912
+2026-06-26 00:18:36,035 [INFO] 
+============================================================
+2026-06-26 00:18:36,035 [INFO] RODADA 36/120
+2026-06-26 00:18:36,035 [INFO] ============================================================
+2026-06-26 00:18:36,035 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:18:36,108 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:20:26,818 [INFO]   [Cliente 0] Loss: 1.2556 | Amostras: 20019
+2026-06-26 00:20:26,818 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:20:26,846 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 00:20:43,923 [INFO]   [Cliente 1] Loss: 1.3615 | Amostras: 3621
+2026-06-26 00:20:43,923 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:20:45,351 [INFO]   [Servidor] Rodada 36 em 129.32s | Loss: 1.0586 | Acc: 0.5685
+2026-06-26 00:20:45,351 [INFO] 
+============================================================
+2026-06-26 00:20:45,351 [INFO] RODADA 37/120
+2026-06-26 00:20:45,351 [INFO] ============================================================
+2026-06-26 00:20:45,351 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:20:45,421 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 4: 1995, 0: 11111, 2: 85, 1: 229}
+2026-06-26 00:22:41,814 [INFO]   [Cliente 0] Loss: 1.2523 | Amostras: 20019
+2026-06-26 00:22:41,814 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:22:41,829 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-26 00:22:58,675 [INFO]   [Cliente 1] Loss: 1.3624 | Amostras: 3621
+2026-06-26 00:22:58,675 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:23:00,115 [INFO]   [Servidor] Rodada 37 em 134.76s | Loss: 1.1458 | Acc: 0.5847
+2026-06-26 00:23:00,115 [INFO] 
+============================================================
+2026-06-26 00:23:00,115 [INFO] RODADA 38/120
+2026-06-26 00:23:00,115 [INFO] ============================================================
+2026-06-26 00:23:00,115 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:23:00,185 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 00:25:10,271 [INFO]   [Cliente 0] Loss: 1.2580 | Amostras: 20019
+2026-06-26 00:25:10,271 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:25:10,300 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 1: 28, 0: 46}
+2026-06-26 00:25:32,032 [INFO]   [Cliente 1] Loss: 1.3616 | Amostras: 3621
+2026-06-26 00:25:32,033 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:25:33,481 [INFO]   [Servidor] Rodada 38 em 153.37s | Loss: 1.1292 | Acc: 0.5839
+2026-06-26 00:25:33,481 [INFO]   [Convergência] Δ=0.00089 < 0.005 (1/3)
+2026-06-26 00:25:33,481 [INFO] 
+============================================================
+2026-06-26 00:25:33,481 [INFO] RODADA 39/120
+2026-06-26 00:25:33,481 [INFO] ============================================================
+2026-06-26 00:25:33,481 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:25:33,551 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 3: 6599, 0: 11111, 1: 229, 2: 85}
+2026-06-26 00:27:17,651 [INFO]   [Cliente 0] Loss: 1.2508 | Amostras: 20019
+2026-06-26 00:27:17,651 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:27:17,667 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 1: 28, 0: 46}
+2026-06-26 00:27:34,987 [INFO]   [Cliente 1] Loss: 1.3550 | Amostras: 3621
+2026-06-26 00:27:34,987 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:27:36,453 [INFO]   [Servidor] Rodada 39 em 122.97s | Loss: 1.0492 | Acc: 0.5776
+2026-06-26 00:27:36,453 [INFO] 
+============================================================
+2026-06-26 00:27:36,453 [INFO] RODADA 40/120
+2026-06-26 00:27:36,454 [INFO] ============================================================
+2026-06-26 00:27:36,454 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:27:36,530 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:29:22,653 [INFO]   [Cliente 0] Loss: 1.2549 | Amostras: 20019
+2026-06-26 00:29:22,653 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:29:22,667 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 1: 28, 0: 46}
+2026-06-26 00:29:39,522 [INFO]   [Cliente 1] Loss: 1.3478 | Amostras: 3621
+2026-06-26 00:29:39,522 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:29:40,934 [INFO]   [Servidor] Rodada 40 em 124.48s | Loss: 1.1007 | Acc: 0.5664
+2026-06-26 00:29:40,934 [INFO] 
+============================================================
+2026-06-26 00:29:40,934 [INFO] RODADA 41/120
+2026-06-26 00:29:40,934 [INFO] ============================================================
+2026-06-26 00:29:40,934 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:29:41,004 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:31:38,738 [INFO]   [Cliente 0] Loss: 1.2426 | Amostras: 20019
+2026-06-26 00:31:38,738 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:31:38,753 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 1: 28, 0: 46}
+2026-06-26 00:31:55,503 [INFO]   [Cliente 1] Loss: 1.3683 | Amostras: 3621
+2026-06-26 00:31:55,503 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:31:56,917 [INFO]   [Servidor] Rodada 41 em 135.98s | Loss: 1.0611 | Acc: 0.6013
+2026-06-26 00:31:56,917 [INFO] 
+============================================================
+2026-06-26 00:31:56,917 [INFO] RODADA 42/120
+2026-06-26 00:31:56,917 [INFO] ============================================================
+2026-06-26 00:31:56,917 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:31:56,988 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:33:57,695 [INFO]   [Cliente 0] Loss: 1.2529 | Amostras: 20019
+2026-06-26 00:33:57,695 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:33:57,710 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 1: 28, 0: 46}
+2026-06-26 00:34:13,798 [INFO]   [Cliente 1] Loss: 1.3539 | Amostras: 3621
+2026-06-26 00:34:13,798 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:34:15,192 [INFO]   [Servidor] Rodada 42 em 138.27s | Loss: 1.1513 | Acc: 0.5759
+2026-06-26 00:34:15,192 [INFO] 
+============================================================
+2026-06-26 00:34:15,192 [INFO] RODADA 43/120
+2026-06-26 00:34:15,192 [INFO] ============================================================
+2026-06-26 00:34:15,192 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:34:15,263 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:36:06,075 [INFO]   [Cliente 0] Loss: 1.2505 | Amostras: 20019
+2026-06-26 00:36:06,075 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:36:06,090 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 4: 420, 2: 2236, 1: 28, 0: 46}
+2026-06-26 00:36:22,803 [INFO]   [Cliente 1] Loss: 1.3788 | Amostras: 3621
+2026-06-26 00:36:22,803 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:36:24,211 [INFO]   [Servidor] Rodada 43 em 129.02s | Loss: 1.0507 | Acc: 0.6108
+2026-06-26 00:36:24,211 [INFO] 
+============================================================
+2026-06-26 00:36:24,211 [INFO] RODADA 44/120
+2026-06-26 00:36:24,211 [INFO] ============================================================
+2026-06-26 00:36:24,211 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:36:24,281 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 2: 85, 1: 229}
+2026-06-26 00:38:08,325 [INFO]   [Cliente 0] Loss: 1.2475 | Amostras: 20019
+2026-06-26 00:38:08,325 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:38:08,349 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 00:38:26,274 [INFO]   [Cliente 1] Loss: 1.3733 | Amostras: 3621
+2026-06-26 00:38:26,275 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:38:27,727 [INFO]   [Servidor] Rodada 44 em 123.52s | Loss: 1.1180 | Acc: 0.5732
+2026-06-26 00:38:27,727 [INFO] 
+============================================================
+2026-06-26 00:38:27,727 [INFO] RODADA 45/120
+2026-06-26 00:38:27,727 [INFO] ============================================================
+2026-06-26 00:38:27,727 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:38:27,797 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:40:08,636 [INFO]   [Cliente 0] Loss: 1.2467 | Amostras: 20019
+2026-06-26 00:40:08,636 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:40:08,651 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 00:40:24,684 [INFO]   [Cliente 1] Loss: 1.3697 | Amostras: 3621
+2026-06-26 00:40:24,684 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:40:26,099 [INFO]   [Servidor] Rodada 45 em 118.37s | Loss: 1.0802 | Acc: 0.6031
+2026-06-26 00:40:26,099 [INFO] 
+============================================================
+2026-06-26 00:40:26,099 [INFO] RODADA 46/120
+2026-06-26 00:40:26,099 [INFO] ============================================================
+2026-06-26 00:40:26,099 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:40:26,168 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:42:15,925 [INFO]   [Cliente 0] Loss: 1.2450 | Amostras: 20019
+2026-06-26 00:42:15,925 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:42:15,940 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 00:42:32,131 [INFO]   [Cliente 1] Loss: 1.3527 | Amostras: 3621
+2026-06-26 00:42:32,131 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:42:33,565 [INFO]   [Servidor] Rodada 46 em 127.47s | Loss: 1.0809 | Acc: 0.5516
+2026-06-26 00:42:33,565 [INFO] 
+============================================================
+2026-06-26 00:42:33,565 [INFO] RODADA 47/120
+2026-06-26 00:42:33,565 [INFO] ============================================================
+2026-06-26 00:42:33,565 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:42:33,635 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 2: 85, 1: 229}
+2026-06-26 00:44:25,323 [INFO]   [Cliente 0] Loss: 1.2468 | Amostras: 20019
+2026-06-26 00:44:25,323 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:44:25,344 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 4: 420, 2: 2236, 0: 46, 1: 28}
+2026-06-26 00:44:41,375 [INFO]   [Cliente 1] Loss: 1.3605 | Amostras: 3621
+2026-06-26 00:44:41,375 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:44:42,799 [INFO]   [Servidor] Rodada 47 em 129.23s | Loss: 1.1146 | Acc: 0.5785
+2026-06-26 00:44:42,799 [INFO] 
+============================================================
+2026-06-26 00:44:42,799 [INFO] RODADA 48/120
+2026-06-26 00:44:42,799 [INFO] ============================================================
+2026-06-26 00:44:42,799 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:44:42,871 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 00:46:28,483 [INFO]   [Cliente 0] Loss: 1.2552 | Amostras: 20019
+2026-06-26 00:46:28,483 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:46:28,497 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 0: 46, 4: 420, 1: 28}
+2026-06-26 00:46:44,576 [INFO]   [Cliente 1] Loss: 1.3687 | Amostras: 3621
+2026-06-26 00:46:44,576 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:46:45,996 [INFO]   [Servidor] Rodada 48 em 123.20s | Loss: 1.0481 | Acc: 0.5960
+2026-06-26 00:46:45,996 [INFO] 
+============================================================
+2026-06-26 00:46:45,996 [INFO] RODADA 49/120
+2026-06-26 00:46:45,996 [INFO] ============================================================
+2026-06-26 00:46:45,996 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:46:46,067 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:48:48,995 [INFO]   [Cliente 0] Loss: 1.2554 | Amostras: 20019
+2026-06-26 00:48:48,995 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:48:49,018 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 0: 46, 4: 420, 1: 28}
+2026-06-26 00:49:08,854 [INFO]   [Cliente 1] Loss: 1.3634 | Amostras: 3621
+2026-06-26 00:49:08,854 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:49:10,358 [INFO]   [Servidor] Rodada 49 em 144.36s | Loss: 1.0647 | Acc: 0.5475
+2026-06-26 00:49:10,358 [INFO] 
+============================================================
+2026-06-26 00:49:10,358 [INFO] RODADA 50/120
+2026-06-26 00:49:10,358 [INFO] ============================================================
+2026-06-26 00:49:10,359 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:49:10,437 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:51:05,469 [INFO]   [Cliente 0] Loss: 1.2556 | Amostras: 20019
+2026-06-26 00:51:05,469 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:51:05,495 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 1: 28, 0: 46}
+2026-06-26 00:51:21,396 [INFO]   [Cliente 1] Loss: 1.3540 | Amostras: 3621
+2026-06-26 00:51:21,396 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:51:22,847 [INFO]   [Servidor] Rodada 50 em 132.49s | Loss: 1.0612 | Acc: 0.5824
+2026-06-26 00:51:22,847 [INFO] 
+============================================================
+2026-06-26 00:51:22,847 [INFO] RODADA 51/120
+2026-06-26 00:51:22,847 [INFO] ============================================================
+2026-06-26 00:51:22,847 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:51:22,919 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 00:52:59,995 [INFO]   [Cliente 0] Loss: 1.2447 | Amostras: 20019
+2026-06-26 00:52:59,995 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:53:00,018 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 1: 28, 4: 420, 0: 46}
+2026-06-26 00:53:17,363 [INFO]   [Cliente 1] Loss: 1.3533 | Amostras: 3621
+2026-06-26 00:53:17,363 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:53:18,768 [INFO]   [Servidor] Rodada 51 em 115.92s | Loss: 1.1684 | Acc: 0.5853
+2026-06-26 00:53:18,769 [INFO]   [Convergência] Δ=0.00296 < 0.005 (1/3)
+2026-06-26 00:53:18,769 [INFO] 
+============================================================
+2026-06-26 00:53:18,769 [INFO] RODADA 52/120
+2026-06-26 00:53:18,769 [INFO] ============================================================
+2026-06-26 00:53:18,769 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:53:18,840 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 0: 11111, 3: 6599, 2: 85, 1: 229}
+2026-06-26 00:55:11,113 [INFO]   [Cliente 0] Loss: 1.2396 | Amostras: 20019
+2026-06-26 00:55:11,113 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:55:11,136 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 00:55:27,491 [INFO]   [Cliente 1] Loss: 1.3579 | Amostras: 3621
+2026-06-26 00:55:27,491 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:55:28,921 [INFO]   [Servidor] Rodada 52 em 130.15s | Loss: 1.0998 | Acc: 0.5061
+2026-06-26 00:55:28,921 [INFO] 
+============================================================
+2026-06-26 00:55:28,921 [INFO] RODADA 53/120
+2026-06-26 00:55:28,921 [INFO] ============================================================
+2026-06-26 00:55:28,921 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:55:28,992 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 2: 85, 1: 229}
+2026-06-26 00:57:32,339 [INFO]   [Cliente 0] Loss: 1.2408 | Amostras: 20019
+2026-06-26 00:57:32,339 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:57:32,363 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 00:57:55,938 [INFO]   [Cliente 1] Loss: 1.3558 | Amostras: 3621
+2026-06-26 00:57:55,938 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 00:57:57,484 [INFO]   [Servidor] Rodada 53 em 148.56s | Loss: 1.1208 | Acc: 0.5883
+2026-06-26 00:57:57,484 [INFO] 
+============================================================
+2026-06-26 00:57:57,484 [INFO] RODADA 54/120
+2026-06-26 00:57:57,484 [INFO] ============================================================
+2026-06-26 00:57:57,484 [INFO]   [Cliente 0] Treinando...
+2026-06-26 00:57:57,563 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={1: 229, 0: 11111, 3: 6599, 4: 1995, 2: 85}
+2026-06-26 00:59:57,023 [INFO]   [Cliente 0] Loss: 1.2437 | Amostras: 20019
+2026-06-26 00:59:57,023 [INFO]   [Cliente 1] Treinando...
+2026-06-26 00:59:57,038 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 0: 46, 4: 420, 1: 28}
+2026-06-26 01:00:14,343 [INFO]   [Cliente 1] Loss: 1.3418 | Amostras: 3621
+2026-06-26 01:00:14,343 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:00:15,786 [INFO]   [Servidor] Rodada 54 em 138.30s | Loss: 1.1222 | Acc: 0.5614
+2026-06-26 01:00:15,786 [INFO] 
+============================================================
+2026-06-26 01:00:15,786 [INFO] RODADA 55/120
+2026-06-26 01:00:15,786 [INFO] ============================================================
+2026-06-26 01:00:15,786 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:00:15,856 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:02:13,706 [INFO]   [Cliente 0] Loss: 1.2437 | Amostras: 20019
+2026-06-26 01:02:13,706 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:02:13,720 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 01:02:37,205 [INFO]   [Cliente 1] Loss: 1.3438 | Amostras: 3621
+2026-06-26 01:02:37,205 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:02:38,756 [INFO]   [Servidor] Rodada 55 em 142.97s | Loss: 1.1047 | Acc: 0.5788
+2026-06-26 01:02:38,756 [INFO] 
+============================================================
+2026-06-26 01:02:38,756 [INFO] RODADA 56/120
+2026-06-26 01:02:38,756 [INFO] ============================================================
+2026-06-26 01:02:38,756 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:02:38,834 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 2: 85, 1: 229}
+2026-06-26 01:04:28,890 [INFO]   [Cliente 0] Loss: 1.2436 | Amostras: 20019
+2026-06-26 01:04:28,890 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:04:28,915 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 1: 28, 3: 891, 0: 46, 4: 420}
+2026-06-26 01:04:51,230 [INFO]   [Cliente 1] Loss: 1.3438 | Amostras: 3621
+2026-06-26 01:04:51,230 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:04:52,649 [INFO]   [Servidor] Rodada 56 em 133.89s | Loss: 0.9975 | Acc: 0.5646
+2026-06-26 01:04:52,649 [INFO] 
+============================================================
+2026-06-26 01:04:52,649 [INFO] RODADA 57/120
+2026-06-26 01:04:52,649 [INFO] ============================================================
+2026-06-26 01:04:52,649 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:04:52,720 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 3: 6599, 0: 11111, 1: 229, 2: 85}
+2026-06-26 01:06:32,091 [INFO]   [Cliente 0] Loss: 1.2402 | Amostras: 20019
+2026-06-26 01:06:32,091 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:06:32,116 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 0: 46, 4: 420, 1: 28}
+2026-06-26 01:06:54,884 [INFO]   [Cliente 1] Loss: 1.3638 | Amostras: 3621
+2026-06-26 01:06:54,885 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:06:56,428 [INFO]   [Servidor] Rodada 57 em 123.78s | Loss: 1.0841 | Acc: 0.5442
+2026-06-26 01:06:56,428 [INFO] 
+============================================================
+2026-06-26 01:06:56,428 [INFO] RODADA 58/120
+2026-06-26 01:06:56,428 [INFO] ============================================================
+2026-06-26 01:06:56,429 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:06:56,508 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:08:49,735 [INFO]   [Cliente 0] Loss: 1.2460 | Amostras: 20019
+2026-06-26 01:08:49,735 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:08:49,751 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-26 01:09:06,309 [INFO]   [Cliente 1] Loss: 1.3420 | Amostras: 3621
+2026-06-26 01:09:06,309 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:09:07,726 [INFO]   [Servidor] Rodada 58 em 131.30s | Loss: 1.0744 | Acc: 0.5705
+2026-06-26 01:09:07,727 [INFO] 
+============================================================
+2026-06-26 01:09:07,727 [INFO] RODADA 59/120
+2026-06-26 01:09:07,727 [INFO] ============================================================
+2026-06-26 01:09:07,727 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:09:07,805 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 2: 85, 0: 11111, 4: 1995, 1: 229}
+2026-06-26 01:10:49,164 [INFO]   [Cliente 0] Loss: 1.2496 | Amostras: 20019
+2026-06-26 01:10:49,164 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:10:49,179 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={0: 46, 2: 2236, 4: 420, 3: 891, 1: 28}
+2026-06-26 01:11:05,116 [INFO]   [Cliente 1] Loss: 1.3528 | Amostras: 3621
+2026-06-26 01:11:05,116 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:11:06,499 [INFO]   [Servidor] Rodada 59 em 118.77s | Loss: 1.0552 | Acc: 0.5782
+2026-06-26 01:11:06,499 [INFO] 
+============================================================
+2026-06-26 01:11:06,499 [INFO] RODADA 60/120
+2026-06-26 01:11:06,499 [INFO] ============================================================
+2026-06-26 01:11:06,499 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:11:06,569 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 2: 85, 1: 229}
+2026-06-26 01:12:55,752 [INFO]   [Cliente 0] Loss: 1.2325 | Amostras: 20019
+2026-06-26 01:12:55,752 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:12:55,767 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 01:13:11,790 [INFO]   [Cliente 1] Loss: 1.3524 | Amostras: 3621
+2026-06-26 01:13:11,790 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:13:13,161 [INFO]   [Servidor] Rodada 60 em 126.66s | Loss: 1.1426 | Acc: 0.5569
+2026-06-26 01:13:13,161 [INFO] 
+============================================================
+2026-06-26 01:13:13,161 [INFO] RODADA 61/120
+2026-06-26 01:13:13,161 [INFO] ============================================================
+2026-06-26 01:13:13,161 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:13:13,233 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 3: 6599, 0: 11111, 1: 229, 2: 85}
+2026-06-26 01:15:14,734 [INFO]   [Cliente 0] Loss: 1.2372 | Amostras: 20019
+2026-06-26 01:15:14,734 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:15:14,749 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-26 01:15:32,109 [INFO]   [Cliente 1] Loss: 1.3500 | Amostras: 3621
+2026-06-26 01:15:32,109 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:15:33,621 [INFO]   [Servidor] Rodada 61 em 140.46s | Loss: 1.0807 | Acc: 0.5380
+2026-06-26 01:15:33,621 [INFO] 
+============================================================
+2026-06-26 01:15:33,621 [INFO] RODADA 62/120
+2026-06-26 01:15:33,621 [INFO] ============================================================
+2026-06-26 01:15:33,621 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:15:33,708 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:17:23,021 [INFO]   [Cliente 0] Loss: 1.2403 | Amostras: 20019
+2026-06-26 01:17:23,021 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:17:23,045 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 01:17:39,389 [INFO]   [Cliente 1] Loss: 1.3196 | Amostras: 3621
+2026-06-26 01:17:39,389 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:17:40,818 [INFO]   [Servidor] Rodada 62 em 127.20s | Loss: 1.1090 | Acc: 0.5827
+2026-06-26 01:17:40,818 [INFO] 
+============================================================
+2026-06-26 01:17:40,818 [INFO] RODADA 63/120
+2026-06-26 01:17:40,818 [INFO] ============================================================
+2026-06-26 01:17:40,818 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:17:40,886 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 2: 85, 1: 229}
+2026-06-26 01:19:26,949 [INFO]   [Cliente 0] Loss: 1.2452 | Amostras: 20019
+2026-06-26 01:19:26,949 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:19:26,976 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 1: 28, 4: 420, 0: 46}
+2026-06-26 01:19:43,091 [INFO]   [Cliente 1] Loss: 1.3406 | Amostras: 3621
+2026-06-26 01:19:43,091 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:19:44,487 [INFO]   [Servidor] Rodada 63 em 123.67s | Loss: 1.1553 | Acc: 0.5398
+2026-06-26 01:19:44,487 [INFO] 
+============================================================
+2026-06-26 01:19:44,487 [INFO] RODADA 64/120
+2026-06-26 01:19:44,487 [INFO] ============================================================
+2026-06-26 01:19:44,487 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:19:44,559 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:21:30,948 [INFO]   [Cliente 0] Loss: 1.2463 | Amostras: 20019
+2026-06-26 01:21:30,949 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:21:30,963 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 1: 28, 0: 46}
+2026-06-26 01:21:46,749 [INFO]   [Cliente 1] Loss: 1.3398 | Amostras: 3621
+2026-06-26 01:21:46,749 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:21:48,155 [INFO]   [Servidor] Rodada 64 em 123.67s | Loss: 1.0886 | Acc: 0.5948
+2026-06-26 01:21:48,155 [INFO] 
+============================================================
+2026-06-26 01:21:48,155 [INFO] RODADA 65/120
+2026-06-26 01:21:48,155 [INFO] ============================================================
+2026-06-26 01:21:48,155 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:21:48,224 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:23:38,497 [INFO]   [Cliente 0] Loss: 1.2331 | Amostras: 20019
+2026-06-26 01:23:38,497 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:23:38,511 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-26 01:23:54,744 [INFO]   [Cliente 1] Loss: 1.3586 | Amostras: 3621
+2026-06-26 01:23:54,744 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:23:56,145 [INFO]   [Servidor] Rodada 65 em 127.99s | Loss: 1.0714 | Acc: 0.5448
+2026-06-26 01:23:56,145 [INFO] 
+============================================================
+2026-06-26 01:23:56,145 [INFO] RODADA 66/120
+2026-06-26 01:23:56,145 [INFO] ============================================================
+2026-06-26 01:23:56,145 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:23:56,214 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 0: 11111, 3: 6599, 1: 229, 2: 85}
+2026-06-26 01:25:55,713 [INFO]   [Cliente 0] Loss: 1.2491 | Amostras: 20019
+2026-06-26 01:25:55,713 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:25:55,736 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 01:26:11,918 [INFO]   [Cliente 1] Loss: 1.3553 | Amostras: 3621
+2026-06-26 01:26:11,918 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:26:13,334 [INFO]   [Servidor] Rodada 66 em 137.19s | Loss: 1.0123 | Acc: 0.5975
+2026-06-26 01:26:13,334 [INFO] 
+============================================================
+2026-06-26 01:26:13,334 [INFO] RODADA 67/120
+2026-06-26 01:26:13,334 [INFO] ============================================================
+2026-06-26 01:26:13,334 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:26:13,405 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:28:03,655 [INFO]   [Cliente 0] Loss: 1.2418 | Amostras: 20019
+2026-06-26 01:28:03,656 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:28:03,686 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 1: 28, 4: 420, 0: 46}
+2026-06-26 01:28:19,834 [INFO]   [Cliente 1] Loss: 1.3422 | Amostras: 3621
+2026-06-26 01:28:19,834 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:28:21,310 [INFO]   [Servidor] Rodada 67 em 127.98s | Loss: 1.0642 | Acc: 0.5871
+2026-06-26 01:28:21,310 [INFO] 
+============================================================
+2026-06-26 01:28:21,310 [INFO] RODADA 68/120
+2026-06-26 01:28:21,310 [INFO] ============================================================
+2026-06-26 01:28:21,310 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:28:21,391 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:30:15,502 [INFO]   [Cliente 0] Loss: 1.2398 | Amostras: 20019
+2026-06-26 01:30:15,502 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:30:15,527 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 01:30:37,291 [INFO]   [Cliente 1] Loss: 1.3338 | Amostras: 3621
+2026-06-26 01:30:37,291 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:30:38,679 [INFO]   [Servidor] Rodada 68 em 137.37s | Loss: 1.0247 | Acc: 0.5960
+2026-06-26 01:30:38,679 [INFO] 
+============================================================
+2026-06-26 01:30:38,679 [INFO] RODADA 69/120
+2026-06-26 01:30:38,679 [INFO] ============================================================
+2026-06-26 01:30:38,679 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:30:38,749 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 01:32:33,853 [INFO]   [Cliente 0] Loss: 1.2279 | Amostras: 20019
+2026-06-26 01:32:33,853 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:32:33,868 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 01:32:50,928 [INFO]   [Cliente 1] Loss: 1.3385 | Amostras: 3621
+2026-06-26 01:32:50,929 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:32:52,321 [INFO]   [Servidor] Rodada 69 em 133.64s | Loss: 1.0689 | Acc: 0.6267
+2026-06-26 01:32:52,321 [INFO] 
+============================================================
+2026-06-26 01:32:52,321 [INFO] RODADA 70/120
+2026-06-26 01:32:52,321 [INFO] ============================================================
+2026-06-26 01:32:52,321 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:32:52,390 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 01:34:43,462 [INFO]   [Cliente 0] Loss: 1.2318 | Amostras: 20019
+2026-06-26 01:34:43,462 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:34:43,486 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 01:35:00,314 [INFO]   [Cliente 1] Loss: 1.3351 | Amostras: 3621
+2026-06-26 01:35:00,314 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:35:01,720 [INFO]   [Servidor] Rodada 70 em 129.40s | Loss: 1.0550 | Acc: 0.6028
+2026-06-26 01:35:01,720 [INFO] 
+============================================================
+2026-06-26 01:35:01,720 [INFO] RODADA 71/120
+2026-06-26 01:35:01,720 [INFO] ============================================================
+2026-06-26 01:35:01,720 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:35:01,791 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 01:36:50,784 [INFO]   [Cliente 0] Loss: 1.2311 | Amostras: 20019
+2026-06-26 01:36:50,784 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:36:50,800 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-26 01:37:07,128 [INFO]   [Cliente 1] Loss: 1.3510 | Amostras: 3621
+2026-06-26 01:37:07,128 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:37:08,628 [INFO]   [Servidor] Rodada 71 em 126.91s | Loss: 1.1090 | Acc: 0.5732
+2026-06-26 01:37:08,628 [INFO] 
+============================================================
+2026-06-26 01:37:08,628 [INFO] RODADA 72/120
+2026-06-26 01:37:08,628 [INFO] ============================================================
+2026-06-26 01:37:08,628 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:37:08,705 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 01:39:00,101 [INFO]   [Cliente 0] Loss: 1.2458 | Amostras: 20019
+2026-06-26 01:39:00,101 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:39:00,130 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 1: 28, 0: 46}
+2026-06-26 01:39:20,087 [INFO]   [Cliente 1] Loss: 1.3428 | Amostras: 3621
+2026-06-26 01:39:20,087 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:39:21,573 [INFO]   [Servidor] Rodada 72 em 132.94s | Loss: 1.0432 | Acc: 0.5998
+2026-06-26 01:39:21,573 [INFO] 
+============================================================
+2026-06-26 01:39:21,573 [INFO] RODADA 73/120
+2026-06-26 01:39:21,573 [INFO] ============================================================
+2026-06-26 01:39:21,573 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:39:21,659 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 4: 1995, 0: 11111, 2: 85, 1: 229}
+2026-06-26 01:41:10,299 [INFO]   [Cliente 0] Loss: 1.2304 | Amostras: 20019
+2026-06-26 01:41:10,299 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:41:10,314 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 01:41:34,017 [INFO]   [Cliente 1] Loss: 1.3384 | Amostras: 3621
+2026-06-26 01:41:34,017 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:41:35,390 [INFO]   [Servidor] Rodada 73 em 133.82s | Loss: 1.0013 | Acc: 0.6155
+2026-06-26 01:41:35,390 [INFO] 
+============================================================
+2026-06-26 01:41:35,390 [INFO] RODADA 74/120
+2026-06-26 01:41:35,390 [INFO] ============================================================
+2026-06-26 01:41:35,390 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:41:35,466 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 01:43:22,825 [INFO]   [Cliente 0] Loss: 1.2384 | Amostras: 20019
+2026-06-26 01:43:22,825 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:43:22,841 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 01:43:43,671 [INFO]   [Cliente 1] Loss: 1.3652 | Amostras: 3621
+2026-06-26 01:43:43,671 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:43:44,983 [INFO]   [Servidor] Rodada 74 em 129.59s | Loss: 1.0076 | Acc: 0.6022
+2026-06-26 01:43:44,983 [INFO] 
+============================================================
+2026-06-26 01:43:45,012 [INFO] RODADA 75/120
+2026-06-26 01:43:45,012 [INFO] ============================================================
+2026-06-26 01:43:45,013 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:43:45,099 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:45:24,745 [INFO]   [Cliente 0] Loss: 1.2345 | Amostras: 20019
+2026-06-26 01:45:24,745 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:45:24,767 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 01:45:46,917 [INFO]   [Cliente 1] Loss: 1.3497 | Amostras: 3621
+2026-06-26 01:45:46,918 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:45:48,404 [INFO]   [Servidor] Rodada 75 em 123.42s | Loss: 1.0497 | Acc: 0.6167
+2026-06-26 01:45:48,404 [INFO] 
+============================================================
+2026-06-26 01:45:48,404 [INFO] RODADA 76/120
+2026-06-26 01:45:48,404 [INFO] ============================================================
+2026-06-26 01:45:48,404 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:45:48,484 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:47:23,448 [INFO]   [Cliente 0] Loss: 1.2331 | Amostras: 20019
+2026-06-26 01:47:23,448 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:47:23,467 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 01:47:41,112 [INFO]   [Cliente 1] Loss: 1.3370 | Amostras: 3621
+2026-06-26 01:47:41,112 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:47:42,488 [INFO]   [Servidor] Rodada 76 em 114.08s | Loss: 1.0650 | Acc: 0.5871
+2026-06-26 01:47:42,488 [INFO] 
+============================================================
+2026-06-26 01:47:42,488 [INFO] RODADA 77/120
+2026-06-26 01:47:42,488 [INFO] ============================================================
+2026-06-26 01:47:42,488 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:47:42,560 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 4: 1995, 0: 11111, 1: 229, 2: 85}
+2026-06-26 01:49:22,523 [INFO]   [Cliente 0] Loss: 1.2334 | Amostras: 20019
+2026-06-26 01:49:22,523 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:49:22,538 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 01:49:38,236 [INFO]   [Cliente 1] Loss: 1.3695 | Amostras: 3621
+2026-06-26 01:49:38,236 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:49:39,607 [INFO]   [Servidor] Rodada 77 em 117.12s | Loss: 1.1154 | Acc: 0.5558
+2026-06-26 01:49:39,607 [INFO] 
+============================================================
+2026-06-26 01:49:39,607 [INFO] RODADA 78/120
+2026-06-26 01:49:39,607 [INFO] ============================================================
+2026-06-26 01:49:39,607 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:49:39,676 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 2: 85, 1: 229}
+2026-06-26 01:51:30,629 [INFO]   [Cliente 0] Loss: 1.2367 | Amostras: 20019
+2026-06-26 01:51:30,629 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:51:30,652 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 4: 420, 2: 2236, 1: 28, 0: 46}
+2026-06-26 01:51:49,483 [INFO]   [Cliente 1] Loss: 1.3189 | Amostras: 3621
+2026-06-26 01:51:49,483 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:51:51,001 [INFO]   [Servidor] Rodada 78 em 131.39s | Loss: 1.1205 | Acc: 0.5309
+2026-06-26 01:51:51,002 [INFO] 
+============================================================
+2026-06-26 01:51:51,002 [INFO] RODADA 79/120
+2026-06-26 01:51:51,002 [INFO] ============================================================
+2026-06-26 01:51:51,002 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:51:51,084 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:53:45,897 [INFO]   [Cliente 0] Loss: 1.2423 | Amostras: 20019
+2026-06-26 01:53:45,897 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:53:45,924 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 01:54:03,724 [INFO]   [Cliente 1] Loss: 1.3785 | Amostras: 3621
+2026-06-26 01:54:03,724 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:54:05,118 [INFO]   [Servidor] Rodada 79 em 134.12s | Loss: 1.1236 | Acc: 0.5667
+2026-06-26 01:54:05,118 [INFO] 
+============================================================
+2026-06-26 01:54:05,118 [INFO] RODADA 80/120
+2026-06-26 01:54:05,118 [INFO] ============================================================
+2026-06-26 01:54:05,118 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:54:05,189 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:55:48,248 [INFO]   [Cliente 0] Loss: 1.2469 | Amostras: 20019
+2026-06-26 01:55:48,248 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:55:48,307 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 01:56:03,643 [INFO]   [Cliente 1] Loss: 1.3354 | Amostras: 3621
+2026-06-26 01:56:03,643 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:56:04,999 [INFO]   [Servidor] Rodada 80 em 119.88s | Loss: 1.1372 | Acc: 0.5362
+2026-06-26 01:56:04,999 [INFO] 
+============================================================
+2026-06-26 01:56:04,999 [INFO] RODADA 81/120
+2026-06-26 01:56:04,999 [INFO] ============================================================
+2026-06-26 01:56:04,999 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:56:05,069 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 2: 85, 1: 229}
+2026-06-26 01:57:35,844 [INFO]   [Cliente 0] Loss: 1.2220 | Amostras: 20019
+2026-06-26 01:57:35,844 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:57:35,859 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 01:57:56,679 [INFO]   [Cliente 1] Loss: 1.3498 | Amostras: 3621
+2026-06-26 01:57:56,679 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 01:57:58,148 [INFO]   [Servidor] Rodada 81 em 113.15s | Loss: 1.0592 | Acc: 0.5871
+2026-06-26 01:57:58,148 [INFO] 
+============================================================
+2026-06-26 01:57:58,148 [INFO] RODADA 82/120
+2026-06-26 01:57:58,148 [INFO] ============================================================
+2026-06-26 01:57:58,148 [INFO]   [Cliente 0] Treinando...
+2026-06-26 01:57:58,229 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 01:59:45,335 [INFO]   [Cliente 0] Loss: 1.2282 | Amostras: 20019
+2026-06-26 01:59:45,335 [INFO]   [Cliente 1] Treinando...
+2026-06-26 01:59:45,350 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:00:04,792 [INFO]   [Cliente 1] Loss: 1.3302 | Amostras: 3621
+2026-06-26 02:00:04,792 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:00:06,162 [INFO]   [Servidor] Rodada 82 em 128.01s | Loss: 1.0556 | Acc: 0.5756
+2026-06-26 02:00:06,162 [INFO] 
+============================================================
+2026-06-26 02:00:06,162 [INFO] RODADA 83/120
+2026-06-26 02:00:06,162 [INFO] ============================================================
+2026-06-26 02:00:06,162 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:00:06,232 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:01:56,891 [INFO]   [Cliente 0] Loss: 1.2331 | Amostras: 20019
+2026-06-26 02:01:56,891 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:01:56,914 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 02:02:17,035 [INFO]   [Cliente 1] Loss: 1.3297 | Amostras: 3621
+2026-06-26 02:02:17,035 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:02:18,357 [INFO]   [Servidor] Rodada 83 em 132.19s | Loss: 0.9885 | Acc: 0.6182
+2026-06-26 02:02:18,357 [INFO] 
+============================================================
+2026-06-26 02:02:18,357 [INFO] RODADA 84/120
+2026-06-26 02:02:18,357 [INFO] ============================================================
+2026-06-26 02:02:18,357 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:02:18,435 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 02:04:19,574 [INFO]   [Cliente 0] Loss: 1.2256 | Amostras: 20019
+2026-06-26 02:04:19,574 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:04:19,589 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 1: 28, 0: 46}
+2026-06-26 02:04:34,933 [INFO]   [Cliente 1] Loss: 1.3191 | Amostras: 3621
+2026-06-26 02:04:34,933 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:04:36,270 [INFO]   [Servidor] Rodada 84 em 137.91s | Loss: 1.0385 | Acc: 0.5652
+2026-06-26 02:04:36,270 [INFO] 
+============================================================
+2026-06-26 02:04:36,270 [INFO] RODADA 85/120
+2026-06-26 02:04:36,270 [INFO] ============================================================
+2026-06-26 02:04:36,270 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:04:36,342 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 3: 6599, 0: 11111, 1: 229, 2: 85}
+2026-06-26 02:06:34,197 [INFO]   [Cliente 0] Loss: 1.2313 | Amostras: 20019
+2026-06-26 02:06:34,197 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:06:34,220 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 1: 28, 0: 46}
+2026-06-26 02:06:49,528 [INFO]   [Cliente 1] Loss: 1.2987 | Amostras: 3621
+2026-06-26 02:06:49,528 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:06:50,911 [INFO]   [Servidor] Rodada 85 em 134.64s | Loss: 1.0424 | Acc: 0.5699
+2026-06-26 02:06:50,911 [INFO]   [Convergência] Δ=0.00473 < 0.005 (1/3)
+2026-06-26 02:06:50,911 [INFO] 
+============================================================
+2026-06-26 02:06:50,911 [INFO] RODADA 86/120
+2026-06-26 02:06:50,911 [INFO] ============================================================
+2026-06-26 02:06:50,911 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:06:50,981 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 1: 229, 4: 1995, 2: 85}
+2026-06-26 02:08:41,962 [INFO]   [Cliente 0] Loss: 1.2228 | Amostras: 20019
+2026-06-26 02:08:41,962 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:08:41,977 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 1: 28, 0: 46}
+2026-06-26 02:09:00,299 [INFO]   [Cliente 1] Loss: 1.3288 | Amostras: 3621
+2026-06-26 02:09:00,299 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:09:01,737 [INFO]   [Servidor] Rodada 86 em 130.83s | Loss: 1.0137 | Acc: 0.5581
+2026-06-26 02:09:01,737 [INFO] 
+============================================================
+2026-06-26 02:09:01,737 [INFO] RODADA 87/120
+2026-06-26 02:09:01,737 [INFO] ============================================================
+2026-06-26 02:09:01,737 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:09:01,819 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:11:02,184 [INFO]   [Cliente 0] Loss: 1.2261 | Amostras: 20019
+2026-06-26 02:11:02,185 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:11:02,207 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 1: 28, 0: 46}
+2026-06-26 02:11:20,169 [INFO]   [Cliente 1] Loss: 1.3349 | Amostras: 3621
+2026-06-26 02:11:20,169 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:11:21,481 [INFO]   [Servidor] Rodada 87 em 139.74s | Loss: 1.0447 | Acc: 0.5856
+2026-06-26 02:11:21,481 [INFO] 
+============================================================
+2026-06-26 02:11:21,481 [INFO] RODADA 88/120
+2026-06-26 02:11:21,481 [INFO] ============================================================
+2026-06-26 02:11:21,481 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:11:21,553 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 4: 1995, 0: 11111, 1: 229, 2: 85}
+2026-06-26 02:12:56,565 [INFO]   [Cliente 0] Loss: 1.2120 | Amostras: 20019
+2026-06-26 02:12:56,565 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:12:56,589 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:13:15,042 [INFO]   [Cliente 1] Loss: 1.3192 | Amostras: 3621
+2026-06-26 02:13:15,043 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:13:16,485 [INFO]   [Servidor] Rodada 88 em 115.00s | Loss: 1.0472 | Acc: 0.5948
+2026-06-26 02:13:16,485 [INFO] 
+============================================================
+2026-06-26 02:13:16,485 [INFO] RODADA 89/120
+2026-06-26 02:13:16,485 [INFO] ============================================================
+2026-06-26 02:13:16,485 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:13:16,567 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:15:01,503 [INFO]   [Cliente 0] Loss: 1.2303 | Amostras: 20019
+2026-06-26 02:15:01,503 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:15:01,518 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 3: 891, 2: 2236, 1: 28, 0: 46}
+2026-06-26 02:15:17,111 [INFO]   [Cliente 1] Loss: 1.2985 | Amostras: 3621
+2026-06-26 02:15:17,111 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:15:18,479 [INFO]   [Servidor] Rodada 89 em 121.99s | Loss: 0.9638 | Acc: 0.6329
+2026-06-26 02:15:18,479 [INFO] 
+============================================================
+2026-06-26 02:15:18,479 [INFO] RODADA 90/120
+2026-06-26 02:15:18,479 [INFO] ============================================================
+2026-06-26 02:15:18,479 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:15:18,551 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:17:20,815 [INFO]   [Cliente 0] Loss: 1.2310 | Amostras: 20019
+2026-06-26 02:17:20,815 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:17:20,830 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:17:36,323 [INFO]   [Cliente 1] Loss: 1.2881 | Amostras: 3621
+2026-06-26 02:17:36,323 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:17:37,636 [INFO]   [Servidor] Rodada 90 em 139.16s | Loss: 1.0458 | Acc: 0.5868
+2026-06-26 02:17:37,636 [INFO] 
+============================================================
+2026-06-26 02:17:37,636 [INFO] RODADA 91/120
+2026-06-26 02:17:37,636 [INFO] ============================================================
+2026-06-26 02:17:37,636 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:17:37,705 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 2: 85, 1: 229}
+2026-06-26 02:19:06,186 [INFO]   [Cliente 0] Loss: 1.2221 | Amostras: 20019
+2026-06-26 02:19:06,186 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:19:06,200 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:19:21,472 [INFO]   [Cliente 1] Loss: 1.3299 | Amostras: 3621
+2026-06-26 02:19:21,472 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:19:22,801 [INFO]   [Servidor] Rodada 91 em 105.17s | Loss: 1.0201 | Acc: 0.6119
+2026-06-26 02:19:22,801 [INFO] 
+============================================================
+2026-06-26 02:19:22,801 [INFO] RODADA 92/120
+2026-06-26 02:19:22,801 [INFO] ============================================================
+2026-06-26 02:19:22,801 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:19:22,870 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:21:07,125 [INFO]   [Cliente 0] Loss: 1.2323 | Amostras: 20019
+2026-06-26 02:21:07,125 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:21:07,149 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 4: 420, 2: 2236, 1: 28, 0: 46}
+2026-06-26 02:21:29,815 [INFO]   [Cliente 1] Loss: 1.3235 | Amostras: 3621
+2026-06-26 02:21:29,815 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:21:31,304 [INFO]   [Servidor] Rodada 92 em 128.50s | Loss: 1.0289 | Acc: 0.5711
+2026-06-26 02:21:31,305 [INFO] 
+============================================================
+2026-06-26 02:21:31,305 [INFO] RODADA 93/120
+2026-06-26 02:21:31,305 [INFO] ============================================================
+2026-06-26 02:21:31,305 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:21:31,385 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 2: 85, 1: 229}
+2026-06-26 02:23:07,557 [INFO]   [Cliente 0] Loss: 1.2339 | Amostras: 20019
+2026-06-26 02:23:07,557 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:23:07,581 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 1: 28, 0: 46}
+2026-06-26 02:23:24,507 [INFO]   [Cliente 1] Loss: 1.3105 | Amostras: 3621
+2026-06-26 02:23:24,507 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:23:25,808 [INFO]   [Servidor] Rodada 93 em 114.50s | Loss: 1.0011 | Acc: 0.6046
+2026-06-26 02:23:25,808 [INFO] 
+============================================================
+2026-06-26 02:23:25,808 [INFO] RODADA 94/120
+2026-06-26 02:23:25,808 [INFO] ============================================================
+2026-06-26 02:23:25,808 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:23:25,877 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 1: 229, 4: 1995, 2: 85}
+2026-06-26 02:25:02,096 [INFO]   [Cliente 0] Loss: 1.2365 | Amostras: 20019
+2026-06-26 02:25:02,096 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:25:02,110 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:25:20,000 [INFO]   [Cliente 1] Loss: 1.2905 | Amostras: 3621
+2026-06-26 02:25:20,000 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:25:21,312 [INFO]   [Servidor] Rodada 94 em 115.50s | Loss: 1.0217 | Acc: 0.5705
+2026-06-26 02:25:21,312 [INFO] 
+============================================================
+2026-06-26 02:25:21,312 [INFO] RODADA 95/120
+2026-06-26 02:25:21,312 [INFO] ============================================================
+2026-06-26 02:25:21,312 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:25:21,381 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 0: 11111, 3: 6599, 1: 229, 2: 85}
+2026-06-26 02:26:59,583 [INFO]   [Cliente 0] Loss: 1.2297 | Amostras: 20019
+2026-06-26 02:26:59,583 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:26:59,608 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 02:27:15,062 [INFO]   [Cliente 1] Loss: 1.3210 | Amostras: 3621
+2026-06-26 02:27:15,062 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:27:16,378 [INFO]   [Servidor] Rodada 95 em 115.07s | Loss: 0.9817 | Acc: 0.6158
+2026-06-26 02:27:16,378 [INFO] 
+============================================================
+2026-06-26 02:27:16,378 [INFO] RODADA 96/120
+2026-06-26 02:27:16,378 [INFO] ============================================================
+2026-06-26 02:27:16,378 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:27:16,446 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:28:51,164 [INFO]   [Cliente 0] Loss: 1.2508 | Amostras: 20019
+2026-06-26 02:28:51,164 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:28:51,180 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 02:29:06,398 [INFO]   [Cliente 1] Loss: 1.3205 | Amostras: 3621
+2026-06-26 02:29:06,398 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:29:07,753 [INFO]   [Servidor] Rodada 96 em 111.37s | Loss: 1.0877 | Acc: 0.5886
+2026-06-26 02:29:07,753 [INFO] 
+============================================================
+2026-06-26 02:29:07,753 [INFO] RODADA 97/120
+2026-06-26 02:29:07,753 [INFO] ============================================================
+2026-06-26 02:29:07,753 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:29:07,824 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:30:39,038 [INFO]   [Cliente 0] Loss: 1.2339 | Amostras: 20019
+2026-06-26 02:30:39,038 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:30:39,052 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={1: 28, 2: 2236, 3: 891, 4: 420, 0: 46}
+2026-06-26 02:30:54,140 [INFO]   [Cliente 1] Loss: 1.3345 | Amostras: 3621
+2026-06-26 02:30:54,140 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:30:55,434 [INFO]   [Servidor] Rodada 97 em 107.68s | Loss: 1.0891 | Acc: 0.5637
+2026-06-26 02:30:55,434 [INFO] 
+============================================================
+2026-06-26 02:30:55,434 [INFO] RODADA 98/120
+2026-06-26 02:30:55,434 [INFO] ============================================================
+2026-06-26 02:30:55,434 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:30:55,503 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:32:37,917 [INFO]   [Cliente 0] Loss: 1.2379 | Amostras: 20019
+2026-06-26 02:32:37,917 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:32:37,932 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 3: 891, 2: 2236, 0: 46, 1: 28}
+2026-06-26 02:32:54,523 [INFO]   [Cliente 1] Loss: 1.3329 | Amostras: 3621
+2026-06-26 02:32:54,523 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:32:55,958 [INFO]   [Servidor] Rodada 98 em 120.52s | Loss: 1.0784 | Acc: 0.5818
+2026-06-26 02:32:55,958 [INFO] 
+============================================================
+2026-06-26 02:32:55,958 [INFO] RODADA 99/120
+2026-06-26 02:32:55,958 [INFO] ============================================================
+2026-06-26 02:32:55,958 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:32:56,038 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 4: 1995, 0: 11111, 1: 229, 2: 85}
+2026-06-26 02:34:46,727 [INFO]   [Cliente 0] Loss: 1.2015 | Amostras: 20019
+2026-06-26 02:34:46,728 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:34:46,743 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:35:01,924 [INFO]   [Cliente 1] Loss: 1.3338 | Amostras: 3621
+2026-06-26 02:35:01,924 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:35:03,230 [INFO]   [Servidor] Rodada 99 em 127.27s | Loss: 0.9971 | Acc: 0.5945
+2026-06-26 02:35:03,230 [INFO] 
+============================================================
+2026-06-26 02:35:03,230 [INFO] RODADA 100/120
+2026-06-26 02:35:03,230 [INFO] ============================================================
+2026-06-26 02:35:03,230 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:35:03,300 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:36:54,293 [INFO]   [Cliente 0] Loss: 1.2296 | Amostras: 20019
+2026-06-26 02:36:54,293 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:36:54,309 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 02:37:15,069 [INFO]   [Cliente 1] Loss: 1.3119 | Amostras: 3621
+2026-06-26 02:37:15,070 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:37:16,376 [INFO]   [Servidor] Rodada 100 em 133.15s | Loss: 1.0196 | Acc: 0.5676
+2026-06-26 02:37:16,376 [INFO] 
+============================================================
+2026-06-26 02:37:16,376 [INFO] RODADA 101/120
+2026-06-26 02:37:16,376 [INFO] ============================================================
+2026-06-26 02:37:16,376 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:37:16,456 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:38:49,816 [INFO]   [Cliente 0] Loss: 1.2190 | Amostras: 20019
+2026-06-26 02:38:49,816 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:38:49,838 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 02:39:04,966 [INFO]   [Cliente 1] Loss: 1.3175 | Amostras: 3621
+2026-06-26 02:39:04,966 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:39:06,271 [INFO]   [Servidor] Rodada 101 em 109.89s | Loss: 1.0050 | Acc: 0.6022
+2026-06-26 02:39:06,271 [INFO] 
+============================================================
+2026-06-26 02:39:06,271 [INFO] RODADA 102/120
+2026-06-26 02:39:06,271 [INFO] ============================================================
+2026-06-26 02:39:06,271 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:39:06,341 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:40:51,958 [INFO]   [Cliente 0] Loss: 1.2192 | Amostras: 20019
+2026-06-26 02:40:51,958 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:40:51,973 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:41:07,015 [INFO]   [Cliente 1] Loss: 1.3158 | Amostras: 3621
+2026-06-26 02:41:07,015 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:41:08,302 [INFO]   [Servidor] Rodada 102 em 122.03s | Loss: 1.0688 | Acc: 0.5729
+2026-06-26 02:41:08,302 [INFO] 
+============================================================
+2026-06-26 02:41:08,302 [INFO] RODADA 103/120
+2026-06-26 02:41:08,302 [INFO] ============================================================
+2026-06-26 02:41:08,302 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:41:08,372 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:42:48,699 [INFO]   [Cliente 0] Loss: 1.2158 | Amostras: 20019
+2026-06-26 02:42:48,699 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:42:48,714 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:43:11,683 [INFO]   [Cliente 1] Loss: 1.3158 | Amostras: 3621
+2026-06-26 02:43:11,683 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:43:13,084 [INFO]   [Servidor] Rodada 103 em 124.78s | Loss: 1.0208 | Acc: 0.6149
+2026-06-26 02:43:13,084 [INFO] 
+============================================================
+2026-06-26 02:43:13,085 [INFO] RODADA 104/120
+2026-06-26 02:43:13,085 [INFO] ============================================================
+2026-06-26 02:43:13,085 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:43:13,164 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 2: 85, 1: 229}
+2026-06-26 02:44:51,110 [INFO]   [Cliente 0] Loss: 1.2128 | Amostras: 20019
+2026-06-26 02:44:51,111 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:44:51,135 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:45:13,815 [INFO]   [Cliente 1] Loss: 1.3016 | Amostras: 3621
+2026-06-26 02:45:13,815 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:45:15,288 [INFO]   [Servidor] Rodada 104 em 122.20s | Loss: 1.0489 | Acc: 0.5824
+2026-06-26 02:45:15,288 [INFO] 
+============================================================
+2026-06-26 02:45:15,288 [INFO] RODADA 105/120
+2026-06-26 02:45:15,288 [INFO] ============================================================
+2026-06-26 02:45:15,288 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:45:15,366 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 02:46:41,608 [INFO]   [Cliente 0] Loss: 1.2187 | Amostras: 20019
+2026-06-26 02:46:41,608 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:46:41,623 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-26 02:46:56,910 [INFO]   [Cliente 1] Loss: 1.3167 | Amostras: 3621
+2026-06-26 02:46:56,910 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:46:58,209 [INFO]   [Servidor] Rodada 105 em 102.92s | Loss: 1.0090 | Acc: 0.6122
+2026-06-26 02:46:58,209 [INFO] 
+============================================================
+2026-06-26 02:46:58,209 [INFO] RODADA 106/120
+2026-06-26 02:46:58,210 [INFO] ============================================================
+2026-06-26 02:46:58,210 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:46:58,279 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 2: 85, 4: 1995, 1: 229}
+2026-06-26 02:48:58,727 [INFO]   [Cliente 0] Loss: 1.2084 | Amostras: 20019
+2026-06-26 02:48:58,728 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:48:58,753 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={0: 46, 3: 891, 2: 2236, 4: 420, 1: 28}
+2026-06-26 02:49:15,597 [INFO]   [Cliente 1] Loss: 1.3017 | Amostras: 3621
+2026-06-26 02:49:15,597 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:49:16,875 [INFO]   [Servidor] Rodada 106 em 138.67s | Loss: 1.0666 | Acc: 0.5874
+2026-06-26 02:49:16,875 [INFO] 
+============================================================
+2026-06-26 02:49:16,875 [INFO] RODADA 107/120
+2026-06-26 02:49:16,875 [INFO] ============================================================
+2026-06-26 02:49:16,875 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:49:16,946 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:50:57,029 [INFO]   [Cliente 0] Loss: 1.2077 | Amostras: 20019
+2026-06-26 02:50:57,029 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:50:57,045 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:51:12,073 [INFO]   [Cliente 1] Loss: 1.3300 | Amostras: 3621
+2026-06-26 02:51:12,073 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:51:13,366 [INFO]   [Servidor] Rodada 107 em 116.49s | Loss: 1.0169 | Acc: 0.5892
+2026-06-26 02:51:13,366 [INFO]   [Convergência] Δ=0.00177 < 0.005 (1/3)
+2026-06-26 02:51:13,366 [INFO] 
+============================================================
+2026-06-26 02:51:13,366 [INFO] RODADA 108/120
+2026-06-26 02:51:13,366 [INFO] ============================================================
+2026-06-26 02:51:13,366 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:51:13,436 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 0: 11111, 3: 6599, 1: 229, 2: 85}
+2026-06-26 02:52:49,204 [INFO]   [Cliente 0] Loss: 1.2107 | Amostras: 20019
+2026-06-26 02:52:49,204 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:52:49,226 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-26 02:53:07,524 [INFO]   [Cliente 1] Loss: 1.3413 | Amostras: 3621
+2026-06-26 02:53:07,524 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:53:08,834 [INFO]   [Servidor] Rodada 108 em 115.47s | Loss: 1.0033 | Acc: 0.6096
+2026-06-26 02:53:08,834 [INFO] 
+============================================================
+2026-06-26 02:53:08,834 [INFO] RODADA 109/120
+2026-06-26 02:53:08,834 [INFO] ============================================================
+2026-06-26 02:53:08,834 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:53:08,903 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 4: 1995, 0: 11111, 1: 229, 2: 85}
+2026-06-26 02:54:56,540 [INFO]   [Cliente 0] Loss: 1.2068 | Amostras: 20019
+2026-06-26 02:54:56,540 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:54:56,563 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 02:55:19,162 [INFO]   [Cliente 1] Loss: 1.2910 | Amostras: 3621
+2026-06-26 02:55:19,162 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:55:20,592 [INFO]   [Servidor] Rodada 109 em 131.76s | Loss: 1.0197 | Acc: 0.5717
+2026-06-26 02:55:20,592 [INFO] 
+============================================================
+2026-06-26 02:55:20,592 [INFO] RODADA 110/120
+2026-06-26 02:55:20,592 [INFO] ============================================================
+2026-06-26 02:55:20,592 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:55:20,670 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:56:51,398 [INFO]   [Cliente 0] Loss: 1.2147 | Amostras: 20019
+2026-06-26 02:56:51,398 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:56:51,426 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 02:57:07,190 [INFO]   [Cliente 1] Loss: 1.3226 | Amostras: 3621
+2026-06-26 02:57:07,190 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:57:08,489 [INFO]   [Servidor] Rodada 110 em 107.90s | Loss: 0.9795 | Acc: 0.6270
+2026-06-26 02:57:08,489 [INFO] 
+============================================================
+2026-06-26 02:57:08,489 [INFO] RODADA 111/120
+2026-06-26 02:57:08,489 [INFO] ============================================================
+2026-06-26 02:57:08,489 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:57:08,559 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 02:58:52,621 [INFO]   [Cliente 0] Loss: 1.2181 | Amostras: 20019
+2026-06-26 02:58:52,621 [INFO]   [Cliente 1] Treinando...
+2026-06-26 02:58:52,646 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 0: 46, 1: 28}
+2026-06-26 02:59:14,759 [INFO]   [Cliente 1] Loss: 1.3260 | Amostras: 3621
+2026-06-26 02:59:14,759 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 02:59:16,158 [INFO]   [Servidor] Rodada 111 em 127.67s | Loss: 1.0138 | Acc: 0.5978
+2026-06-26 02:59:16,158 [INFO] 
+============================================================
+2026-06-26 02:59:16,158 [INFO] RODADA 112/120
+2026-06-26 02:59:16,158 [INFO] ============================================================
+2026-06-26 02:59:16,158 [INFO]   [Cliente 0] Treinando...
+2026-06-26 02:59:16,235 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={3: 6599, 0: 11111, 4: 1995, 1: 229, 2: 85}
+2026-06-26 03:01:02,136 [INFO]   [Cliente 0] Loss: 1.2102 | Amostras: 20019
+2026-06-26 03:01:02,137 [INFO]   [Cliente 1] Treinando...
+2026-06-26 03:01:02,151 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 0: 46, 1: 28}
+2026-06-26 03:01:22,061 [INFO]   [Cliente 1] Loss: 1.2885 | Amostras: 3621
+2026-06-26 03:01:22,061 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 03:01:23,485 [INFO]   [Servidor] Rodada 112 em 127.33s | Loss: 0.9767 | Acc: 0.6196
+2026-06-26 03:01:23,485 [INFO] 
+============================================================
+2026-06-26 03:01:23,485 [INFO] RODADA 113/120
+2026-06-26 03:01:23,485 [INFO] ============================================================
+2026-06-26 03:01:23,485 [INFO]   [Cliente 0] Treinando...
+2026-06-26 03:01:23,569 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 0: 11111, 1: 229, 3: 6599, 2: 85}
+2026-06-26 03:03:07,534 [INFO]   [Cliente 0] Loss: 1.2039 | Amostras: 20019
+2026-06-26 03:03:07,534 [INFO]   [Cliente 1] Treinando...
+2026-06-26 03:03:07,569 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 4: 420, 2: 2236, 0: 46, 1: 28}
+2026-06-26 03:03:26,811 [INFO]   [Cliente 1] Loss: 1.3028 | Amostras: 3621
+2026-06-26 03:03:26,811 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 03:03:28,246 [INFO]   [Servidor] Rodada 113 em 124.76s | Loss: 1.0165 | Acc: 0.5978
+2026-06-26 03:03:28,246 [INFO] 
+============================================================
+2026-06-26 03:03:28,246 [INFO] RODADA 114/120
+2026-06-26 03:03:28,246 [INFO] ============================================================
+2026-06-26 03:03:28,246 [INFO]   [Cliente 0] Treinando...
+2026-06-26 03:03:28,325 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-26 03:05:23,247 [INFO]   [Cliente 0] Loss: 1.2066 | Amostras: 20019
+2026-06-26 03:05:23,247 [INFO]   [Cliente 1] Treinando...
+2026-06-26 03:05:23,262 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 4: 420, 3: 891, 1: 28, 0: 46}
+2026-06-26 03:05:38,318 [INFO]   [Cliente 1] Loss: 1.2921 | Amostras: 3621
+2026-06-26 03:05:38,318 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 03:05:39,569 [INFO]   [Servidor] Rodada 114 em 131.32s | Loss: 1.0211 | Acc: 0.5909
+2026-06-26 03:05:39,569 [INFO] 
+============================================================
+2026-06-26 03:05:39,569 [INFO] RODADA 115/120
+2026-06-26 03:05:39,569 [INFO] ============================================================
+2026-06-26 03:05:39,569 [INFO]   [Cliente 0] Treinando...
+2026-06-26 03:05:39,639 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 0: 11111, 3: 6599, 1: 229, 2: 85}
+2026-06-26 03:07:26,994 [INFO]   [Cliente 0] Loss: 1.2386 | Amostras: 20019
+2026-06-26 03:07:26,994 [INFO]   [Cliente 1] Treinando...
+2026-06-26 03:07:27,009 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={4: 420, 2: 2236, 3: 891, 0: 46, 1: 28}
+2026-06-26 03:07:41,941 [INFO]   [Cliente 1] Loss: 1.2844 | Amostras: 3621
+2026-06-26 03:07:41,941 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 03:07:43,227 [INFO]   [Servidor] Rodada 115 em 123.66s | Loss: 1.0821 | Acc: 0.5939
+2026-06-26 03:07:43,227 [INFO]   [Convergência] Δ=0.00296 < 0.005 (1/3)
+2026-06-26 03:07:43,227 [INFO] 
+============================================================
+2026-06-26 03:07:43,227 [INFO] RODADA 116/120
+2026-06-26 03:07:43,227 [INFO] ============================================================
+2026-06-26 03:07:43,227 [INFO]   [Cliente 0] Treinando...
+2026-06-26 03:07:43,297 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 03:09:37,266 [INFO]   [Cliente 0] Loss: 1.2081 | Amostras: 20019
+2026-06-26 03:09:37,266 [INFO]   [Cliente 1] Treinando...
+2026-06-26 03:09:37,281 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 0: 46, 4: 420, 1: 28, 3: 891}
+2026-06-26 03:09:52,543 [INFO]   [Cliente 1] Loss: 1.3325 | Amostras: 3621
+2026-06-26 03:09:52,544 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 03:09:53,835 [INFO]   [Servidor] Rodada 116 em 130.61s | Loss: 1.0390 | Acc: 0.5824
+2026-06-26 03:09:53,835 [INFO] 
+============================================================
+2026-06-26 03:09:53,835 [INFO] RODADA 117/120
+2026-06-26 03:09:53,835 [INFO] ============================================================
+2026-06-26 03:09:53,836 [INFO]   [Cliente 0] Treinando...
+2026-06-26 03:09:53,907 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 3: 6599, 0: 11111, 2: 85, 1: 229}
+2026-06-26 03:11:48,648 [INFO]   [Cliente 0] Loss: 1.2071 | Amostras: 20019
+2026-06-26 03:11:48,649 [INFO]   [Cliente 1] Treinando...
+2026-06-26 03:11:48,671 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 0: 46, 4: 420, 1: 28}
+2026-06-26 03:12:11,785 [INFO]   [Cliente 1] Loss: 1.3420 | Amostras: 3621
+2026-06-26 03:12:11,786 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 03:12:13,086 [INFO]   [Servidor] Rodada 117 em 139.25s | Loss: 1.0533 | Acc: 0.6069
+2026-06-26 03:12:13,086 [INFO] 
+============================================================
+2026-06-26 03:12:13,086 [INFO] RODADA 118/120
+2026-06-26 03:12:13,086 [INFO] ============================================================
+2026-06-26 03:12:13,086 [INFO]   [Cliente 0] Treinando...
+2026-06-26 03:12:13,160 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 4: 1995, 1: 229, 2: 85}
+2026-06-26 03:13:38,654 [INFO]   [Cliente 0] Loss: 1.2151 | Amostras: 20019
+2026-06-26 03:13:38,654 [INFO]   [Cliente 1] Treinando...
+2026-06-26 03:13:38,718 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 03:13:53,900 [INFO]   [Cliente 1] Loss: 1.2874 | Amostras: 3621
+2026-06-26 03:13:53,900 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 03:13:55,182 [INFO]   [Servidor] Rodada 118 em 102.10s | Loss: 1.0274 | Acc: 0.5868
+2026-06-26 03:13:55,182 [INFO] 
+============================================================
+2026-06-26 03:13:55,182 [INFO] RODADA 119/120
+2026-06-26 03:13:55,182 [INFO] ============================================================
+2026-06-26 03:13:55,182 [INFO]   [Cliente 0] Treinando...
+2026-06-26 03:13:55,251 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 3: 6599, 1: 229, 4: 1995, 2: 85}
+2026-06-26 03:15:28,416 [INFO]   [Cliente 0] Loss: 1.2256 | Amostras: 20019
+2026-06-26 03:15:28,416 [INFO]   [Cliente 1] Treinando...
+2026-06-26 03:15:28,431 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 0: 46, 4: 420, 1: 28}
+2026-06-26 03:15:43,683 [INFO]   [Cliente 1] Loss: 1.3044 | Amostras: 3621
+2026-06-26 03:15:43,683 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 03:15:44,975 [INFO]   [Servidor] Rodada 119 em 109.79s | Loss: 1.0487 | Acc: 0.6001
+2026-06-26 03:15:44,975 [INFO] 
+============================================================
+2026-06-26 03:15:44,975 [INFO] RODADA 120/120
+2026-06-26 03:15:44,975 [INFO] ============================================================
+2026-06-26 03:15:44,975 [INFO]   [Cliente 0] Treinando...
+2026-06-26 03:15:45,050 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={4: 1995, 0: 11111, 3: 6599, 1: 229, 2: 85}
+2026-06-26 03:17:29,916 [INFO]   [Cliente 0] Loss: 1.2528 | Amostras: 20019
+2026-06-26 03:17:29,917 [INFO]   [Cliente 1] Treinando...
+2026-06-26 03:17:29,933 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={2: 2236, 3: 891, 4: 420, 1: 28, 0: 46}
+2026-06-26 03:17:45,124 [INFO]   [Cliente 1] Loss: 1.3405 | Amostras: 3621
+2026-06-26 03:17:45,124 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-26 03:17:46,379 [INFO]   [Servidor] Rodada 120 em 121.40s | Loss: 1.0270 | Acc: 0.5936
+2026-06-26 03:17:46,379 [INFO] 
+============================================================
+2026-06-26 03:17:46,379 [INFO] SIMULAÇÃO CONCLUÍDA
+2026-06-26 03:17:46,379 [INFO] ============================================================
+2026-06-26 03:17:46,379 [INFO]   Rodadas:      120
+2026-06-26 03:17:46,379 [INFO]   Convergência: Não
+2026-06-26 03:17:46,379 [INFO]   Acurácia:     0.5936
+2026-06-26 03:17:46,379 [INFO]   Loss:         1.0270
+2026-06-26 03:17:46,379 [INFO]   Tráfego:      1310.28 MB
+2026-06-26 03:17:46,379 [INFO]   Tempo total:  15846.19s (264.10 min)
+2026-06-26 03:17:46,379 [INFO] ============================================================
+2026-06-26 03:17:46,379 [INFO] FL_TRAINING_COMPLETE rounds=120 converged=False accuracy=0.5936 loss=1.0270 duration_s=15846.2 traffic_mb=1310.28
+2026-06-26 03:17:46,379 [INFO] Histórico salvo: experiments/data/history_20260626_031746.json
+2026-06-26 03:17:47,655 [INFO] Avaliação pré-calibração — ECE=0.0326 AUC=0.7703 F1=0.3837
+2026-06-26 03:17:49,078 [INFO] temperature_scaling_fit T=1.1910
+2026-06-26 03:17:49,079 [INFO] Calibração concluída — T=1.1910 (cal_set=3376 amostras)
+2026-06-26 03:17:50,487 [INFO] Avaliação pós-calibração  — ECE=0.0621 AUC=0.7700 F1=0.3837
+2026-06-26 03:17:50,488 [INFO] Relatório de avaliação salvo: experiments/logs/evaluation_round_120.json
+2026-06-26 03:17:50,500 [INFO] postgres_checkpoint_store_ready
+2026-06-26 03:17:50,549 [INFO] checkpoint_saved_postgres round=120 accuracy=0.5936 T=1.1910 vocab_size=648 sha256=27059b3ee9b2
+2026-06-26 03:17:50,549 [INFO] Checkpoint salvo no store (PostgreSQLCheckpointStore, vocab_size=648, T=1.1910)
+2026-06-26 03:17:50,552 [INFO] metrics_saved round=120 acc=0.5936 auc=n/a ece=n/a rag_p@k=n/a source=fapesp
+2026-06-26 03:17:50,552 [INFO] [3/5] Pipeline RAG...
+2026-06-26 03:17:50,553 [INFO] ============================================================
+2026-06-26 03:17:50,553 [INFO] PIPELINE RAG
+2026-06-26 03:17:50,553 [INFO] ============================================================
+2026-06-26 03:17:50,567 [INFO] Desfechos presentes no test_loader: [0, 1, 2, 3, 4]
+2026-06-26 03:17:57,983 [INFO] Padrões extraídos: 228 perfis
+2026-06-26 03:17:57,984 [INFO] No device provided, using cpu
+2026-06-26 03:17:58,605 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/modules.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:17:58,679 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/modules.json "HTTP/1.1 200 OK"
+2026-06-26 03:17:59,015 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config_sentence_transformers.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:17:59,016 [WARNING] Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-06-26 03:17:59,100 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/config_sentence_transformers.json "HTTP/1.1 200 OK"
+2026-06-26 03:17:59,101 [INFO] Loading SentenceTransformer model from sentence-transformers/all-MiniLM-L6-v2.
+2026-06-26 03:17:59,370 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config_sentence_transformers.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:17:59,460 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/config_sentence_transformers.json "HTTP/1.1 200 OK"
+2026-06-26 03:17:59,729 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:17:59,803 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/README.md "HTTP/1.1 200 OK"
+2026-06-26 03:18:00,142 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/modules.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:00,246 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/modules.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:00,494 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/sentence_bert_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:00,574 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/sentence_bert_config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:00,961 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/adapter_config.json "HTTP/1.1 404 Not Found"
+2026-06-26 03:18:01,268 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:01,347 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:01,654 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/processor_config.json "HTTP/1.1 404 Not Found"
+2026-06-26 03:18:01,984 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/preprocessor_config.json "HTTP/1.1 404 Not Found"
+2026-06-26 03:18:02,292 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/video_preprocessor_config.json "HTTP/1.1 404 Not Found"
+2026-06-26 03:18:02,601 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/preprocessor_config.json "HTTP/1.1 404 Not Found"
+2026-06-26 03:18:02,908 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:02,984 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:03,314 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:03,406 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:03,667 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:03,754 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:04,032 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:04,117 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:04,391 [INFO] HTTP Request: GET https://huggingface.co/api/models/sentence-transformers/all-MiniLM-L6-v2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-06-26 03:18:04,749 [INFO] HTTP Request: GET https://huggingface.co/api/models/sentence-transformers/all-MiniLM-L6-v2/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-06-26 03:18:05,057 [INFO] HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/1_Pooling/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:05,138 [INFO] HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-MiniLM-L6-v2/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/1_Pooling%2Fconfig.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:05,467 [INFO] HTTP Request: GET https://huggingface.co/api/models/sentence-transformers/all-MiniLM-L6-v2 "HTTP/1.1 200 OK"
+2026-06-26 03:18:05,772 [INFO] HTTP Request: HEAD https://huggingface.co/distilgpt2/resolve/main/config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:06,082 [INFO] HTTP Request: HEAD https://huggingface.co/distilgpt2/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:06,388 [INFO] HTTP Request: GET https://huggingface.co/api/models/distilgpt2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:06,695 [INFO] HTTP Request: GET https://huggingface.co/api/models/distilbert/distilgpt2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-06-26 03:18:07,003 [INFO] HTTP Request: GET https://huggingface.co/api/models/distilgpt2/tree/main?recursive=true&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-06-26 03:18:07,309 [INFO] HTTP Request: GET https://huggingface.co/api/models/distilbert/distilgpt2/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-06-26 03:18:07,720 [INFO] HTTP Request: HEAD https://huggingface.co/distilgpt2/resolve/main/config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:08,025 [INFO] HTTP Request: HEAD https://huggingface.co/distilgpt2/resolve/main/generation_config.json "HTTP/1.1 200 OK"
+2026-06-26 03:18:09,975 [INFO] Avaliando Precision@k da recuperação...
+2026-06-26 03:18:48,979 [INFO] RAG Precision@3 (recuperação): 0.1102
+2026-06-26 03:18:48,979 [INFO]   curado_pronto: 0.0198
+2026-06-26 03:18:48,979 [INFO]   curado_internado: 0.3571
+2026-06-26 03:18:48,979 [INFO]   melhora_pronto: 0.1589
+2026-06-26 03:18:48,979 [INFO]   melhora_internado_breve: 0.1375
+2026-06-26 03:18:48,979 [INFO]   melhora_internado_grave: 0.3905
+2026-06-26 03:18:49,646 [INFO] Justificativa — confiável: True | alucinação: False
+2026-06-26 03:18:49,685 [INFO] metrics_saved round=120 acc=0.0000 auc=n/a ece=n/a rag_p@k=0.1102 source=fapesp
+2026-06-26 03:18:49,685 [INFO] [4/5] Baseline Random Forest...
+2026-06-26 03:18:49,729 [INFO] ============================================================
+2026-06-26 03:18:49,730 [INFO] BASELINE — Random Forest (Bag-of-Tokens)
+2026-06-26 03:18:49,730 [INFO] ============================================================
+2026-06-26 03:18:49,730 [INFO]   vocab_size: 10000 | classes: ['curado_pronto', 'curado_internado', 'melhora_pronto', 'melhora_internado_breve', 'melhora_internado_grave']
+2026-06-26 03:18:49,830 [INFO]   Teste: 3381 amostras | distribuição: {'curado_pronto': 1620, 'curado_internado': 28, 'melhora_pronto': 321, 'melhora_internado_breve': 1074, 'melhora_internado_grave': 338}
+2026-06-26 03:18:49,831 [INFO] 
+[Opção A] RF Centralizado — pool de todos os clientes
+2026-06-26 03:18:50,434 [INFO]   Cliente 0: 20019 amostras
+2026-06-26 03:18:50,544 [INFO]   Cliente 1: 3621 amostras
+2026-06-26 03:18:50,799 [INFO]   Pool total: 23640 amostras
+2026-06-26 03:19:01,595 [INFO]   Resultado → Acc=0.6832  AUC=0.7935  F1=0.5057  ECE=0.0632
+2026-06-26 03:19:01,595 [INFO] 
+[Opção B] RF por Hospital — modelo independente por cliente
+2026-06-26 03:19:09,794 [INFO]   Hospital 0: Acc=0.5915  AUC=0.7384  F1=0.3368  (treino=20019, classes_locais=5)
+2026-06-26 03:19:10,774 [INFO]   Hospital 1: Acc=0.2570  AUC=0.7091  F1=0.1923  (treino=3621, classes_locais=5)
+2026-06-26 03:19:10,774 [INFO] 
+============================================================
+2026-06-26 03:19:10,774 [INFO] TABELA COMPARATIVA — Baseline vs. BEHRT (FL)
+2026-06-26 03:19:10,774 [INFO] ============================================================
+2026-06-26 03:19:10,774 [INFO] Modelo                                     Accuracy  AUC-ROC F1 Macro     ECE
+2026-06-26 03:19:10,774 [INFO] ----------------------------------------------------------------------------
+2026-06-26 03:19:10,774 [INFO] RF Centralizado (BoT)                        0.6832   0.7935   0.5057   0.0632
+2026-06-26 03:19:10,774 [INFO]   RF Hospital 0 (BoT)                        0.5915   0.7384   0.3368   0.0616
+2026-06-26 03:19:10,774 [INFO]   RF Hospital 1 (BoT)                        0.2570   0.7091   0.1923   0.2354
+2026-06-26 03:19:10,774 [INFO] ----------------------------------------------------------------------------
+2026-06-26 03:19:10,774 [INFO] SimplifiedBEHRT (FL) — ver evaluation_round_*.json
+2026-06-26 03:19:10,774 [INFO] ============================================================
+2026-06-26 03:19:10,788 [INFO] Baseline salvo: experiments/data/baseline_rf_20260626_031910.json
+2026-06-26 03:19:10,790 [INFO] metrics_saved round=0 acc=0.6832 auc=0.7935 ece=0.0632 rag_p@k=n/a source=fapesp_baseline_rf
+2026-06-26 03:19:10,790 [INFO] [5/5] Ablation study — late fusion demográfica...
+2026-06-26 03:19:10,790 [INFO] ============================================================
+2026-06-26 03:19:10,790 [INFO] ABLATION — Late Fusion Demográfica
+2026-06-26 03:19:10,790 [INFO]   Fonte dos demográficos: dados reais (FAPESP)
+2026-06-26 03:19:10,790 [INFO]   ablation_A_sem_demo:    SimplifiedBEHRT sem demográficos (demo_dim=0)
+2026-06-26 03:19:10,790 [INFO]   ablation_B_late_fusion: SimplifiedBEHRT + late fusion (demo_dim=2)
+2026-06-26 03:19:10,790 [INFO]   Épocas locais: 10 | seed: 42
+2026-06-26 03:19:10,790 [INFO] ============================================================
+2026-06-26 03:19:10,790 [INFO] 
+[Ablação] Treinando ablation_A_sem_demo (demo_dim=0, épocas=10)...
+2026-06-26 03:30:04,362 [INFO]   ablation_A_sem_demo: Acc=0.5416 | F1=0.3653
+2026-06-26 03:30:04,362 [INFO] 
+[Ablação] Treinando ablation_B_late_fusion (demo_dim=2, épocas=10)...
+2026-06-26 03:40:02,686 [INFO]   ablation_B_late_fusion: Acc=0.601 | F1=0.3808
+2026-06-26 03:40:02,687 [INFO] 
+[Ablação] Δ (B − A): Acc=+0.0594 | F1=+0.0155
+2026-06-26 03:40:02,687 [INFO] 
+======================================================================
+2026-06-26 03:40:02,687 [INFO] RESULTADO ABLAÇÃO — Late Fusion Demográfica
+2026-06-26 03:40:02,687 [INFO] ======================================================================
+2026-06-26 03:40:02,687 [INFO] Config                              Accuracy F1 Macro
+2026-06-26 03:40:02,687 [INFO] -------------------------------------------------------
+2026-06-26 03:40:02,687 [INFO] ablation_A_sem_demo                   0.5416   0.3653
+2026-06-26 03:40:02,687 [INFO] ablation_B_late_fusion                 0.601   0.3808
+2026-06-26 03:40:02,687 [INFO] Δ (B − A)                            +0.0594  +0.0155
+2026-06-26 03:40:02,687 [INFO] ======================================================================
+2026-06-26 03:40:02,687 [INFO] Ablation salvo: experiments/data/ablation_demo_20260626_034002.json
+2026-06-26 03:40:02,687 [INFO] ============================================================
+2026-06-26 03:40:02,687 [INFO] CONCLUÍDO
+2026-06-26 03:40:02,687 [INFO]   Modo dados:     fapesp
+2026-06-26 03:40:02,687 [INFO]   Clientes FL:    2
+2026-06-26 03:40:02,687 [INFO]   RAG confiável:  True
+2026-06-26 03:40:02,687 [INFO]   RF centralizado: Acc=0.6832  AUC=0.7935  F1=0.5057
+2026-06-26 03:40:02,687 [INFO]   Ablation Δ Acc: +0.0594
+2026-06-26 03:40:02,687 [INFO]   Logs em:        experiments/logs/run_complete_20260625_225308.log
+2026-06-26 03:40:02,687 [INFO] ============================================================
+2026-06-26 03:40:02,687 [INFO] TREINAMENTO_COMPLETO status=ok fl_rounds=120 rag_ok=True baseline_rf_ok=True ablation_ok=True log=experiments/logs/run_complete_20260625_225308.log
+2026-06-26 03:40:04,272 [INFO] setup plugin alembic.autogenerate.schemas
+2026-06-26 03:40:04,272 [INFO] setup plugin alembic.autogenerate.tables
+2026-06-26 03:40:04,272 [INFO] setup plugin alembic.autogenerate.types
+2026-06-26 03:40:04,272 [INFO] setup plugin alembic.autogenerate.constraints
+2026-06-26 03:40:04,272 [INFO] setup plugin alembic.autogenerate.defaults
+2026-06-26 03:40:04,272 [INFO] setup plugin alembic.autogenerate.comments
+2026-06-26 03:40:05,941 [INFO] ============================================================
+2026-06-26 03:40:05,942 [INFO] MOSAIC-FL — BEHRT Pooled Baseline (Artefato de Pesquisa)
+2026-06-26 03:40:05,942 [INFO] Autora: Jacqueline Abreu | ICMC/USP
+2026-06-26 03:40:05,942 [INFO] AVISO: Este script não deve ser executado em produção.
+2026-06-26 03:40:05,942 [INFO] ============================================================
+2026-06-26 03:40:05,942 [INFO] [1/3] Carregando dados do banco (SequencePipeline)...
+2026-06-26 03:40:05,942 [INFO] [db] Iniciando carregamento via SequencePipeline...
+2026-06-26 03:40:05,942 [INFO] [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+2026-06-26 03:40:05,956 [INFO] [pipeline] conexão OK
+2026-06-26 03:40:05,956 [INFO] [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+2026-06-26 03:40:27,235 [INFO] [pipeline] query concluída em 21.3s — 4,145,906 linhas
+2026-06-26 03:40:27,405 [INFO] [pipeline/per_hospital] hospitais encontrados: ['BPSP', 'HSL']
+2026-06-26 03:40:27,406 [INFO] [pipeline/per_hospital] construindo vocabulário global...
+2026-06-26 03:40:28,503 [INFO] vocab_built mode=FULL tokens=645 total=648
+2026-06-26 03:40:28,527 [INFO] [pipeline/per_hospital] vocabulário: 648 tokens em 1.1s
+2026-06-26 03:40:29,592 [INFO] [pipeline/per_hospital] BPSP: construindo tensores (28,599 atendimentos)...
+2026-06-26 03:40:31,520 [INFO] [pipeline] tensores: 2,859/28,599 (10%)
+2026-06-26 03:40:31,760 [INFO] [pipeline] tensores: 5,718/28,599 (20%)
+2026-06-26 03:40:31,998 [INFO] [pipeline] tensores: 8,577/28,599 (30%)
+2026-06-26 03:40:32,238 [INFO] [pipeline] tensores: 11,436/28,599 (40%)
+2026-06-26 03:40:32,484 [INFO] [pipeline] tensores: 14,295/28,599 (50%)
+2026-06-26 03:40:32,723 [INFO] [pipeline] tensores: 17,154/28,599 (60%)
+2026-06-26 03:40:32,963 [INFO] [pipeline] tensores: 20,013/28,599 (70%)
+2026-06-26 03:40:33,203 [INFO] [pipeline] tensores: 22,872/28,599 (80%)
+2026-06-26 03:40:33,444 [INFO] [pipeline] tensores: 25,731/28,599 (90%)
+2026-06-26 03:40:33,683 [INFO] [pipeline] tensores: 28,590/28,599 (100%)
+2026-06-26 03:40:33,988 [INFO] [pipeline/per_hospital] BPSP: 28,599 sequências em 4.4s | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | age_mean=0.51 sex_M=13664
+2026-06-26 03:40:34,436 [INFO] [pipeline/per_hospital] HSL: construindo tensores (5,174 atendimentos)...
+2026-06-26 03:40:34,794 [INFO] [pipeline] tensores: 517/5,174 (10%)
+2026-06-26 03:40:34,837 [INFO] [pipeline] tensores: 1,034/5,174 (20%)
+2026-06-26 03:40:34,882 [INFO] [pipeline] tensores: 1,551/5,174 (30%)
+2026-06-26 03:40:34,926 [INFO] [pipeline] tensores: 2,068/5,174 (40%)
+2026-06-26 03:40:34,970 [INFO] [pipeline] tensores: 2,585/5,174 (50%)
+2026-06-26 03:40:35,014 [INFO] [pipeline] tensores: 3,102/5,174 (60%)
+2026-06-26 03:40:35,057 [INFO] [pipeline] tensores: 3,619/5,174 (70%)
+2026-06-26 03:40:35,102 [INFO] [pipeline] tensores: 4,136/5,174 (80%)
+2026-06-26 03:40:35,145 [INFO] [pipeline] tensores: 4,653/5,174 (90%)
+2026-06-26 03:40:35,190 [INFO] [pipeline] tensores: 5,170/5,174 (100%)
+2026-06-26 03:40:35,244 [INFO] [pipeline/per_hospital] HSL: 5,174 sequências em 0.8s | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | age_mean=0.52 sex_M=2859
+2026-06-26 03:40:35,244 [INFO] [pipeline/per_hospital] concluído em 29.3s total
+2026-06-26 03:40:35,453 [INFO] [db] Hospital BPSP → cliente 0: 20019 treino | 2859 val | 2859 cal | age_mean=0.51 sex_M=9591
+2026-06-26 03:40:35,454 [INFO] [db] Hospital HSL → cliente 1: 3621 treino | 517 val | 517 cal | age_mean=0.52 sex_M=1981
+2026-06-26 03:40:35,454 [INFO] [db] Teste global: 3381 amostras | Cal global: 3376 amostras | 2 clientes FL
+2026-06-26 03:40:35,459 [INFO] [2/3] BEHRT pooled baseline (pool BPSP+HSL)...
+2026-06-26 03:40:35,460 [INFO] ============================================================
+2026-06-26 03:40:35,460 [INFO] POOLED BASELINE — SimplifiedBEHRT (artefato de pesquisa)
+2026-06-26 03:40:35,460 [INFO]   Este experimento NUNCA deve rodar em produção.
+2026-06-26 03:40:35,460 [INFO]   Épocas: 240 (= NUM_ROUNDS × LOCAL_EPOCHS) | seed: 42
+2026-06-26 03:40:35,460 [INFO]   Fonte demográficos: dados reais FAPESP
+2026-06-26 03:40:35,461 [INFO] ============================================================
+2026-06-26 03:40:35,639 [INFO]   Pool total: 23640 amostras (BPSP + HSL combinados)
+2026-06-26 03:40:35,639 [INFO] 
+[Pooled] Treinando behrt_pooled_A_sem_demo (demo_dim=0)...
+2026-06-26 04:22:23,248 [INFO]     época 48/240 loss=0.9266
+2026-06-26 04:59:04,272 [INFO]     época 96/240 loss=0.8795
+2026-06-26 05:33:45,153 [INFO]     época 144/240 loss=0.8625
+2026-06-26 06:07:56,598 [INFO]     época 192/240 loss=0.8496
+2026-06-26 06:44:51,460 [INFO]     época 240/240 loss=0.8314
+2026-06-26 06:44:52,584 [INFO]   behrt_pooled_A_sem_demo: Acc=0.677 | F1=0.497
+2026-06-26 06:44:52,584 [INFO] 
+[Pooled] Treinando behrt_pooled_B_late_fusion (demo_dim=2)...
+2026-06-26 07:28:22,528 [INFO]     época 48/240 loss=0.9095
+2026-06-26 08:04:20,532 [INFO]     época 96/240 loss=0.8743
+2026-06-26 08:39:09,038 [INFO]     época 144/240 loss=0.8691
+2026-06-26 09:14:00,697 [INFO]     época 192/240 loss=0.8347
+2026-06-26 09:49:06,204 [INFO]     época 240/240 loss=0.8309
+2026-06-26 09:49:07,328 [INFO]   behrt_pooled_B_late_fusion: Acc=0.6667 | F1=0.49
+2026-06-26 09:49:07,328 [INFO] 
+======================================================================
+2026-06-26 09:49:07,328 [INFO] RESULTADO POOLED BASELINE
+2026-06-26 09:49:07,328 [INFO] ======================================================================
+2026-06-26 09:49:07,328 [INFO] Variante                                 Accuracy F1 Macro
+2026-06-26 09:49:07,328 [INFO] ------------------------------------------------------------
+2026-06-26 09:49:07,328 [INFO] behrt_pooled_A_sem_demo                     0.677    0.497
+2026-06-26 09:49:07,328 [INFO] behrt_pooled_B_late_fusion                 0.6667     0.49
+2026-06-26 09:49:07,328 [INFO] Δ (B − A)                                 -0.0103   -0.007
+2026-06-26 09:49:07,328 [INFO] ======================================================================
+2026-06-26 09:49:07,330 [INFO] [3/3] RF centralizado (referência comparativa de arquitetura)...
+2026-06-26 09:49:07,366 [INFO] ============================================================
+2026-06-26 09:49:07,366 [INFO] BASELINE — Random Forest (Bag-of-Tokens)
+2026-06-26 09:49:07,366 [INFO] ============================================================
+2026-06-26 09:49:07,366 [INFO]   vocab_size: 10000 | classes: ['curado_pronto', 'curado_internado', 'melhora_pronto', 'melhora_internado_breve', 'melhora_internado_grave']
+2026-06-26 09:49:07,466 [INFO]   Teste: 3381 amostras | distribuição: {'curado_pronto': 1620, 'curado_internado': 28, 'melhora_pronto': 321, 'melhora_internado_breve': 1074, 'melhora_internado_grave': 338}
+2026-06-26 09:49:07,466 [INFO] 
+[Opção A] RF Centralizado — pool de todos os clientes
+2026-06-26 09:49:08,084 [INFO]   Cliente 0: 20019 amostras
+2026-06-26 09:49:08,193 [INFO]   Cliente 1: 3621 amostras
+2026-06-26 09:49:08,469 [INFO]   Pool total: 23640 amostras
+2026-06-26 09:49:19,228 [INFO]   Resultado → Acc=0.6803  AUC=0.7928  F1=0.5066  ECE=0.0601
+2026-06-26 09:49:19,228 [INFO] 
+[Opção B] RF por Hospital — modelo independente por cliente
+2026-06-26 09:49:27,606 [INFO]   Hospital 0: Acc=0.5939  AUC=0.7292  F1=0.3370  (treino=20019, classes_locais=5)
+2026-06-26 09:49:28,549 [INFO]   Hospital 1: Acc=0.2532  AUC=0.6951  F1=0.1887  (treino=3621, classes_locais=5)
+2026-06-26 09:49:28,549 [INFO] 
+============================================================
+2026-06-26 09:49:28,549 [INFO] TABELA COMPARATIVA — Baseline vs. BEHRT (FL)
+2026-06-26 09:49:28,549 [INFO] ============================================================
+2026-06-26 09:49:28,549 [INFO] Modelo                                     Accuracy  AUC-ROC F1 Macro     ECE
+2026-06-26 09:49:28,549 [INFO] ----------------------------------------------------------------------------
+2026-06-26 09:49:28,549 [INFO] RF Centralizado (BoT)                        0.6803   0.7928   0.5066   0.0601
+2026-06-26 09:49:28,549 [INFO]   RF Hospital 0 (BoT)                        0.5939   0.7292   0.3370   0.0528
+2026-06-26 09:49:28,549 [INFO]   RF Hospital 1 (BoT)                        0.2532   0.6951   0.1887   0.2200
+2026-06-26 09:49:28,549 [INFO] ----------------------------------------------------------------------------
+2026-06-26 09:49:28,549 [INFO] SimplifiedBEHRT (FL) — ver evaluation_round_*.json
+2026-06-26 09:49:28,549 [INFO] ============================================================
+2026-06-26 09:49:28,562 [INFO] Resultado salvo: experiments/data/behrt_pooled_20260626_094928.json
+2026-06-26 09:49:28,562 [INFO] 
+======================================================================
+2026-06-26 09:49:28,562 [INFO] RESUMO — Custo de Privacidade da Federação (BEHRT × BEHRT)
+2026-06-26 09:49:28,562 [INFO] ======================================================================
+2026-06-26 09:49:28,562 [INFO] Configuração                                  Accuracy F1 Macro
+2026-06-26 09:49:28,562 [INFO] -----------------------------------------------------------------
+2026-06-26 09:49:28,562 [INFO] behrt_pooled_A_sem_demo                          0.677    0.497
+2026-06-26 09:49:28,562 [INFO] behrt_pooled_B_late_fusion                      0.6667     0.49
+2026-06-26 09:49:28,562 [INFO] rf_centralizado (bag-of-tokens)                 0.6803   0.5066
+2026-06-26 09:49:28,562 [INFO] -----------------------------------------------------------------
+2026-06-26 09:49:28,562 [INFO] Compare behrt_pooled_B_late_fusion com FL Config B (ablation study) para o custo real de privacidade (mesma arquitetura, mesmo split).
+2026-06-26 09:49:28,562 [INFO] ======================================================================

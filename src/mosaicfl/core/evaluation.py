@@ -169,9 +169,11 @@ def collect_logits(
     labels_list: List[torch.Tensor] = []
 
     for batch in loader:
-        batch_x, batch_y = batch[0].to(device), batch[1]
+        batch_x = batch[0].to(device)
+        batch_y = batch[1]
+        batch_dia = batch[2].to(device) if len(batch) > 2 else None
         mask = (batch_x == 0)
-        logits = model(batch_x, mask=mask)
+        logits = model(batch_x, mask=mask, dia_relativo=batch_dia)
         probs  = F.softmax(logits / max(temperature, 1e-3), dim=-1).cpu()
         probs_list.append(probs)
         labels_list.append(batch_y)

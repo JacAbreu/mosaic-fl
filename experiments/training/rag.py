@@ -34,7 +34,7 @@ def _eval_rag_precision_at_k(
     per_class_hits: Dict[str, int] = {lbl: 0 for lbl in class_labels}
     per_class_queries: Dict[str, int] = {lbl: 0 for lbl in class_labels}
 
-    for batch_x, batch_y in test_loader:
+    for batch_x, batch_y, *_ in test_loader:
         for seq, label_idx in zip(batch_x.tolist(), batch_y.tolist()):
             tokens = [vocab_inverse[t] for t in seq if t > 2 and t in vocab_inverse]
             if not tokens:
@@ -87,7 +87,7 @@ def run_rag_pipeline(
     logger.info("=" * 60)
 
     all_labels = []
-    for _, batch_y in test_loader:
+    for _, batch_y, *_ in test_loader:
         all_labels.extend(batch_y.tolist())
     desfechos = sorted(set(all_labels))
     logger.info(f"Desfechos presentes no test_loader: {desfechos}")
@@ -109,7 +109,7 @@ def run_rag_pipeline(
 
     sample_label = desfechos[0]
     sample_tokens: List[str] = []
-    for batch_x, batch_y in test_loader:
+    for batch_x, batch_y, *_ in test_loader:
         raw_tokens = [vocab_inverse.get(t, "") for t in batch_x[0].tolist() if t > 2]
         sample_tokens = [t for t in raw_tokens if t][:10]
         sample_label = int(batch_y[0].item())

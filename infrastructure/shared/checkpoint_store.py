@@ -104,6 +104,10 @@ class CheckpointStore(ABC):
     def load_latest(self) -> Optional[Dict]:
         """Retorna {'model_state': OrderedDict, 'vocab': dict} do checkpoint mais recente, ou None."""
 
+    @abstractmethod
+    def load_best(self) -> Optional[Dict]:
+        """Retorna o checkpoint com maior acurácia registrada, ou None."""
+
 
 class SQLiteCheckpointStore(CheckpointStore):
     """Checkpoint store em SQLite — para experimentos locais."""
@@ -151,6 +155,20 @@ class SQLiteCheckpointStore(CheckpointStore):
         if hashlib.sha256(data).hexdigest() != stored_sha256:
             logger.error("checkpoint_integrity_error sha256 mismatch — checkpoint descartado")
             return None
+        return _deserialize(data)
+
+    def load_best(self) -> Optional[Dict]:
+        with sqlite3.connect(self._db_path) as conn:
+            row = conn.execute(
+                "SELECT model_bytes, sha256, round, accuracy FROM fl_checkpoints ORDER BY accuracy DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return None
+        data, stored_sha256, round_num, accuracy = bytes(row[0]), row[1], row[2], row[3]
+        if hashlib.sha256(data).hexdigest() != stored_sha256:
+            logger.error("checkpoint_integrity_error sha256 mismatch — checkpoint descartado")
+            return None
+        logger.info("checkpoint_best_loaded_sqlite round=%d accuracy=%.4f", round_num, accuracy)
         return _deserialize(data)
 
 
@@ -212,6 +230,24 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         if hashlib.sha256(data).hexdigest() != stored_sha256:
             logger.error("checkpoint_integrity_error sha256 mismatch — checkpoint descartado")
             return None
+        return _deserialize(data)
+
+    def load_best(self) -> Optional[Dict]:
+        import sqlalchemy as sa
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                sa.text(
+                    "SELECT model_bytes, sha256, round, accuracy FROM metrics.fl_checkpoints "
+                    "ORDER BY accuracy DESC LIMIT 1"
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        data, stored_sha256, round_num, accuracy = bytes(row[0]), row[1], row[2], row[3]
+        if hashlib.sha256(data).hexdigest() != stored_sha256:
+            logger.error("checkpoint_integrity_error sha256 mismatch — checkpoint descartado")
+            return None
+        logger.info("checkpoint_best_loaded_postgres round=%d accuracy=%.4f", round_num, accuracy)
         return _deserialize(data)
 
 

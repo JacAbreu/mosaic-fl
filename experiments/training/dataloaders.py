@@ -106,11 +106,11 @@ def prepare_dataloaders_from_db(
 
     client_loaders: Dict = {}
     demographics_by_client: Dict = {}
-    test_seqs_list, test_lbls_list, test_demo_list = [], [], []
-    cal_seqs_list, cal_lbls_list = [], []
+    test_seqs_list, test_lbls_list, test_demo_list, test_dia_list = [], [], [], []
+    cal_seqs_list, cal_lbls_list, cal_dia_list = [], [], []
     total_train_samples = 0
 
-    for cid, (hospital_id, (seqs, labels, _, demo)) in enumerate(hospital_data.items()):
+    for cid, (hospital_id, (seqs, labels, _, demo, dia_rels)) in enumerate(hospital_data.items()):
         n = len(seqs)
         if n < 10:
             logger.warning(f"[db] Hospital {hospital_id}: apenas {n} amostras — pulando.")
@@ -124,25 +124,30 @@ def prepare_dataloaders_from_db(
         train_seqs = seqs[perm[:n_train]]
         train_lbls = labels[perm[:n_train]]
         train_demo = demo[perm[:n_train]]
+        train_dia  = dia_rels[perm[:n_train]]
         val_seqs   = seqs[perm[n_train:n_train + n_val]]
         val_lbls   = labels[perm[n_train:n_train + n_val]]
         val_demo   = demo[perm[n_train:n_train + n_val]]
+        val_dia    = dia_rels[perm[n_train:n_train + n_val]]
         cal_seqs   = seqs[perm[n_train + n_val:n_train + n_val + n_cal]]
         cal_lbls   = labels[perm[n_train + n_val:n_train + n_val + n_cal]]
+        cal_dia    = dia_rels[perm[n_train + n_val:n_train + n_val + n_cal]]
         test_seqs_list.append(seqs[perm[n_train + n_val + n_cal:]])
         test_lbls_list.append(labels[perm[n_train + n_val + n_cal:]])
         test_demo_list.append(demo[perm[n_train + n_val + n_cal:]])
+        test_dia_list.append(dia_rels[perm[n_train + n_val + n_cal:]])
 
         client_loaders[cid] = (
-            DataLoader(TensorDataset(train_seqs, train_lbls), batch_size=batch_size, shuffle=True),
-            DataLoader(TensorDataset(val_seqs, val_lbls), batch_size=batch_size),
+            DataLoader(TensorDataset(train_seqs, train_lbls, train_dia), batch_size=batch_size, shuffle=True),
+            DataLoader(TensorDataset(val_seqs, val_lbls, val_dia), batch_size=batch_size),
         )
         demographics_by_client[cid] = (
-            DataLoader(TensorDataset(train_seqs, train_lbls, train_demo), batch_size=batch_size, shuffle=True),
-            DataLoader(TensorDataset(val_seqs, val_lbls, val_demo), batch_size=batch_size),
+            DataLoader(TensorDataset(train_seqs, train_lbls, train_demo, train_dia), batch_size=batch_size, shuffle=True),
+            DataLoader(TensorDataset(val_seqs, val_lbls, val_demo, val_dia), batch_size=batch_size),
         )
         cal_seqs_list.append(cal_seqs)
         cal_lbls_list.append(cal_lbls)
+        cal_dia_list.append(cal_dia)
         total_train_samples += len(train_seqs)
         logger.info(
             f"[db] Hospital {hospital_id} → cliente {cid}: "
@@ -156,12 +161,14 @@ def prepare_dataloaders_from_db(
     test_seqs  = torch.cat(test_seqs_list, dim=0)
     test_lbls  = torch.cat(test_lbls_list, dim=0)
     test_demo  = torch.cat(test_demo_list, dim=0)
+    test_dia   = torch.cat(test_dia_list, dim=0)
     cal_seqs_all = torch.cat(cal_seqs_list, dim=0)
     cal_lbls_all = torch.cat(cal_lbls_list, dim=0)
+    cal_dia_all  = torch.cat(cal_dia_list, dim=0)
 
-    test_loader      = DataLoader(TensorDataset(test_seqs, test_lbls), batch_size=batch_size)
-    test_loader_demo = DataLoader(TensorDataset(test_seqs, test_lbls, test_demo), batch_size=batch_size)
-    cal_loader       = DataLoader(TensorDataset(cal_seqs_all, cal_lbls_all), batch_size=batch_size)
+    test_loader      = DataLoader(TensorDataset(test_seqs, test_lbls, test_dia), batch_size=batch_size)
+    test_loader_demo = DataLoader(TensorDataset(test_seqs, test_lbls, test_demo, test_dia), batch_size=batch_size)
+    cal_loader       = DataLoader(TensorDataset(cal_seqs_all, cal_lbls_all, cal_dia_all), batch_size=batch_size)
 
     logger.info(
         f"[db] Teste global: {len(test_seqs)} amostras | Cal global: {len(cal_seqs_all)} amostras "

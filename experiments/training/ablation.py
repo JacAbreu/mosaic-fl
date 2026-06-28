@@ -13,7 +13,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from mosaicfl.core.config import (
-    BATCH_SIZE, DEVICE, LOCAL_EPOCHS, LR, MODEL_CFG, NUM_ROUNDS, RANDOM_SEED,
+    BATCH_SIZE, DEVICE, LOCAL_EPOCHS, LR, MODEL_CFG, NUM_ROUNDS, POOLED_EPOCHS, RANDOM_SEED,
 )
 from mosaicfl.core.model import SimplifiedBEHRT
 
@@ -68,39 +68,42 @@ def run_ablation_demographics(
         criterion = nn.CrossEntropyLoss()
         model.train()
 
-        synth_demo_cache: Dict[int, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = {}
+        synth_demo_cache: Dict[int, Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]] = {}
         if with_demo and not use_real_demo:
             for cid, (train_loader, _) in loaders.items():
-                all_x, all_y = [], []
-                for bx, by in train_loader:
-                    all_x.append(bx); all_y.append(by)
-                all_x = torch.cat(all_x); all_y = torch.cat(all_y)
-                synth_demo_cache[cid] = (all_x, all_y, _make_correlated_demo(all_y, seed=random_seed + cid))
+                all_x, all_y, all_dia = [], [], []
+                for bx, by, bdia in train_loader:
+                    all_x.append(bx); all_y.append(by); all_dia.append(bdia)
+                all_x = torch.cat(all_x); all_y = torch.cat(all_y); all_dia = torch.cat(all_dia)
+                synth_demo_cache[cid] = (all_x, all_y, _make_correlated_demo(all_y, seed=random_seed + cid), all_dia)
 
         for _ in range(n_epochs):
             if with_demo and use_real_demo and demo_loaders:
                 for cid, (demo_train_loader, _) in demo_loaders.items():
-                    for batch_x, batch_y, batch_demo in demo_train_loader:
-                        batch_x, batch_y, batch_demo = (
-                            batch_x.to(DEVICE), batch_y.to(DEVICE), batch_demo.to(DEVICE)
-                        )
+                    for batch_x, batch_y, batch_demo, batch_dia in demo_train_loader:
+                        batch_x = batch_x.to(DEVICE)
+                        batch_y = batch_y.to(DEVICE)
+                        batch_demo = batch_demo.to(DEVICE)
+                        batch_dia  = batch_dia.to(DEVICE)
                         optimizer.zero_grad()
-                        criterion(model(batch_x, demographics=batch_demo), batch_y).backward()
+                        criterion(model(batch_x, demographics=batch_demo, dia_relativo=batch_dia), batch_y).backward()
                         optimizer.step()
             elif with_demo and not use_real_demo:
-                for cid, (all_x, all_y, all_demo) in synth_demo_cache.items():
-                    for bx, by, bd in DataLoader(TensorDataset(all_x, all_y, all_demo),
-                                                  batch_size=BATCH_SIZE, shuffle=True):
-                        bx, by, bd = bx.to(DEVICE), by.to(DEVICE), bd.to(DEVICE)
+                for cid, (all_x, all_y, all_demo, all_dia) in synth_demo_cache.items():
+                    for bx, by, bd, bdia in DataLoader(TensorDataset(all_x, all_y, all_demo, all_dia),
+                                                        batch_size=BATCH_SIZE, shuffle=True):
+                        bx, by, bd, bdia = bx.to(DEVICE), by.to(DEVICE), bd.to(DEVICE), bdia.to(DEVICE)
                         optimizer.zero_grad()
-                        criterion(model(bx, demographics=bd), by).backward()
+                        criterion(model(bx, demographics=bd, dia_relativo=bdia), by).backward()
                         optimizer.step()
             else:
                 for cid, (train_loader, _) in loaders.items():
-                    for batch_x, batch_y in train_loader:
-                        batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
+                    for batch_x, batch_y, batch_dia in train_loader:
+                        batch_x  = batch_x.to(DEVICE)
+                        batch_y  = batch_y.to(DEVICE)
+                        batch_dia = batch_dia.to(DEVICE)
                         optimizer.zero_grad()
-                        criterion(model(batch_x), batch_y).backward()
+                        criterion(model(batch_x, dia_relativo=batch_dia), batch_y).backward()
                         optimizer.step()
 
     def _eval_with_demo(model: nn.Module, t_loader_demo: DataLoader) -> Dict:
@@ -111,13 +114,20 @@ def run_ablation_demographics(
 
         with torch.no_grad():
             for batch in t_loader_demo:
-                if len(batch) == 3:
+                if len(batch) >= 4:
+                    bx, by, bd, bdia = batch[0], batch[1], batch[2], batch[3]
+                elif len(batch) == 3:
                     bx, by, bd = batch
+                    bdia = None
                 else:
-                    bx, by = batch
-                    bd = _make_correlated_demo(by, seed=random_seed + 99)
-                bx, by, bd = bx.to(DEVICE), by.to(DEVICE), bd.to(DEVICE)
-                logits = model(bx, demographics=bd)
+                    bx, by = batch[0], batch[1]
+                    bd   = _make_correlated_demo(by, seed=random_seed + 99)
+                    bdia = None
+                bx  = bx.to(DEVICE)
+                by  = by.to(DEVICE)
+                bd  = bd.to(DEVICE)
+                bdia = bdia.to(DEVICE) if bdia is not None else None
+                logits = model(bx, demographics=bd, dia_relativo=bdia)
                 total_loss += criterion(logits, by).item() * by.size(0)
                 total_n += by.size(0)
                 all_preds.extend(torch.argmax(logits, 1).cpu().tolist())
@@ -224,29 +234,31 @@ def run_pooled_behrt(
     from mosaicfl.core.evaluation import evaluate
 
     random_seed   = random_seed if random_seed is not None else RANDOM_SEED
-    n_epochs      = n_epochs    if n_epochs    is not None else (NUM_ROUNDS * LOCAL_EPOCHS)
+    n_epochs      = n_epochs    if n_epochs    is not None else POOLED_EPOCHS
     use_real_demo = demographics_by_client is not None
 
     logger.info("=" * 60)
     logger.info("POOLED BASELINE — SimplifiedBEHRT (artefato de pesquisa)")
     logger.info("  Este experimento NUNCA deve rodar em produção.")
-    logger.info(f"  Épocas: {n_epochs} (= NUM_ROUNDS × LOCAL_EPOCHS) | seed: {random_seed}")
+    logger.info(f"  Épocas: {n_epochs} (POOLED_EPOCHS) | seed: {random_seed}")
     logger.info(f"  Fonte demográficos: {'dados reais FAPESP' if use_real_demo else 'sintéticos'}")
     logger.info("=" * 60)
 
-    all_seqs, all_lbls, all_demo = [], [], []
+    all_seqs, all_lbls, all_demo, all_dia = [], [], [], []
     for cid, (train_loader, _) in client_loaders.items():
-        for bx, by in train_loader:
+        for bx, by, bdia in train_loader:
             all_seqs.append(bx)
             all_lbls.append(by)
+            all_dia.append(bdia)
 
     if use_real_demo:
         for cid, (demo_train_loader, _) in demographics_by_client.items():
-            for bx, by, bd in demo_train_loader:
+            for bx, by, bd, _bdia in demo_train_loader:
                 all_demo.append(bd)
 
     pool_seqs = torch.cat(all_seqs, dim=0)
     pool_lbls = torch.cat(all_lbls, dim=0)
+    pool_dia  = torch.cat(all_dia,  dim=0)
     pool_demo = torch.cat(all_demo, dim=0) if all_demo else None
     n_pool    = len(pool_seqs)
     logger.info(f"  Pool total: {n_pool} amostras (BPSP + HSL combinados)")
@@ -268,9 +280,9 @@ def run_pooled_behrt(
         criterion = nn.CrossEntropyLoss(weight=weights)
 
         dataset = (
-            TensorDataset(pool_seqs, pool_lbls, pool_demo)
+            TensorDataset(pool_seqs, pool_lbls, pool_demo, pool_dia)
             if (with_demo and pool_demo is not None)
-            else TensorDataset(pool_seqs, pool_lbls)
+            else TensorDataset(pool_seqs, pool_lbls, pool_dia)
         )
         loader = DataLoader(
             dataset, batch_size=BATCH_SIZE, shuffle=True,
@@ -281,12 +293,17 @@ def run_pooled_behrt(
         for epoch in range(n_epochs):
             epoch_loss = 0.0
             for batch in loader:
-                if with_demo and pool_demo is not None and len(batch) == 3:
-                    bx, by, bd = batch[0].to(DEVICE), batch[1].to(DEVICE), batch[2].to(DEVICE)
-                    logits = model(bx, demographics=bd)
+                if with_demo and pool_demo is not None:
+                    bx   = batch[0].to(DEVICE)
+                    by   = batch[1].to(DEVICE)
+                    bd   = batch[2].to(DEVICE)
+                    bdia = batch[3].to(DEVICE)
+                    logits = model(bx, demographics=bd, dia_relativo=bdia)
                 else:
-                    bx, by = batch[0].to(DEVICE), batch[1].to(DEVICE)
-                    logits = model(bx)
+                    bx   = batch[0].to(DEVICE)
+                    by   = batch[1].to(DEVICE)
+                    bdia = batch[2].to(DEVICE)
+                    logits = model(bx, dia_relativo=bdia)
                 loss = criterion(logits, by)
                 optimizer.zero_grad()
                 loss.backward()
@@ -301,9 +318,11 @@ def run_pooled_behrt(
             eval_loss, eval_n = 0.0, 0
             with torch.no_grad():
                 for batch in test_loader_demo:
-                    bx, by = batch[0].to(DEVICE), batch[1].to(DEVICE)
-                    bd = batch[2].to(DEVICE) if len(batch) == 3 else None
-                    logits = model(bx, demographics=bd)
+                    bx   = batch[0].to(DEVICE)
+                    by   = batch[1].to(DEVICE)
+                    bd   = batch[2].to(DEVICE) if len(batch) >= 3 else None
+                    bdia = batch[3].to(DEVICE) if len(batch) >= 4 else None
+                    logits = model(bx, demographics=bd, dia_relativo=bdia)
                     eval_loss += nn.CrossEntropyLoss()(logits, by).item() * by.size(0)
                     eval_n += by.size(0)
                     all_preds.extend(torch.argmax(logits, 1).cpu().tolist())
@@ -325,9 +344,9 @@ def run_pooled_behrt(
                     "macro_auc":    round(report.macro_auc, 4) if report.macro_auc else None,
                     "ece":          round(report.calibration.ece, 4),
                     "per_class_f1": {
-                        lbl: round(f, 4)
-                        for lbl, f in zip(MODEL_CFG.class_labels, report.per_class_f1)
-                    } if report.per_class_f1 is not None else None,
+                        lbl: round(m.f1, 4)
+                        for lbl, m in report.per_class.items()
+                    },
                 }
             except Exception as exc:
                 logger.warning(f"evaluate() falhou para {variant_name}: {exc}")

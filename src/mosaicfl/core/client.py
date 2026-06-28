@@ -76,7 +76,7 @@ class FedProxClient(fl.client.NumPyClient):
         distorce a loss em direção a classes inexistentes.
         """
         counts: Counter = Counter()
-        for _, batch_y in loader:
+        for _, batch_y, *_ in loader:
             counts.update(batch_y.tolist())
         n = MODEL_CFG.num_classes
         total = sum(counts.values()) or 1
@@ -106,21 +106,25 @@ class FedProxClient(fl.client.NumPyClient):
         self.set_parameters(parameters)
         self.model.train()
         epoch_losses = []
+        tau = 0  # passos efetivos reais (batches processados × épocas)
 
         for epoch in range(local_epochs):
             running_loss = 0.0
             total_samples = 0
-            for batch_x, batch_y in self.train_loader:
+            for batch_x, batch_y, batch_dia in self.train_loader:
                 try:
-                    batch_x, batch_y = batch_x.to(RUNTIME_CFG.device), batch_y.to(RUNTIME_CFG.device)
+                    batch_x = batch_x.to(RUNTIME_CFG.device)
+                    batch_y = batch_y.to(RUNTIME_CFG.device)
+                    batch_dia = batch_dia.to(RUNTIME_CFG.device)
                     self.optimizer.zero_grad()
-                    outputs = self.model(batch_x)
+                    outputs = self.model(batch_x, dia_relativo=batch_dia)
                     loss = self.criterion(outputs, batch_y)
                     loss = self._proximal_loss(loss, proximal_mu)
                     loss.backward()
                     self.optimizer.step()
                     running_loss += loss.item() * batch_y.size(0)
                     total_samples += batch_y.size(0)
+                    tau += 1
                 except Exception as e:
                     logger.error("batch_failed", extra={"client_id": self.client_id, "error": str(e)})
                     raise
@@ -128,16 +132,19 @@ class FedProxClient(fl.client.NumPyClient):
             epoch_loss = running_loss / total_samples if total_samples > 0 else 0.0
             epoch_losses.append(epoch_loss)
 
-        return self.get_parameters(config), total_samples, {"loss": sum(epoch_losses) / len(epoch_losses)}
+        avg_loss = sum(epoch_losses) / len(epoch_losses)
+        return self.get_parameters(config), total_samples, {"loss": avg_loss, "tau": tau}
 
     def evaluate(self, parameters: List[np.ndarray], config: Dict) -> Tuple[float, int, Dict]:
         self.set_parameters(parameters)
         self.model.eval()
         correct, total, loss_sum = 0, 0, 0.0
         with torch.no_grad():
-            for batch_x, batch_y in self.val_loader:
-                batch_x, batch_y = batch_x.to(RUNTIME_CFG.device), batch_y.to(RUNTIME_CFG.device)
-                outputs = self.model(batch_x)
+            for batch_x, batch_y, batch_dia in self.val_loader:
+                batch_x = batch_x.to(RUNTIME_CFG.device)
+                batch_y = batch_y.to(RUNTIME_CFG.device)
+                batch_dia = batch_dia.to(RUNTIME_CFG.device)
+                outputs = self.model(batch_x, dia_relativo=batch_dia)
                 loss = self._eval_criterion(outputs, batch_y)
                 loss_sum += loss.item() * batch_y.size(0)
                 _, predicted = torch.max(outputs.data, 1)

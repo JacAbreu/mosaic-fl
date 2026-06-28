@@ -30,14 +30,20 @@ class TemperatureScaler(nn.Module):
         scaler.fit(global_model, calib_loader, device="cpu")
         calibrated_logits = scaler(raw_logits)
         T = scaler.T  # persiste no checkpoint
+
+    Parametrização em espaço log: T = exp(log_T), garantindo T > 0 matematicamente.
+    Isso evita que o LBFGS (método de segunda ordem) salte para valores negativos —
+    problema que ocorre quando o clamp(min=ε) zera o gradiente e o otimizador
+    interpreta erroneamente que convergiu fora do domínio válido.
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self.temperature = nn.Parameter(torch.ones(1) * 1.5)
+        # log(1.5) ≈ 0.405 — ponto inicial equivalente ao anterior
+        self.log_temperature = nn.Parameter(torch.tensor([0.405]))
 
     def forward(self, logits: torch.Tensor) -> torch.Tensor:
-        return logits / self.temperature.clamp(min=1e-3)
+        return logits / self.log_temperature.exp()
 
     def fit(
         self,
@@ -49,7 +55,7 @@ class TemperatureScaler(nn.Module):
     ) -> "TemperatureScaler":
         """Otimiza T minimizando NLL no calib_loader via LBFGS.
 
-        O modelo não é modificado — apenas self.temperature é atualizado.
+        O modelo não é modificado — apenas self.log_temperature é atualizado.
         Recomenda-se um conjunto de calibração holdout separado do treino e do teste.
         Em simulação acadêmica, o test_loader pode ser reutilizado com ressalva documentada.
         """
@@ -60,9 +66,10 @@ class TemperatureScaler(nn.Module):
         logits_list: list = []
         labels_list: list = []
         with torch.no_grad():
-            for batch_x, batch_y in calib_loader:
+            for batch_x, batch_y, batch_dia in calib_loader:
                 batch_x = batch_x.to(device)
-                logits_list.append(model(batch_x).cpu())
+                batch_dia = batch_dia.to(device)
+                logits_list.append(model(batch_x, dia_relativo=batch_dia).cpu())
                 labels_list.append(batch_y.cpu())
 
         if not logits_list:
@@ -73,11 +80,11 @@ class TemperatureScaler(nn.Module):
         all_labels = torch.cat(labels_list).to(device)
 
         nll = nn.CrossEntropyLoss()
-        optimizer = torch.optim.LBFGS([self.temperature], lr=lr, max_iter=max_iter)
+        optimizer = torch.optim.LBFGS([self.log_temperature], lr=lr, max_iter=max_iter)
 
         def _closure():
             optimizer.zero_grad()
-            loss = nll(all_logits / self.temperature.clamp(min=1e-3), all_labels)
+            loss = nll(all_logits / self.log_temperature.exp(), all_labels)
             loss.backward()
             return loss
 
@@ -88,5 +95,5 @@ class TemperatureScaler(nn.Module):
 
     @property
     def T(self) -> float:
-        """Valor escalar de temperatura após calibração."""
-        return float(self.temperature.item())
+        """Valor escalar de temperatura após calibração (sempre positivo)."""
+        return float(self.log_temperature.exp().item())

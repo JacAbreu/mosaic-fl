@@ -61,9 +61,11 @@ def get_evaluate_fn(test_loader: "torch.utils.data.DataLoader[Any]") -> Callable
         correct, total, loss_sum = 0, 0, 0.0
 
         with torch.no_grad():
-            for batch_x, batch_y in test_loader:
-                batch_x, batch_y = batch_x.to(RUNTIME_CFG.device), batch_y.to(RUNTIME_CFG.device)
-                logits = model(batch_x)
+            for batch_x, batch_y, *rest in test_loader:
+                batch_x = batch_x.to(RUNTIME_CFG.device)
+                batch_y = batch_y.to(RUNTIME_CFG.device)
+                batch_dia = rest[0].to(RUNTIME_CFG.device) if rest else None
+                logits = model(batch_x, dia_relativo=batch_dia)
                 loss = criterion(logits, batch_y)
                 loss_sum += loss.item() * batch_y.size(0)
                 _, predicted = torch.max(logits, dim=1)

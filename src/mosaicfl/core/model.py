@@ -25,6 +25,34 @@ from typing import Optional, Tuple, Union
 from .config import MODEL_CFG
 
 
+MAX_DIA_RELATIVO = 60  # dias de internação; valores acima são clampados
+
+
+class DiaRelativoEmbedding(nn.Module):
+    """
+    Embedding do 'dia relativo' de cada exame (days since admission).
+
+    Mapeia dia_relativo ∈ {0, 1, …, MAX_DIA_RELATIVO} → vetor de tamanho d_model.
+    O índice 0 é reservado para padding (posições sem exame real), portanto os
+    valores de dia são armazenados deslocados em +1:
+        dia 0 (admissão) → índice 1
+        dia 1            → índice 2
+        …
+        dia ≥ MAX_DIA_RELATIVO → índice MAX_DIA_RELATIVO + 1
+
+    O token CLS recebe dia=0 (padding_idx), gerando embedding zero.
+    """
+    def __init__(self, d_model: int, max_dia: int = MAX_DIA_RELATIVO):
+        super().__init__()
+        # índice 0 = padding; índices 1..(max_dia+1) = dias reais
+        self.embedding = nn.Embedding(max_dia + 2, d_model, padding_idx=0)
+        self.max_dia = max_dia
+
+    def forward(self, dia_relativo: torch.Tensor) -> torch.Tensor:
+        # dia_relativo: (batch, seq_len) — já deslocado (+1), clampado
+        return self.embedding(dia_relativo.clamp(0, self.max_dia + 1))
+
+
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int = MODEL_CFG.max_seq_len):
         super().__init__()
@@ -113,6 +141,7 @@ class SimplifiedBEHRT(nn.Module):
         self.cls_token = nn.Parameter(torch.empty(1, 1, MODEL_CFG.embed_dim))
         nn.init.trunc_normal_(self.cls_token, std=0.02)
         self.embedding = nn.Embedding(MODEL_CFG.vocab_size, MODEL_CFG.embed_dim, padding_idx=0)
+        self.dia_embedding = DiaRelativoEmbedding(MODEL_CFG.embed_dim)
         self.pos_encoder = PositionalEncoding(MODEL_CFG.embed_dim, MODEL_CFG.max_seq_len + 1)
         self.dropout    = nn.Dropout(MODEL_CFG.dropout)
 
@@ -166,6 +195,7 @@ class SimplifiedBEHRT(nn.Module):
         x: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
         demographics: Optional[torch.Tensor] = None,
+        dia_relativo: Optional[torch.Tensor] = None,
         return_attention: bool = False,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
@@ -175,6 +205,8 @@ class SimplifiedBEHRT(nn.Module):
             demographics:     (batch, demo_dim) — features demográficas para late fusion
                               [age_norm, sex_binary] quando demo_dim=2.
                               None = sem demográficos; se demo_dim > 0, zero-pad automático.
+            dia_relativo:     (batch, seq_len) — dia relativo de cada exame (deslocado +1).
+                              0 = padding. None = sem embedding temporal.
             return_attention: se True, retorna (logits, all_attn_weights)
 
         Returns:
@@ -189,6 +221,10 @@ class SimplifiedBEHRT(nn.Module):
             mask = (x == 0)  # True em posições de padding
 
         emb = self.embedding(x)  # (batch, seq_len, embed_dim)
+
+        # Soma embedding temporal de dia relativo (progressão clínica desde admissão)
+        if dia_relativo is not None:
+            emb = emb + self.dia_embedding(dia_relativo.to(x.device))
 
         # Prefixa o vetor CLS learnable (parâmetro real, recebe gradiente)
         if self.use_cls_token:

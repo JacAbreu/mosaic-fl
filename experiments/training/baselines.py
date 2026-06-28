@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def _loader_to_bow(loader: DataLoader, vocab_size: int) -> Tuple[np.ndarray, np.ndarray]:
     """Converte sequências de token IDs de um DataLoader em vetores Bag-of-Tokens."""
     X, y = [], []
-    for batch_x, batch_y in loader:
+    for batch_x, batch_y, *_ in loader:
         for seq, label in zip(batch_x.numpy(), batch_y.numpy()):
             bow = np.zeros(vocab_size, dtype=np.float32)
             for tok in seq:

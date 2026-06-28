@@ -13,7 +13,7 @@ import torch
 import numpy as np
 from typing import List, Dict, Tuple
 
-from .config import FED_CFG, RUNTIME_CFG
+from .config import FED_CFG, MAX_SEQ_LEN, RUNTIME_CFG
 
 _DEFAULT_DB_URL = os.getenv("FL_DB_URL", "")
 
@@ -145,17 +145,17 @@ class ClinicalRAG:
         self.embedder = SentenceTransformer(RUNTIME_CFG.embedding_model)
 
         self.tokenizer = AutoTokenizer.from_pretrained(RUNTIME_CFG.llm_model)
+        self.tokenizer.clean_up_tokenization_spaces = False
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
         self.llm = AutoModelForCausalLM.from_pretrained(RUNTIME_CFG.llm_model)
         self.generator = pipeline(
             "text-generation",
             model=self.llm,
             tokenizer=self.tokenizer,
-            max_new_tokens=FED_CFG.max_new_tokens,
             device=0 if torch.cuda.is_available() else -1,
             truncation=True,
         )
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
 
     def build_knowledge_base(self, patterns: List[Dict]) -> None:
         """
@@ -211,7 +211,7 @@ class ClinicalRAG:
             truncated_cases.append(self.tokenizer.decode(ids, skip_special_tokens=True))
         cases_text = "\n".join([f"- {t}" for t in truncated_cases])
 
-        symptoms_ids = self.tokenizer.encode(symptoms, max_length=50, truncation=True)
+        symptoms_ids = self.tokenizer.encode(symptoms, max_length=MAX_SEQ_LEN, truncation=True)
         symptoms_trunc = self.tokenizer.decode(symptoms_ids, skip_special_tokens=True)
 
         prompt = (
@@ -224,7 +224,13 @@ class ClinicalRAG:
         prompt_ids = self.tokenizer.encode(prompt, max_length=max_prompt_tokens, truncation=True)
         prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=True)
 
-        output = self.generator(prompt, do_sample=True, temperature=0.7, num_return_sequences=1)
+        output = self.generator(
+            prompt,
+            max_new_tokens=FED_CFG.max_new_tokens,
+            do_sample=True,
+            temperature=0.7,
+            num_return_sequences=1,
+        )
         justification = output[0]["generated_text"].replace(prompt, "").strip()
 
         hallucination = probability < 0.6 and "certeza" in justification.lower()

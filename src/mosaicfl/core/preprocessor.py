@@ -16,6 +16,7 @@ from typing import Tuple, Dict, List, Optional
 from pathlib import Path
 
 import torch
+from .model import MAX_DIA_RELATIVO
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -613,7 +614,7 @@ class SequencePipeline:
 
         _log(f"[pipeline] construindo tensores para {n_atendimentos:,} sequências...")
         t_t = time.time()
-        sequences, labels, _, demographics = self._build_tensors(df, vocab)
+        sequences, labels, _, demographics, dia_relativos = self._build_tensors(df, vocab)
         _log(f"[pipeline] tensores prontos em {time.time() - t_t:.1f}s")
 
         label_dist = {i: int((labels == i).sum()) for i in range(MODEL_CFG.num_classes)}
@@ -625,7 +626,7 @@ class SequencePipeline:
             f"demográficos: age_mean={demographics[:, 0].mean():.2f} "
             f"sex_M={n_male}/{n_with_sex}"
         )
-        return sequences, labels, vocab, demographics
+        return sequences, labels, vocab, demographics, dia_relativos
 
     def build_per_hospital(self) -> Dict[str, Tuple[torch.Tensor, torch.Tensor, Dict[str, int]]]:
         """
@@ -663,14 +664,14 @@ class SequencePipeline:
             n = df_h.groupby(["patient_id", "attendance_id"]).ngroups
             _log(f"[pipeline/per_hospital] {hosp}: construindo tensores ({n:,} atendimentos)...")
             t_h = time.time()
-            seqs, lbls, _, demo = self._build_tensors(df_h, vocab)
+            seqs, lbls, _, demo, dia_rels = self._build_tensors(df_h, vocab)
             dist = {i: int((lbls == i).sum()) for i in range(MODEL_CFG.num_classes)}
             _log(
                 f"[pipeline/per_hospital] {hosp}: {len(seqs):,} sequências "
                 f"em {time.time() - t_h:.1f}s | dist={dist} | "
                 f"age_mean={demo[:, 0].mean():.2f} sex_M={int((demo[:, 1] == 1.0).sum())}"
             )
-            result[hosp] = (seqs, lbls, vocab, demo)
+            result[hosp] = (seqs, lbls, vocab, demo, dia_rels)
 
         _log(f"[pipeline/per_hospital] concluído em {time.time() - t0:.1f}s total")
         return result
@@ -739,9 +740,9 @@ class SequencePipeline:
 
     def _build_tensors(
         self, df: pd.DataFrame, vocab: Dict[str, int]
-    ) -> Tuple[torch.Tensor, torch.Tensor, List[str], torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, List[str], torch.Tensor, torch.Tensor]:
         """
-        Retorna (sequences, labels, hospital_ids, demographics).
+        Retorna (sequences, labels, hospital_ids, demographics, dia_relativos).
 
         Token building e demográficos são computados vetorizadamente no DataFrame
         inteiro antes do groupby — elimina iterrows() no inner loop.
@@ -750,6 +751,8 @@ class SequencePipeline:
             age_norm   = (REF_YEAR − birth_year) / 100.0, clamped [0.0, 1.0]
                          0.5 quando birth_year ausente
             sex_binary = 1.0 para 'M', 0.0 para 'F' ou desconhecido
+        dia_relativos: LongTensor shape (N, max_seq_len) — dias desde admissão por token.
+            0 = padding; dia 0 (admissão) → índice 1; dia ≥ MAX_DIA_RELATIVO → MAX_DIA_RELATIVO+1
         """
         unk_id = self._SPECIAL["<UNK>"]
 
@@ -768,6 +771,20 @@ class SequencePipeline:
 
         token_ids = pd.Series(raw_tokens, dtype=str).map(vocab).fillna(unk_id).astype(int).values
         df = df.assign(_token_id=token_ids)
+
+        # ── Vectorized dia_relativo (temporal position within episode) ─────────
+        if "dia_relativo" in df.columns:
+            # Shift +1: 0=padding, 1=dia0 (admissão), ..., MAX_DIA_RELATIVO+1=dia≥MAX
+            dia_shifted = (
+                pd.to_numeric(df["dia_relativo"], errors="coerce")
+                .fillna(0)
+                .clip(upper=MAX_DIA_RELATIVO - 1)
+                .astype(int)
+                + 1
+            ).values
+        else:
+            dia_shifted = np.ones(len(df), dtype=int)  # fallback: todos no dia 1
+        df = df.assign(_dia_rel=dia_shifted)
 
         # ── Vectorized demographics ───────────────────────────────────────────
         if "sex" in df.columns:
@@ -790,6 +807,7 @@ class SequencePipeline:
         labels: List[int] = []
         hospital_ids: List[str] = []
         demographics: List[List[float]] = []
+        dia_relativos: List[List[int]] = []
 
         grouped = df.groupby(["patient_id", "attendance_id"], sort=False)
         total = grouped.ngroups
@@ -808,6 +826,7 @@ class SequencePipeline:
             labels.append(label)
             hospital_ids.append(str(group["hospital_id"].iloc[0]))
             demographics.append([float(group["_age_norm"].iloc[0]), float(group["_sex_bin"].iloc[0])])
+            dia_relativos.append(self._pad(group["_dia_rel"].tolist()))
 
             if (idx + 1) % checkpoint == 0:
                 pct = (idx + 1) / total * 100
@@ -820,6 +839,7 @@ class SequencePipeline:
             torch.tensor(labels, dtype=torch.long),
             hospital_ids,
             torch.tensor(demographics, dtype=torch.float32),
+            torch.tensor(dia_relativos, dtype=torch.long),
         )
 
     def _pad(self, tokens: List[int]) -> List[int]:

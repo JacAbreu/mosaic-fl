@@ -13,7 +13,7 @@ from mosaicfl.core.data_loader import load_with_fallback
 from mosaicfl.core.model import SimplifiedBEHRT
 from mosaicfl.core.preprocessor import EHRPreprocessor
 
-from .ablation import run_ablation_demographics
+from .ablation import run_ablation_demographics, run_pooled_behrt
 from .baselines import run_baseline_rf
 from .dataloaders import prepare_dataloaders, prepare_dataloaders_from_db
 from .fl_core import run_federated_learning

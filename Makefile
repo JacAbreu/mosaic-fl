@@ -31,8 +31,9 @@ FL_DATA_DIR      ?= $(HOME)/studies/usp/mba-bigdata-art-int/tcc/data/Dados/Covid
 HSL_SEED         ?= scripts/db/seeds/hsl_seed.sql.gz
 BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
 
-.PHONY: setup test test-integration test-e2e test-all test-cov experiment training clean \
-        superlink server-app supernode sim test-pipeline behrt-pooled \
+.PHONY: setup test test-integration test-e2e test-all test-cov experiment training training-full clean \
+        superlink server-app supernode sim test-pipeline behrt-pooled recalibrate \
+        bootstrap-ci seed-sensitivity \
         db-up db-down db-wait fl-server fl-client fl-check \
         client-generate-seed client-db-up client-migrate client-load-hsl client-setup \
         server-generate-seed server-db-reset server-load-bpsp server-setup
@@ -76,6 +77,34 @@ experiment:
 ## Requer FL_DB_URL. Saída: experiments/data/behrt_pooled_<timestamp>.json
 behrt-pooled:
 	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_behrt_pooled.py
+
+## Re-calibração de temperatura sobre o melhor checkpoint salvo no banco.
+## Útil quando a calibração falhou (ex: T negativo) sem re-executar o treinamento.
+## Requer FL_DB_URL. Saída: experiments/logs/recalibrate_<timestamp>.json
+recalibrate:
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_recalibrate.py
+
+## IC 95% via bootstrap sobre o melhor checkpoint (sem re-treino). Requer FL_DB_URL.
+## Persiste em metrics.bootstrap_ci. Saída: experiments/logs/bootstrap_ci_<timestamp>.json
+bootstrap-ci:
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_bootstrap_ci.py
+
+## Sensibilidade a seed: FedAvg vs FedNova, 3 seeds × 30 rounds. Requer FL_DB_URL.
+## Checkpoints isolados em SQLite. Resultados em metrics.sensitivity_runs.
+## Saída: experiments/logs/seed_sensitivity_<timestamp>.json
+## Opções: make seed-sensitivity ROUNDS=20 SEEDS="42 7"
+ROUNDS ?= 30
+SEEDS  ?= 42 7 123
+seed-sensitivity:
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_seed_sensitivity.py \
+		--rounds $(ROUNDS) --seeds $(SEEDS)
+
+## Treinamento completo + pooled baseline em sequência, em arquivo de log único.
+## FL_LOG_FILE é definido uma vez e passado para ambos os scripts via variável de shell.
+training-full:
+	@LOG="experiments/logs/run_complete_$$(date +%Y%m%d_%H%M%S).log"; \
+	FL_ENV=production FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_behrt_pooled.py
 
 # ── Banco de dados (PostgreSQL via Docker) ────────────────────────────────────
 

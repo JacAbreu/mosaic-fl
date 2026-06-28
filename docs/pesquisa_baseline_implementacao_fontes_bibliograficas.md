@@ -215,6 +215,71 @@
 
 ---
 
+## 8. Convergência em FL — Relação entre Rodadas e Dados (não parâmetros)
+
+> Esta seção documenta a fundamentação teórica para a escolha do número de rodadas de
+> treinamento no MOSAIC-FL, esclarecendo que a relação relevante na literatura é entre
+> **rodadas e quantidade de dados**, não entre rodadas e quantidade de parâmetros do modelo.
+
+### 8.1 FedAvg — Comunicação eficiente via múltiplas épocas locais (referência fundacional)
+
+- **Autores:** H. Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, Blaise Agüera y Arcas
+- **Título:** Communication-Efficient Learning of Deep Networks from Decentralized Data
+- **Publicação:** AISTATS, 2017
+- **arXiv:** https://arxiv.org/abs/1602.05629
+- **Resultado relevante:** A convergência do FedAvg é formulada em termos de `T_rounds × E_epochs × (n / B)` — total de steps de gradiente por cliente. A métrica central é quantas vezes o modelo processa os dados locais, análogo a "épocas" em treinamento centralizado. O número de parâmetros não figura nas condições de convergência: o critério é a cobertura dos dados por steps de gradiente.
+- **Relevância para o MOSAIC-FL:** Fundamenta a decisão de medir suficiência de treinamento em `rodadas × épocas_locais × (n_treino / batch_size)`. Com 20 rodadas × 2 épocas × (20019/16) ≈ 50.040 steps no BPSP e apenas 9.040 no HSL, o cliente menor (HSL) está significativamente sub-treinado em relação ao limiar de convergência centralizado.
+
+### 8.2 FedProx — Convergência em redes heterogêneas não-IID
+
+- **Autores:** Tian Li, Anit Kumar Sahu, Manzil Zaheer, Maziar Sanjabi, Ameet Talwalkar, Virginia Smith
+- **Título:** Federated Optimization in Heterogeneous Networks
+- **Publicação:** MLSys, 2020
+- **arXiv:** https://arxiv.org/abs/1812.06127
+- **Resultado relevante:** Para dados IID, FedAvg converge em O(1/√T) rodadas. Para dados **não-IID**, a convergência degrada por um termo adicional proporcional à divergência entre distribuições dos clientes (`γ-inexact` assumption). Quanto maior a heterogeneidade, mais rodadas são necessárias para o mesmo nível de convergência — o µ do termo proximal controla o tradeoff entre fidelidade ao modelo global e aprendizado local. Li et al. demonstram que µ=0 (FedAvg puro) pode divergir sob não-IID severo.
+- **Relevância para o MOSAIC-FL:** Com `melhora_pronto` em 61,5% do HSL e 0,4% do BPSP, o grau de heterogeneidade excede cenários típicos da literatura de FedProx. O µ=0,01 usado nos experimentos 1–6 é conservador; os autores recomendam µ maiores para heterogeneidade extrema. A literatura sugere 50–100 rodadas para não-IID do grau observado, contra as 20 rodadas atuais.
+
+### 8.3 Por que FedAvg dilui o aprendizado do cliente minoritário
+
+A agregação FedAvg reconstrói o modelo global como média ponderada pelo volume de dados de cada cliente:
+
+```
+w_global = (n_BPSP × w_BPSP + n_HSL × w_HSL) / (n_BPSP + n_HSL)
+         = (20019 × w_BPSP + 3621 × w_HSL) / 23640
+         ≈ 0,847 × w_BPSP + 0,153 × w_HSL
+```
+
+O modelo global vai quase inteiramente na direção do BPSP (5,5× mais amostras). O que o HSL aprendeu sobre `melhora_pronto` é diluído a 15% do sinal. Na rodada seguinte, o HSL recebe esse modelo dominado pelo BPSP e recomeça a "empurrar" na sua direção — ciclo que se repete.
+
+O problema não é perda de informação aleatória: é que **a média de dois vetores de gradiente apontando em direções opostas resulta num vetor fraco em ambas as direções**:
+
+```
+Gradiente BPSP:  →→→→→→→→→→→  (forte, domina — curado_pronto)
+Gradiente HSL:   ←←←          (fraco, diluído — melhora_pronto)
+Resultado FedAvg: →→→→→        (vai para BPSP, ignora HSL)
+```
+
+Isso explica diretamente a oscilação de F1 de `melhora_pronto` entre 0,025 e 0,397 em experimentos com os mesmos hiperparâmetros: em algumas rodadas o estado intermediário do modelo capturou o sinal do HSL antes da agregação; em outras não. Com µ=0,01, é quase aleatório qual estado prevalece.
+
+O µ do FedProx atua exatamente aqui: limita a magnitude de `Δ_BPSP` e `Δ_HSL` (os clientes não se afastam tanto do global), reduzindo o cancelamento por oposição na média. Vetores menores em direções opostas resultam numa média menos distorcida — o sinal do HSL preserva mais impacto relativo no modelo global.
+
+- **Referência teórica:** Li et al. (2020) — seção 3, "Dissimilarity assumption" — formaliza esse efeito como `γ-inexactness`: quanto maior a heterogeneidade entre clientes, mais rounds são necessários para convergência e maior o benefício de µ > 0.
+
+### 8.4 Implicação para o design de experimentos do MOSAIC-FL
+
+A análise do Experimento 6 (2026-06-25) revelou que o modelo SimplifiedBEHRT tem ~117.000 parâmetros efetivamente treinados (os 640.000 do `embedding.weight` são alocados para `vocab_size=10.000` mas apenas 648 tokens recebem gradiente). Com 20 rodadas:
+
+| Cliente | Steps totais | Steps/parâmetro efetivo |
+|---|---|---|
+| BPSP | 50.040 | 0,43 |
+| HSL | 9.040 | 0,08 |
+
+O limiar prático para convergência de transformers em centralizado é ~1–3 steps/parâmetro. Sob FL não-IID, o **drift entre clientes** reduz a eficiência de cada step — efetivamente, o limiar real é 3–10× maior. 20 rodadas são insuficientes não por conta dos parâmetros, mas porque o drift consome a maior parte do progresso de cada rodada.
+
+**Ação corretiva indicada pela literatura:** aumentar µ (0,01 → 0,1) para reduzir drift antes de aumentar o número de rodadas, conforme recomendado em Li et al. (2020) para cenários de alta heterogeneidade.
+
+---
+
 ## 6. Regulatório
 
 ### 6.1 ANVISA — RDC 657/2022

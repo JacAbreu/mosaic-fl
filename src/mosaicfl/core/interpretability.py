@@ -55,9 +55,10 @@ class BEHRTPatternExtractor:
         pattern_scores = []
 
         with torch.no_grad():
-            for batch_x, batch_y in dataloader:
+            for batch_x, batch_y, *rest in dataloader:
+                batch_dia = rest[0] if rest else None
                 mask = (batch_x == 0)
-                logits, attn_weights = self.model(batch_x, mask, return_attention=True)
+                logits, attn_weights = self.model(batch_x, mask, dia_relativo=batch_dia, return_attention=True)
 
                 # (num_layers, batch, num_heads, seq, seq) → (batch, layers, heads, seq, seq)
                 attn_weights = attn_weights.permute(1, 0, 2, 3, 4)

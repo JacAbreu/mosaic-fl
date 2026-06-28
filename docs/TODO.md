@@ -394,3 +394,53 @@ Dividido em três partes:
 - [ ] Submissão ANVISA como Software como Dispositivo Médico (SaMD) — classificação provável Classe III (RDC 657/2022)
 - [ ] Validação clínica prospectiva com parecer de comitê de ética (CEP/CONEP)
 - [ ] Documentação técnica conforme Resolução CFM 2.227/2018 (sistemas de suporte à decisão clínica)
+
+
+avaliar comparação com SCAFFOLD ou FedNova — que são alternativas diretas ao FedProx para non-IID severo.
+
+SCAFFOLD e FedNova
+
+  O problema central do seu projeto é o client drift — o HSL aprende numa direção (melhora_pronto domina) e o BPSP aprende em outra (quase sem melhora_pronto), e o FedAvg faz uma média
+  que dilui os dois. O FedProx tenta controlar isso com o termo µ, mas de forma grosseira.
+
+  SCAFFOLD (Karimireddy et al., 2020) resolve o drift de forma mais elegante: cada cliente mantém uma variável de controle que estima o quanto ele está desviando do gradiente global. A
+  cada rodada, o cliente corrige sua atualização local subtraindo o próprio drift e adicionando o drift médio global. É como se cada hospital dissesse: "sei que minha população é 
+  enviesada nessa direção — vou compensar antes de enviar os pesos". Resultado: convergência mais estável em non-IID severo, sem precisar de µ alto que penaliza aprendizado local.
+
+  FedNova (Wang et al., 2020) ataca um problema diferente mas relacionado: quando os clientes fazem números diferentes de passos locais (épocas), a agregação FedAvg fica distorcida —
+  quem treinou mais domina proporcionalmente mais do que deveria. FedNova normaliza a contribuição de cada cliente pelo número de passos que ele deu, tornando a agregação justa
+  independentemente de quantas épocas cada um rodou.
+
+  ---
+  Por que importa para o seu TCC:
+
+  No seu cenário, BPSP tem 20.019 amostras e HSL tem 3.621 — e as distribuições são opostas. O FedProx com µ=0,1 reduziu o drift mas não convergiu em 120 rodadas. 
+  
+  SCAFFOLD
+  provavelmente convergiria mais rápido porque corrigiria o drift ativamente em vez de apenas penalizá-lo.
+
+  Implementar SCAFFOLD ou FedNova não é requisito para o TCC — mas mencionar que eles existem e que seriam a evolução natural é exatamente o tipo de "trabalhos futuros" que banca
+  examinadora e revisores de artigo valorizam. Você apresenta os resultados do FedProx, explica o limite que encontrou, e aponta o caminho.
+
+porque motivo voce acha que uma das implementacoes nao eh o foco do meu trabalho? eu tenho medo que o scaffold enviese os resultados, acredito que o fednova teria menos eveitos      
+  colaterais                                                                                                                                                                            
+
+● Boa pergunta — assumi errado. Fui conservador sem motivo: o projeto está em evolução ativa com experimentos ainda em curso, e vocação para publicação. Implementar FedNova é
+  completamente dentro do escopo.
+
+  Seu instinto sobre SCAFFOLD está correto. O problema específico do SCAFFOLD no seu cenário:
+
+  As variáveis de controle do SCAFFOLD são estimativas do gradiente global que cada cliente mantém localmente. Com apenas 2 clientes e distribuições tão opostas (melhora_pronto 61,5%
+  vs 0,4%), a variável de controle do BPSP seria calculada quase inteiramente sobre curado_pronto — e ela passaria a corrigir o HSL na direção errada. O remédio vira veneno quando a
+  heterogeneidade é extrema e o número de clientes é pequeno.
+
+  FedNova é mais adequado para o seu caso específico porque:
+
+  O problema que o FedNova resolve é diferente do SCAFFOLD — ele ataca a inconsistência objetiva causada por números diferentes de passos locais. No seu cenário, BPSP treina sobre
+  20.019 amostras e HSL sobre 3.621 — com o mesmo batch_size=16 e local_epochs=2, o BPSP dá ~2.502 passos e o HSL ~453 passos por rodada. O FedAvg trata isso como equivalente. FedNova
+  normaliza cada cliente pela quantidade de passos que ele realmente deu antes de agregar — a contribuição do HSL deixa de ser diluída pelo simples fato de ter menos dados.
+
+  Não introduz hiperparâmetro novo, não mantém estado adicional, e a matemática não cria novo vetor de viés.
+
+  Impacto na implementação: a mudança é contida — aggregate_fedavg vira aggregate_fednova, o fit() do cliente passa a retornar o número de passos efetivos (τ), e o servidor normaliza
+  antes de agregar. O resto do pipeline não muda.

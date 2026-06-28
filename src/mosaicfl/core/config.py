@@ -54,7 +54,7 @@ class ModelConfig:
     num_layers:   int            = 2
     num_heads:    int            = 4
     ff_dim:       int            = 128
-    num_classes:  int            = 4
+    num_classes:  int            = 5
     class_labels: tuple[str, ...] = _DEFAULT_CLASS_LABELS
     dropout:      float          = 0.1
 
@@ -69,10 +69,11 @@ class ModelConfig:
 @dataclass(frozen=True)
 class FedConfig:
     """Protocolo federado e hiperparâmetros de treinamento — imutável por experimento."""
-    num_rounds:            int   = 20
+    num_rounds:            int   = 120  # teto máximo; early stopping pode parar antes (ver min_rounds)
+    min_rounds:            int   = 20   # warm-up: convergência só é avaliada após esta rodada
     fraction_fit:          float = 1.0
     fraction_evaluate:     float = 1.0
-    proximal_mu:           float = 0.01
+    proximal_mu:           float = 0.1  # aumentado de 0.01 → 0.1 (Exp 7): reduz drift não-IID (Li et al. 2020)
     min_fit_clients:       int   = 2
     min_evaluate_clients:  int   = 2
     min_available_clients: int   = 2
@@ -85,6 +86,8 @@ class FedConfig:
     random_seed:           int   = 42
     top_k:                 int   = 3
     max_new_tokens:        int   = 64
+    pooled_epochs:         int   = 120  # épocas do BEHRT centralizado — equivalente ao budget de rodadas do FL (num_rounds)
+    use_fednova:           bool  = True  # Exp 9: substitui FedAvg por normalização por passos efetivos τ_i (Wang et al. 2020)
 
 
 @dataclass
@@ -102,28 +105,8 @@ class RuntimeConfig:
     env:             str    = field(default_factory=lambda: os.getenv("FL_ENV", "development").lower())
 
 
-MODEL_CFG = ModelConfig(
-    vocab_size   = int(os.getenv("FL_VOCAB_SIZE",   "10000")),
-    embed_dim    = int(os.getenv("FL_EMBED_DIM",    "64")),
-    max_seq_len  = int(os.getenv("FL_MAX_SEQ_LEN",  "128")),
-    num_layers   = int(os.getenv("FL_NUM_LAYERS",   "2")),
-    num_heads    = int(os.getenv("FL_NUM_HEADS",    "4")),
-    ff_dim       = int(os.getenv("FL_FF_DIM",       "128")),
-    num_classes  = int(os.getenv("FL_NUM_CLASSES",  "5")),
-    class_labels = tuple(
-        os.getenv("FL_CLASS_LABELS", ",".join(_DEFAULT_CLASS_LABELS)).split(",")
-    ),
-    dropout      = float(os.getenv("FL_DROPOUT",    "0.1")),
-)
-FED_CFG = FedConfig(
-    num_rounds   = int(os.getenv("FL_NUM_ROUNDS",   "20")),
-    batch_size   = int(os.getenv("FL_BATCH_SIZE",   "16")),
-    local_epochs = int(os.getenv("FL_LOCAL_EPOCHS", "2")),
-    lr           = float(os.getenv("FL_LR",         "0.001")),
-    proximal_mu  = float(os.getenv("FL_PROXIMAL_MU","0.01")),
-    num_clients  = int(os.getenv("FL_NUM_CLIENTS",  "2")),
-    random_seed  = int(os.getenv("FL_RANDOM_SEED",  "42")),
-)
+MODEL_CFG = ModelConfig()
+FED_CFG   = FedConfig()
 RUNTIME_CFG = RuntimeConfig()
 
 # Aliases de compatibilidade para testes e scripts legados — não usar em código novo
@@ -137,6 +120,7 @@ NUM_CLASSES           = MODEL_CFG.num_classes
 DROPOUT               = MODEL_CFG.dropout
 
 NUM_ROUNDS            = FED_CFG.num_rounds
+MIN_ROUNDS            = FED_CFG.min_rounds
 FRACTION_FIT          = FED_CFG.fraction_fit
 FRACTION_EVALUATE     = FED_CFG.fraction_evaluate
 PROXIMAL_MU           = FED_CFG.proximal_mu
@@ -147,6 +131,7 @@ CONVERGENCE_THRESHOLD = FED_CFG.convergence_threshold
 CONVERGENCE_PATIENCE  = FED_CFG.convergence_patience
 BATCH_SIZE            = FED_CFG.batch_size
 LOCAL_EPOCHS          = FED_CFG.local_epochs
+POOLED_EPOCHS         = FED_CFG.pooled_epochs
 LR                    = FED_CFG.lr
 NUM_CLIENTS           = FED_CFG.num_clients
 RANDOM_SEED           = FED_CFG.random_seed
