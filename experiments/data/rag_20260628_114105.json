@@ -1,0 +1,50 @@
+{
+  "predicao": {
+    "diagnostico": "curado_internado",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "- adultoPadultoaadultoeadultoadultoeadultoadultoeadultoadultoeadultoadultoeadultoadultoeadultoadultoeadultoadultoeadultoadultoeadultoAdultoOadultoEoEoEoE",
+  "fontes": [
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoVadultoCadultoMadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoLadultoaadultocadultotadultoaadultotadultooadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoLadultoOadultoWadulto,adulto adultoGadultoladultoiadultocadultooadultosadultoeadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoCadultoKadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoCadultoladultooadultoradultooadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6178917218511264
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoRadultoDadultoWadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoLadultoaadultocadultotadultoaadultotadultooadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoFadultooadultosadultofadultooadultoradultooadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoSadultoóadultodadultoiadultooadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoCadultoKadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto",
+      "metadata": {
+        "desfecho": "melhora_internado_grave",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6190719164524178
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoHadultooadultoradultomadultooadultonadultoiadultooadulto adultoTadultoiadultoradultooadultoeadultosadultotadultoiadultomadultouadultoladultoaadultonadultotadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoCadultoradultoeadultoaadultotadultoiadultonadultoiadultonadultoaadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoLadultoaadultocadultotadultoaadultotadultooadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adulto<adultoPadultoAadultoDadulto>adulto,adulto adulto<adultoUadultoNadultoKadulto>adulto",
+      "metadata": {
+        "desfecho": "curado_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6231553554534885
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "precision_metrics": {
+    "precision_at_3": 0.2208,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.2222,
+      "curado_internado": 0.1786,
+      "melhora_pronto": 0.2679,
+      "melhora_internado_breve": 0.2312,
+      "melhora_internado_grave": 0.14
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

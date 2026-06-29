@@ -88,10 +88,26 @@ def prepare_dataloaders_from_db(
     Split: 70% treino / 10% val / 10% cal (calibração) / 10% teste global.
     cal é reservado exclusivamente para temperature scaling — nunca exposto ao FL.
 
+    FL_INCLUDE_HOSPITALS (CSV, ex: "BPSP" ou "HSL,BPSP"):
+        Se definido, apenas os hospitais listados entram como clientes de treino.
+        O test set e cal set continuam globais (todos os hospitais) para comparação justa.
+        Uso: leave-one-client-out — permite isolar a contribuição de cada hospital.
+
     Returns:
         client_loaders, test_loader, vocab, total_train_samples,
         demographics_by_client, test_loader_demo, cal_loader
     """
+    import os
+    _include_raw = os.getenv("FL_INCLUDE_HOSPITALS", "").strip()
+    include_hospitals = (
+        {h.strip() for h in _include_raw.split(",") if h.strip()}
+        if _include_raw else None
+    )
+    if include_hospitals:
+        logger.info("[db] FL_INCLUDE_HOSPITALS=%s — leave-one-client-out mode", sorted(include_hospitals))
+    else:
+        logger.info("[db] FL_INCLUDE_HOSPITALS não definido — todos os hospitais como clientes")
+
     logger.info("[db] Iniciando carregamento via SequencePipeline...")
     pipeline = SequencePipeline(connection_string=db_url, max_seq_len=MAX_SEQ_LEN)
     hospital_data = pipeline.build_per_hospital()
@@ -132,22 +148,34 @@ def prepare_dataloaders_from_db(
         cal_seqs   = seqs[perm[n_train + n_val:n_train + n_val + n_cal]]
         cal_lbls   = labels[perm[n_train + n_val:n_train + n_val + n_cal]]
         cal_dia    = dia_rels[perm[n_train + n_val:n_train + n_val + n_cal]]
+
+        # test e cal são sempre globais — independente do filtro de cliente
         test_seqs_list.append(seqs[perm[n_train + n_val + n_cal:]])
         test_lbls_list.append(labels[perm[n_train + n_val + n_cal:]])
         test_demo_list.append(demo[perm[n_train + n_val + n_cal:]])
         test_dia_list.append(dia_rels[perm[n_train + n_val + n_cal:]])
-
-        client_loaders[cid] = (
-            DataLoader(TensorDataset(train_seqs, train_lbls, train_dia), batch_size=batch_size, shuffle=True),
-            DataLoader(TensorDataset(val_seqs, val_lbls, val_dia), batch_size=batch_size),
-        )
-        demographics_by_client[cid] = (
-            DataLoader(TensorDataset(train_seqs, train_lbls, train_demo, train_dia), batch_size=batch_size, shuffle=True),
-            DataLoader(TensorDataset(val_seqs, val_lbls, val_demo, val_dia), batch_size=batch_size),
-        )
         cal_seqs_list.append(cal_seqs)
         cal_lbls_list.append(cal_lbls)
         cal_dia_list.append(cal_dia)
+
+        if include_hospitals is not None and hospital_id not in include_hospitals:
+            logger.info(
+                "[db] Hospital %s → excluído do treino (FL_INCLUDE_HOSPITALS); test/cal mantidos globais",
+                hospital_id,
+            )
+            continue
+
+        # gerador fixo por cliente — shuffling determinístico, reproduzível entre runs
+        _gen = torch.Generator().manual_seed(RANDOM_SEED + cid)
+        client_loaders[cid] = (
+            DataLoader(TensorDataset(train_seqs, train_lbls, train_dia), batch_size=batch_size, shuffle=True, generator=_gen),
+            DataLoader(TensorDataset(val_seqs, val_lbls, val_dia), batch_size=batch_size),
+        )
+        _gen_demo = torch.Generator().manual_seed(RANDOM_SEED + cid)
+        demographics_by_client[cid] = (
+            DataLoader(TensorDataset(train_seqs, train_lbls, train_demo, train_dia), batch_size=batch_size, shuffle=True, generator=_gen_demo),
+            DataLoader(TensorDataset(val_seqs, val_lbls, val_demo, val_dia), batch_size=batch_size),
+        )
         total_train_samples += len(train_seqs)
         logger.info(
             f"[db] Hospital {hospital_id} → cliente {cid}: "

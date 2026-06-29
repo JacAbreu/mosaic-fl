@@ -1,0 +1,115 @@
+{
+  "meta": {
+    "script": "run_behrt_pooled.py",
+    "timestamp": "2026-06-26T09:49:28.562133",
+    "aviso": "Artefato metodológico. Nunca implantar em produção.",
+    "proposito": "Quantifica o custo de privacidade da federação com mesma arquitetura. Comparar behrt_pooled_B_late_fusion com FL Config B do ablation study."
+  },
+  "behrt_pooled": {
+    "behrt_pooled_A_sem_demo": {
+      "accuracy": 0.677,
+      "macro_f1": 0.497,
+      "macro_auc": 0.8031,
+      "ece": 0.0467,
+      "per_class_f1": {
+        "curado_pronto": 0.8475,
+        "curado_internado": 0.0185,
+        "melhora_pronto": 0.8329,
+        "melhora_internado_breve": 0.4167,
+        "melhora_internado_grave": 0.3693
+      },
+      "demo_dim": 0,
+      "n_epochs": 240,
+      "n_pool": 23640,
+      "descricao": "BEHRT pooled baseline — artefato de pesquisa. Dados BPSP+HSL combinados. Nunca implantado."
+    },
+    "behrt_pooled_B_late_fusion": {
+      "accuracy": 0.6667,
+      "macro_f1": 0.49,
+      "loss": 0.8435,
+      "demo_dim": 2,
+      "n_epochs": 240,
+      "n_pool": 23640,
+      "descricao": "BEHRT pooled baseline — artefato de pesquisa. Dados BPSP+HSL combinados. Nunca implantado."
+    },
+    "delta_B_minus_A": {
+      "accuracy": -0.0103,
+      "macro_f1": -0.007
+    },
+    "meta": {
+      "tipo": "behrt_pooled_baseline",
+      "aviso": "Artefato metodológico. Nunca executar em produção.",
+      "n_epochs": 240,
+      "random_seed": 42,
+      "n_pool": 23640,
+      "fonte_demo": "real_fapesp"
+    }
+  },
+  "baseline_rf": {
+    "opcao_a_centralizado": {
+      "accuracy": 0.6803,
+      "macro_f1": 0.5066,
+      "macro_auc": 0.7928,
+      "ece": 0.0601,
+      "per_class_auc": {
+        "curado_pronto": 0.8838,
+        "curado_internado": 0.5187,
+        "melhora_pronto": 0.9824,
+        "melhora_internado_breve": 0.7699,
+        "melhora_internado_grave": 0.8091
+      },
+      "n_train": 23640,
+      "descricao": "RF treinado em pool de todos os clientes (centralizado)"
+    },
+    "opcao_b_por_hospital": {
+      "per_client": {
+        "0": {
+          "accuracy": 0.5939,
+          "macro_f1": 0.337,
+          "macro_auc": 0.7292,
+          "ece": 0.0528,
+          "per_class_auc": {
+            "curado_pronto": 0.831,
+            "curado_internado": 0.4963,
+            "melhora_pronto": 0.811,
+            "melhora_internado_breve": 0.7275,
+            "melhora_internado_grave": 0.7801
+          },
+          "n_train": 20019,
+          "n_classes_local": 5
+        },
+        "1": {
+          "accuracy": 0.2532,
+          "macro_f1": 0.1887,
+          "macro_auc": 0.6951,
+          "ece": 0.22,
+          "per_class_auc": {
+            "curado_pronto": 0.6704,
+            "curado_internado": 0.5953,
+            "melhora_pronto": 0.8583,
+            "melhora_internado_breve": 0.6081,
+            "melhora_internado_grave": 0.7432
+          },
+          "n_train": 3621,
+          "n_classes_local": 5
+        }
+      },
+      "descricao": "RF independente por hospital — sem compartilhamento de dados"
+    },
+    "meta": {
+      "vocab_size": 10000,
+      "n_test": 3381,
+      "class_labels": [
+        "curado_pronto",
+        "curado_internado",
+        "melhora_pronto",
+        "melhora_internado_breve",
+        "melhora_internado_grave"
+      ],
+      "rf_params": {
+        "n_estimators": 200,
+        "class_weight": "balanced"
+      }
+    }
+  }
+}

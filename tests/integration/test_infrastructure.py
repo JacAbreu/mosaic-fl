@@ -926,9 +926,10 @@ class TestV2PipelineIntegration:
         assert logits.shape == (len(sample_df), NUM_CLASSES)
 
     def test_client_server_parameter_compatibility(self):
-        x = torch.randint(1, VOCAB_SIZE, (8, 16))
-        y = torch.randint(0, NUM_CLASSES, (8,))
-        loader = DataLoader(TensorDataset(x, y), batch_size=4)
+        x   = torch.randint(1, VOCAB_SIZE, (8, 16))
+        y   = torch.randint(0, NUM_CLASSES, (8,))
+        dia = torch.randint(0, 100, (8, 16))
+        loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
         client = FedProxClient(0, loader, loader)
         params = client.get_parameters({})
         server_model = SimplifiedBEHRT(use_cls_token=True)
@@ -977,8 +978,9 @@ class TestV2PipelineIntegration:
         if x.shape[1] < 16:
             pad = torch.zeros(x.shape[0], 16 - x.shape[1], dtype=torch.long)
             x = torch.cat([x, pad], dim=1)
-        y = torch.tensor(subset["desfecho"].values, dtype=torch.long)
-        loader = DataLoader(TensorDataset(x, y), batch_size=4)
+        y   = torch.tensor(subset["desfecho"].values, dtype=torch.long)
+        dia = torch.zeros(x.shape[0], x.shape[1], dtype=torch.long)
+        loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
         client = FedProxClient(0, loader, loader)
         params = client.get_parameters({})
         loss, n, metrics = client.evaluate(params, {})

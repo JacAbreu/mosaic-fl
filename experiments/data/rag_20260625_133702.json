@@ -1,0 +1,50 @@
+{
+  "predicao": {
+    "diagnostico": "curado_internado",
+    "probabilidade": 0.6622847333595657
+  },
+  "justificativa": "Basofilos_NORMAL, Basofilos_NORMAL, Basofilos_NORMAL, Basofilos_NORMAL, Basofilos_NORMAL, Basofilos_NORMAL, Basofilos_NORMAL, Basofilos_NORMAL,",
+  "fontes": [
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoCadultoKadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoGadultoladultoiadultocadultooadultosadultoeadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoLadultoiadultonadultofadultooadultocadultoiadultotadultooadultosadulto_adultoLadultoOadultoWadulto,adulto adultoUadultoradultoéadultoiadultoaadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoCadultoHadultoCadultoMadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto",
+      "metadata": {
+        "desfecho": "melhora_internado_grave",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6078239615068451
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoLadultoiadultonadultofadultooadultocadultoiadultotadultooadultosadulto_adultoLadultoOadultoWadulto,adulto adultoCadultoKadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoAadultomadultoiadultoladultoaadultosadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoUadultoradultoéadultoiadultoaadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoCadultoKadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.614592932784978
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoCadultoKadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoDadultoHadultoLadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoLadultoiadultonadultofadultoóadultocadultoiadultotadultooadultosadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoVadultoCadultoMadulto_adultoLadultoOadultoWadulto,adulto adultoMadultooadultonadultooadultocadultoiadultotadultooadultosadulto_adultoHadultoIadultoGadultoHadulto",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6197996735572788
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "precision_metrics": {
+    "precision_at_3": 0.1329,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.021,
+      "curado_internado": 0.0119,
+      "melhora_pronto": 0.5556,
+      "melhora_internado_breve": 0.09,
+      "melhora_internado_grave": 0.4142
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

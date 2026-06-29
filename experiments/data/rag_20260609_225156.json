@@ -1,0 +1,38 @@
+{
+  "predicao": {
+    "diagnostico": "alta",
+    "probabilidade": 0.6479567415213905
+  },
+  "justificativa": "de dore o cadação de unação de que da témo dores nos seguintes casos clínicos semelhantes:\n- adultoPadultoAadultoSadultoKadultoAdultoSadultoKadultoAadulto",
+  "fontes": [
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adulto<adultoMadultoAadultoSadultoKadulto>adulto,adulto adulto<adultoPadultoAadultoDadulto>adulto,adulto adulto<adultoCadultoLadultoSadulto>adulto,adulto adulto<adultoUadultoNadultoKadulto>adulto,adulto adulto<adultoUadultoNadultoKadulto>adulto",
+      "metadata": {
+        "desfecho": "alta",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.791488540679899
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adulto<adultoMadultoAadultoSadultoKadulto>adulto,adulto adulto<adultoPadultoAadultoDadulto>adulto,adulto adulto<adultoCadultoLadultoSadulto>adulto,adulto adulto<adultoUadultoNadultoKadulto>adulto,adulto adulto<adultoUadultoNadultoKadulto>adulto",
+      "metadata": {
+        "desfecho": "alta",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.791488540679899
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adulto<adultoMadultoAadultoSadultoKadulto>adulto,adulto adulto<adultoPadultoAadultoDadulto>adulto,adulto adulto<adultoCadultoLadultoSadulto>adulto,adulto adulto<adultoUadultoNadultoKadulto>adulto,adulto adulto<adultoUadultoNadultoKadulto>adulto",
+      "metadata": {
+        "desfecho": "pneumonia",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.791488540679899
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true
+}

@@ -1,0 +1,17 @@
+2026-06-28 16:57:15,809 [INFO] setup plugin alembic.autogenerate.schemas
+2026-06-28 16:57:15,810 [INFO] setup plugin alembic.autogenerate.tables
+2026-06-28 16:57:15,810 [INFO] setup plugin alembic.autogenerate.types
+2026-06-28 16:57:15,810 [INFO] setup plugin alembic.autogenerate.constraints
+2026-06-28 16:57:15,810 [INFO] setup plugin alembic.autogenerate.defaults
+2026-06-28 16:57:15,810 [INFO] setup plugin alembic.autogenerate.comments
+2026-06-28 16:57:18,066 [INFO] ============================================================
+2026-06-28 16:57:18,066 [INFO] MOSAIC-FL — Treinamento Federado com Dados Reais FAPESP
+2026-06-28 16:57:18,066 [INFO] Autora: Jacqueline Abreu | ICMC/USP
+2026-06-28 16:57:18,066 [INFO] ============================================================
+2026-06-28 16:57:18,066 [INFO] Ambiente: production | Log: experiments/logs/run_complete_20260628_165714.log
+2026-06-28 16:57:18,085 [INFO] postgres_metrics_store_ready
+2026-06-28 16:57:18,085 [INFO] [1/5] Carregando dados do banco (SequencePipeline)...
+2026-06-28 16:57:18,085 [INFO] [db] Iniciando carregamento via SequencePipeline...
+2026-06-28 16:57:18,085 [INFO] [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+2026-06-28 16:57:18,095 [INFO] [pipeline] conexão OK
+2026-06-28 16:57:18,096 [INFO] [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...

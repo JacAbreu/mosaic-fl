@@ -69,9 +69,10 @@ from infrastructure.mosaicfl_scheduler.scheduler_daemon import FederatedSchedule
 def _tiny_loader(n=6, seq_len=5, seed=42):
     """DataLoader mínimo para testes rápidos."""
     torch.manual_seed(seed)
-    x = torch.randint(0, VOCAB_SIZE, (n, seq_len))
-    y = torch.randint(0, NUM_CLASSES, (n,))
-    return DataLoader(TensorDataset(x, y), batch_size=3, shuffle=False)
+    x   = torch.randint(0, VOCAB_SIZE, (n, seq_len))
+    y   = torch.randint(0, NUM_CLASSES, (n,))
+    dia = torch.randint(0, 100, (n, seq_len))
+    return DataLoader(TensorDataset(x, y, dia), batch_size=3, shuffle=False)
 
 
 def _make_client(client_id=0, n=6, seed=42):

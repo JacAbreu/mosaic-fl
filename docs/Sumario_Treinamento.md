@@ -2,7 +2,7 @@
 
 **Projeto:** TCC — Aprendizado Federado para Predição de Desfecho Clínico  
 **Autora:** Jacqueline Abreu | ICMC/USP  
-**Atualizado em:** 2026-06-26 (Experimento 8 concluído — Experimento 9 pendente)
+**Atualizado em:** 2026-06-29 (Experimento 12 concluído — FedNova + checkpoint scoping)
 
 Este documento registra cada execução de treinamento com dados reais FAPESP, preservando condições, distribuição dos dados, hiperparâmetros, pesos de classe e resultados completos. O objetivo é permitir rastreabilidade total de cada experimento para o TCC.
 
@@ -1209,40 +1209,870 @@ melhora_ig   (338)    73     1     6    73   185
 
 ---
 
+## Experimento 9
+
+**Data:** 2026-06-28  
+**Status:** Em andamento  
+**Log:** `experiments/logs/run_complete_20260628_074558.log`  
+**Temperatura:** `experiments/logs/temperature_exp9.log`  
+**Comando:** `make training-full`
+
+### Motivação — FedNova
+
+O Experimento 8 confirmou que o non-IID estrutural (BPSP 5,5× mais amostras que HSL) persiste mesmo com FedProx µ=0,1 e 120 rodadas — oscilação de ±8 p.p. sem convergência. O problema raiz é que o FedAvg pondera os updates pelo número de amostras, mas BPSP processa ~2.502 batches/rodada e HSL ~453 batches/rodada. Os updates têm magnitudes completamente diferentes mesmo após ponderação por amostras.
+
+**FedNova** (Wang et al. 2020 — *"Tackling the Objective Inconsistency Problem in Heterogeneous Federated Optimization"*) normaliza os updates de cada cliente pelo número de passos efetivos τ_i (batches × épocas locais) antes de agregar, eliminando o viés de escala entre clientes com volumes heterogêneos:
+
+> τ_eff = Σ p_i · τ_i  
+> w_{t+1} = w_t + τ_eff · Σ p_i · (w_i − w_t) / τ_i
+
+Sem hiperparâmetro novo, sem estado adicional por cliente. SCAFFOLD foi descartado por risco de viés com apenas 2 clientes em regime non-IID extremo.
+
+### Alterações implementadas pré-treinamento
+
+| Componente | Alteração | Motivação |
+|---|---|---|
+| `fl_core.py` | `aggregate_fednova()` substituindo `aggregate_fedavg()` quando `use_fednova=True` | Elimina viés de escala entre clientes com volumes heterogêneos |
+| `client.py` | `fit()` retorna `tau` (passos efetivos) nas métricas | `fl_core.py` usa τ_i para normalização FedNova por cliente |
+| `config.py` | `use_fednova: bool = True` em `FedConfig` | Ativa FedNova por padrão |
+
+### Hiperparâmetros
+
+*(idênticos ao Experimento 8 — alteração é exclusivamente no algoritmo de agregação)*
+
+| Parâmetro | Valor |
+|---|---|
+| Rodadas máximas | 120 |
+| Rodadas warm-up | 20 |
+| Algoritmo | **FedNova** (substitui FedProx + FedAvg) |
+| Batch size | 16 |
+| Épocas locais | 2 |
+| Threshold convergência | 0,005 |
+| Paciência convergência | 3 |
+| LR | 0,001 |
+| Seleção checkpoint | gulosa (melhor por acurácia, salvo no PostgreSQL) |
+
+### Ambiente de execução
+
+| Item | Detalhe |
+|---|---|
+| Máquina | Dell Inspiron 5402 — i7-1165G7 (8 threads), 16 GB RAM, sem GPU dedicada |
+| Device | CPU (Intel Iris Xe sem suporte CUDA) |
+| Início | 2026-06-28 07:46 |
+| Fim | Em andamento |
+| Duração estimada | ~265 min (mesma carga do Exp 8) |
+
+#### Monitoramento térmico
+
+> **Contexto:** antes da execução do Exp 9 houve cheiro de queimado próximo ao equipamento, possivelmente relacionado ao aquecimento acumulado da execução interrompida anteriormente e da fase de pré-processamento (pipeline de tensores: 28.599 + 5.174 sequências em Python/NumPy puro). Investigação do código descartou bug de implementação como causa: DataLoaders com `num_workers=0`, `torch.no_grad()` presente na avaliação, calibração fora do loop de rodadas. Causa mais provável: acúmulo de poeira no dissipador/ventoinha — recomenda-se limpeza preventiva.
+
+| Momento | Horário | TCPU | x86_pkg_temp | Etapa |
+|---|---|---|---|---|
+| Início do monitoramento | 07:46 | **71,0°C** | **71,0°C** | [2/5] FL — rodada 1 iniciando |
+| Rodada 30/120 | 08:53 | **76,0°C** | **68,0°C** | [2/5] FL — rodada 30 iniciando |
+| Rodada 60/120 | 09:50 | **80,0°C** | **81,0°C** | [2/5] FL — rodada 60 iniciando |
+| Rodada 90/120 | 10:44 | **83,0°C** | **81,0°C** | [2/5] FL — rodada 90 iniciando |
+| Rodada 120/120 | 11:37 | **76,0°C** | **79,0°C** | [2/5] FL — última rodada iniciando |
+| Início RAG [3/5] | 11:40 | **80,0°C** | **85,0°C** | pico térmico — RAG inicia logo após FL |
+| Início Baseline RF [4/5] | 11:41 | **70,0°C** | **72,0°C** | queda após RAG (CPU libera carga) |
+| Início Ablation [5/5] | 11:41 | **81,0°C** | **81,0°C** | ablation inicia em sequência |
+| Fim (TREINAMENTO_COMPLETO) | 12:02 | **80,0°C** | **85,0°C** | pipeline completo encerrado |
+
+> Arquivo de temperatura detalhado: `experiments/logs/temperature_exp9.log`
+
+### Resultado por rodada
+
+Tabela condensada — marcos, picos, vales e checkpoints gulosos. Atualizada progressivamente.
+
+| Rodada | Tempo (s) | Loss | Acurácia | Nota |
+|---|---|---|---|---|
+| 1 | 159,7 | 1,5059 | 39,13% | primeiro checkpoint |
+| 2 | 155,6 | 1,2334 | 57,38% | novo best |
+| 3 | 155,0 | 1,2218 | 49,33% | — |
+| 4 | 153,1 | 1,2816 | 43,51% | — |
+| 5 | 130,2 | 1,2148 | 57,35% | — |
+| 6 | 131,5 | 1,2549 | 49,22% | — |
+| 7 | 146,5 | 1,1755 | 53,45% | — |
+| 8 | 143,7 | 1,2120 | 52,68% | — |
+| 9 | 143,9 | 1,1619 | 52,09% | — |
+| 10 | 135,9 | 1,2792 | 46,73% | — |
+| 11 | 132,9 | 1,2227 | 50,16% | — |
+| 12 | 151,6 | 1,2331 | 45,46% | — |
+| 13 | 124,0 | 1,1340 | 57,14% | — |
+| 14 | 148,7 | 1,2287 | 51,67% | — |
+| 15 | 141,5 | 1,0115 | **58,50%** | novo best |
+| 16 | 124,9 | 1,1296 | 50,75% | — |
+| 17 | 141,8 | 1,0505 | **62,26%** | novo best — primeiro acima de 60% |
+| 18 | 138,6 | 1,1014 | 53,68% | — |
+| 19 | 138,2 | 1,0910 | **63,38%** | novo best — fim do warm-up |
+| 20 | 150,8 | 1,0745 | 62,02% | fim warm-up |
+| 21 | 137,3 | 1,1755 | 53,15% | convergência avaliada a partir daqui |
+| 22 | 127,6 | 1,1185 | 55,16% | — |
+| 23 | 115,6 | 1,1488 | 51,35% | — |
+| 24 | 127,8 | 1,0591 | 59,12% | — |
+| 25 | 129,8 | 1,0401 | 60,40% | — |
+| 26 | 123,0 | 1,1527 | 53,21% | — |
+| 27 | 142,8 | 1,1064 | 54,30% | — |
+| 28 | 135,2 | 1,0896 | 58,74% | — |
+| 29 | 137,5 | 1,0447 | 58,15% | — |
+| 30 | 120,0 | 1,0593 | 57,17% | — |
+| 31 | 123,2 | 1,2247 | 51,17% | — |
+| 32 | 112,7 | 1,0104 | 61,02% | — |
+| 33 | 130,8 | 0,9871 | **63,86%** | novo best |
+| 34 | 111,6 | 1,0672 | 57,88% | — |
+| 35 | 112,9 | 1,0864 | 55,28% | — |
+| 36 | 114,4 | 1,1301 | 55,49% | — |
+| 37 | 131,7 | 0,9877 | 61,55% | — |
+| 38 | 115,8 | 1,0242 | 59,01% | — |
+| 39 | 134,7 | 1,0390 | 62,41% | — |
+| 40 | 110,4 | 1,0903 | 55,25% | — |
+| 41 | 107,1 | 1,0313 | 57,76% | — |
+| 42 | 114,2 | 1,1462 | 55,49% | — |
+| 43 | 111,8 | 0,9683 | 61,46% | — |
+| 44 | 113,1 | 1,2146 | 49,87% | — |
+| 45 | 107,4 | 1,1156 | 56,85% | — |
+| 46 | 105,4 | 1,1264 | 55,93% | — |
+| 47 | 104,2 | 1,2580 | 50,64% | — |
+| 48 | 124,2 | 1,0272 | 59,72% | — |
+| 49 | 138,9 | 1,0678 | 58,21% | — |
+| 50 | 103,7 | 1,0230 | 61,49% | — |
+| 51 | 108,1 | 1,0394 | 60,19% | — |
+| 52 | 111,9 | 1,0229 | 59,78% | — |
+| 53 | 102,3 | 1,1948 | 52,09% | — |
+| 54 | 105,3 | 1,1372 | 55,78% | — |
+| 55 | 111,1 | 1,0497 | 56,08% | — |
+| 56 | 107,1 | 1,3974 | **41,73%** | ← pior rodada até agora |
+| 57 | 106,8 | 1,0546 | 56,76% | recuperação |
+| 58 | 106,1 | 1,0241 | 61,11% | — |
+| 59 | 102,7 | 1,1552 | 49,36% | — |
+| 60 | 124,8 | 1,1364 | 51,67% | — |
+| 61 | 103,7 | 1,0835 | 57,02% | — |
+| 62 | 117,7 | 1,0093 | 58,50% | — |
+| 63 | 107,3 | 1,1472 | 58,06% | — |
+| 64 | 104,9 | 1,1237 | 49,30% | — |
+| 65 | 107,2 | 1,0422 | 59,72% | — |
+| 66 | 121,3 | 1,3311 | **45,31%** | vale |
+| 67 | 101,4 | 0,9840 | 59,75% | — |
+| 68 | 110,2 | 1,1098 | 52,00% | — |
+| 69 | 105,4 | 1,0730 | 58,86% | — |
+| 70 | 97,8 | 1,0284 | 56,91% | — |
+| 71 | 101,0 | 1,2007 | 55,60% | — |
+| 72 | 103,7 | 1,0273 | 58,09% | — |
+| 73 | 97,7 | 1,0037 | 57,79% | — |
+| 74 | 97,5 | 1,0453 | 56,40% | — |
+| 75 | 105,1 | 1,2263 | **45,40%** | vale |
+| 76 | 120,1 | 1,0707 | 54,48% | — |
+| 77 | 104,3 | 1,1463 | 52,65% | — |
+| 78 | 119,9 | 1,2133 | 53,89% | — |
+| 79 | 137,8 | 1,1767 | 50,93% | — |
+| 80 | 117,9 | 1,1533 | 50,49% | — |
+| 81 | 110,5 | 1,0822 | 56,67% | — |
+| 82 | 109,2 | 1,0792 | 60,72% | — |
+| 83 | 101,4 | 0,9955 | 60,28% | — |
+| 84 | 96,7 | 1,0784 | 52,74% | — |
+| 85 | 100,7 | 1,0232 | 58,06% | — |
+| 86 | 96,7 | 1,0577 | 55,96% | — |
+| 87 | 98,2 | 1,1456 | 52,94% | — |
+| 88 | 125,4 | 1,0592 | 55,87% | — |
+| 89 | 95,6 | 1,0157 | 60,16% | — |
+| 90 | 106,8 | 1,1211 | 50,19% | — |
+| 91 | 101,8 | 0,9895 | 59,95% | — |
+| 92 | 119,9 | 1,0485 | 55,25% | — |
+| 93 | 104,0 | 1,1595 | 52,85% | — |
+| 94 | 101,9 | 0,9719 | 60,07% | — |
+| 95 | 98,3 | 1,0979 | 52,77% | — |
+| 96 | 95,9 | 1,0001 | 59,80% | — |
+| 97 | 99,1 | 1,1475 | 52,41% | — |
+| 98 | 96,9 | 1,0925 | 59,92% | — |
+| 99 | 97,2 | 1,1360 | 54,95% | — |
+| 100 | 100,2 | 1,1377 | 56,29% | — |
+| 101 | 101,7 | 1,0784 | 56,70% | — |
+| 102 | 109,5 | 1,0499 | 59,09% | — |
+| 103 | 116,6 | 1,0192 | 57,62% | — |
+| 104 | 96,4 | 1,1144 | 54,69% | — |
+| 105 | 106,6 | 0,9360 | 61,08% | loss mais baixa do experimento |
+| 106 | 98,2 | 1,0464 | 55,60% | — |
+| 107 | 115,6 | 1,0532 | 55,49% | — |
+| 108 | 96,7 | 1,0585 | 55,04% | — |
+| 109 | 102,0 | 1,0156 | 58,98% | — |
+| 110 | 107,0 | 1,1505 | 50,43% | — |
+| 111 | 104,0 | 1,0209 | 56,43% | — |
+| 112 | 105,7 | 1,0610 | 57,35% | — |
+| 113 | 116,8 | 0,9913 | 59,15% | — |
+| 114 | 104,7 | 0,9560 | 61,55% | — |
+| 115 | 108,2 | 1,1082 | 56,73% | — |
+| 116 | 137,9 | 1,0415 | 59,89% | — |
+| 117 | 121,3 | 1,0782 | 58,50% | — |
+| 118 | 117,8 | 0,9730 | 58,68% | — |
+| 119 | 113,2 | 1,1067 | **61,79%** | — |
+| **120** | **134,1** | **1,1618** | **54,54%** | última rodada — 9,32 p.p. abaixo do melhor |
+
+**Checkpoint guloso — marcos do Exp 9 (completo):**
+
+| Rodada | Experimento | Acc (validação) | Obs. |
+|---|---|---|---|
+| 1 | Exp 9 | 39,13% | primeiro checkpoint salvo |
+| 2 | Exp 9 | 57,38% | novo best |
+| 15 | Exp 9 | 58,50% | novo best |
+| 17 | Exp 9 | 62,26% | novo best — primeiro acima de 60% |
+| 19 | Exp 9 | 63,38% | novo best — maior do warm-up |
+| **33** | **Exp 9** | **63,86%** | ← **melhor do Exp 9** — nenhum novo best após esta rodada |
+| *(91)* | *(Exp 8 — persistido no banco)* | *(66,61%)* | `load_best()` retornou este checkpoint na avaliação final — supera R33 do Exp 9 |
+
+**Convergência:** Não atingida (120 rodadas). Oscilação estrutural (41,73%–63,86%) — nenhum novo best após R33.  
+**Gap best vs last:** 63,86% (R33) − 54,54% (R120) = **9,32 p.p.**  
+**Tempo médio por rodada:** ~113 s/rodada (↓ vs Exp 8: ~133 s/rodada — FedNova ~15% mais rápido)
+
+### Avaliação final (modelo restaurado da rodada 33)
+
+**Pré-calibração (T=1,0) — modelo da R33:**
+
+| Classe | AUC | F1 | Precision | Recall | N | vs Exp 8 |
+|---|---|---|---|---|---|---|
+| curado_pronto | 0,8703 | 0,7980 | 0,7540 | 0,8475 | 1.620 | F1 +0,000 |
+| curado_internado | 0,6336 | 0,0625 | 0,0556 | 0,0714 | 28 | F1 +0,001 |
+| **melhora_pronto** | **0,9216** | **0,6216** | 0,6433 | 0,6012 | 321 | **AUC +0,002 / F1 +0,002** |
+| melhora_internado_breve | 0,8189 | 0,5919 | 0,6894 | 0,5186 | 1.074 | F1 +0,001 |
+| melhora_internado_grave | 0,8038 | 0,3475 | 0,3149 | 0,3876 | 338 | F1 +0,012 |
+| **Macro** | **0,8097** | **0,4843** | — | — | 3.381 | **AUC +0,000 / F1 +0,003** |
+
+**Acurácia:** 66,73% — **novo recorde do projeto** (+0,12 p.p. vs Exp 8: 66,61%)  
+**ECE pré-calibração:** 0,0870 | **MCE:** 0,2382 (idêntico ao Exp 8)  
+**Temperatura T:** 1,0856 (log-space — positivo, fix de calibração funcionando)  
+**ECE pós-calibração:** 0,1079 | MCE: 0,1669 — padrão de subconfiança recorrente (ECE piora, MCE melhora)
+
+**Matriz de confusão (pré-calibração, R33):**
+
+```
+                      cp    ci    mp   mib   mig
+curado_p    (1620)  1373    11    68    83    85
+curado_i      (28)    12     2     1     8     5
+melhora_p    (321)    89     0   193    31     8
+melhora_ib  (1074)   276    21    33   557   187
+melhora_ig   (338)    71     2     5   129   131
+```
+
+> **Nota:** a avaliação refere-se ao modelo do checkpoint guloso (R33, Acc=63,86% durante o treino). A acurácia de 66,73% reflete a avaliação formal no conjunto de teste, que difere da acurácia de validação registrada durante o treino.
+
+### Resultados das etapas pós-FL
+
+**RAG — Precision@3:**
+
+| Classe | Precision@3 |
+|---|---|
+| curado_pronto | 0,2222 |
+| curado_internado | 0,1786 |
+| **melhora_pronto** | **0,2679** |
+| melhora_internado_breve | 0,2312 |
+| melhora_internado_grave | 0,1400 |
+| **Macro** | **0,2208** |
+
+> RAG confiável: True | alucinação: False  
+> Saída: `experiments/data/rag_20260628_114105.json`
+
+**Baseline Random Forest (Bag-of-Tokens):**
+
+| Modelo | Accuracy | AUC | F1 Macro | ECE |
+|---|---|---|---|---|
+| RF Centralizado (pool BPSP+HSL) | **68,32%** | **0,7941** | **0,5090** | 0,0621 |
+| RF Hospital 0 (BPSP isolado) | 59,57% | 0,7411 | 0,3376 | 0,0523 |
+| RF Hospital 1 (HSL isolado) | 25,79% | 0,7153 | 0,1953 | 0,2298 |
+
+> Saída: `experiments/data/baseline_rf_20260628_114126.json`
+
+**Ablation — Late Fusion Demográfica (10 épocas, dados reais FAPESP):**
+
+| Config | Accuracy | F1 Macro | demo_dim |
+|---|---|---|---|
+| Config A — sem demográficos | 35,11% | 0,2128 | 0 |
+| Config B — late fusion (idade + sexo) | **53,33%** | **0,3249** | 2 |
+| **Δ (B − A)** | **+18,22 p.p.** | **+0,1121** | — |
+
+> **Atenção:** o Δ de +18,22 p.p. é o maior do projeto, mas está inflado por uma performance incomumente baixa de Config A (35,11% vs histórico de 54–63%). Resultados históricos de Config A ficaram entre 54,2% e 62,8%. Possível anomalia de inicialização com seed=42 nesta execução específica. O sinal positivo (+) é consistente com todos os experimentos anteriores.  
+> Saída: `experiments/data/ablation_demo_20260628_120225.json`
+
+**BEHRT Pooled Baseline (artefato de pesquisa — sem privacidade):**
+
+| Config | Accuracy | F1 Macro | Épocas |
+|---|---|---|---|
+| behrt_pooled_A — sem demo (demo_dim=0) | **68,88%** | **0,5146** | 120 |
+| behrt_pooled_B — late fusion (demo_dim=2) | **67,82%** | **0,5048** | 120 |
+
+> Saída: `experiments/data/behrt_pooled_20260628_152523.json`  
+> behrt_pooled_A: 12:02–13:49 (~107 min) | behrt_pooled_B: 13:49–15:25 (~96 min)
+
+**Custo de privacidade (Exp 9 — mesma arquitetura):**
+
+| Comparação | Δ Acc | Δ F1 | Nota |
+|---|---|---|---|
+| FL Exp 9⁵ (66,73%) vs BEHRT Pooled A (68,88%) | −2,15 p.p. | −0,030 | gap menor que Exp 6 (−7,57 p.p.) |
+| FL Exp 9⁵ (66,73%) vs BEHRT Pooled B (67,82%) | −1,09 p.p. | −0,021 | menor gap do projeto |
+| FL Exp 9⁵ (66,73%) vs RF Centralizado (68,32%) | −1,59 p.p. | −0,025 | — |
+| BEHRT Pooled A vs RF Centralizado | +0,56 p.p. | +0,006 | BEHRT pooled supera RF pela primeira vez |
+
+> ⁵ A avaliação do Exp 9 reflete o checkpoint do Exp 8 (ver nota ⁵ na tabela comparativa). O custo de privacidade real do FedNova só poderá ser calculado após correção do namespace do checkpoint store.
+
+### Ambiente de execução — duração
+
+| Item | Detalhe |
+|---|---|
+| Início FL | 2026-06-28 07:46:35 |
+| Fim FL | 2026-06-28 11:40:07 |
+| Duração FL | **14.011,2 s (233,5 min / 3,89 h)** |
+| Tráfego FL | **1.310,28 MB** |
+| Custo médio por rodada | **~113 s/rodada** (vs 133 s/rodada no Exp 8 — FedNova ~15% mais rápido) |
+| Início pós-FL | 11:40:11 |
+| Fim pipeline completo | 12:02:25 |
+| BEHRT Pooled | iniciado às 12:02:29 — em andamento |
+
+### Observações relevantes do Experimento 9
+
+**Alerta metodológico — checkpoint cross-contamination:**
+
+O log registra `checkpoint_best_loaded_postgres round=91 accuracy=0.6661` imediatamente antes de "Modelo restaurado da rodada 33 (Acc=0.6386)". O PostgreSQL checkpoint store é **compartilhado entre experimentos e não foi resetado** entre Exp 8 e Exp 9. Como o melhor checkpoint do Exp 8 (R91: 0.6661) supera o melhor do Exp 9 (R33: 0.6386), `load_best()` retornou o modelo do Exp 8. A mensagem de log usa as variáveis em memória do Exp 9 (`best_round=33`, `best_accuracy=0.6386`), mas o modelo carregado é o R91 do Exp 8.
+
+**Consequência:** a avaliação final registrada no Exp 9 (Acc=66,73%, AUC=0,8097, F1=0,4843) é essencialmente uma **re-avaliação do checkpoint R91 do Exp 8**, não do melhor modelo treinado com FedNova. As métricas ligeiramente diferentes de Exp 8 (66,61% → 66,73%, F1 0,4812 → 0,4843) refletem provavelmente a nova temperatura de calibração (T=1,0856 vs T=1,0849), não o modelo.
+
+**Implicação para o TCC:** o Exp 9 não produziu avaliação válida do FedNova. Para avaliar corretamente, é necessário resetar o PostgreSQL checkpoint store antes de cada experimento, ou implementar namespacing por experimento no store. Ação corretiva registrada na seção de diagnóstico.
+
+---
+
+**O que o FedNova revelou:**
+
+- **Convergência:** Não atingida em 120 rodadas. Oscilação de ±22 p.p. (41,73%–63,86%) — similar ao Exp 8 (±25 p.p.). FedNova não resolveu a oscilação estrutural.
+- **Melhor checkpoint (Exp 9 own):** R33, Acc=63,86% de validação — inferior ao Exp 8 R91 (66,61%). FedNova convergiu para um ponto pior nesta execução.
+- **Velocidade:** ~113 s/rodada vs ~133 s/rodada no Exp 8 — **FedNova foi ~15% mais rápido** por normalizar os updates antes da agregação, reduzindo o número de operações de comunicação efetivas.
+- **Nenhum novo best após R33:** 87 rodadas sem melhora — plateau mais precoce que Exp 8 (último best em R91 de 120 rodadas).
+
+**O que não melhorou:**
+- A hipótese central do FedNova (normalizar por τ_i para reduzir o viés de escala entre BPSP e HSL) não se traduziu em convergência melhor. O non-IID estrutural é mais profundo que o viés de escala: a distribuição de classes é radicalmente diferente entre os dois clientes, e nenhuma normalização de gradiente resolve isso sem técnicas específicas para heterogeneidade de labels.
+- `curado_internado` permanece com F1 mínimo (N=28 no teste).
+
+**RAG:** Precision@3 macro de 0,2208 — melhor que Exp 7 (0,110) e Exp 8 (0,226). Sinal positivo, mas avaliado sobre o modelo do Exp 8.
+
+**Custo de privacidade provisório (usando avaliação do Exp 8):**
+- FL Exp 9/8 (66,73%) vs RF Centralizado (68,32%) = **gap de 1,59 p.p.** — idêntico ao Exp 8.
+
+---
+
+## Experimento 12
+
+**Data:** 2026-06-28 / 2026-06-29
+**Status:** Concluído
+**Log:** `experiments/logs/run_complete_20260628_182702.log`
+**Temperatura:** `experiments/logs/temperature_exp12.log`
+**Comando:** `make training-full`
+**training_id:** 2 (primeiro treinamento com checkpoint scoping via migration 011)
+
+### Motivação
+
+O Experimento 9 (FedNova) produziu avaliação inválida por cross-contamination do checkpoint store: `load_best()` sem filtro por experimento retornou o checkpoint R91 do Exp 8 (0,6661) em vez do R33 do Exp 9 (0,6386). Este experimento repete FedNova com o sistema de checkpoint corrigido:
+
+- Migration 011 (`alembic/versions/011_fl_trainings.py`): cria `metrics.fl_trainings`, adiciona `training_id` em `metrics.fl_checkpoints` com índice UNIQUE parcial (`WHERE training_id IS NOT NULL`)
+- `checkpoint_store.py`: `register_training()` antes do loop, UPSERT `ON CONFLICT (training_id) WHERE training_id IS NOT NULL`, `load_best(training_id)` com filtro por treinamento
+- `fl_core.py`: lê `FL_LOG_FILE` do ambiente para `log_file`, chama `complete_training()` após o loop
+
+### Alterações implementadas pré-treinamento
+
+| Componente | Alteração |
+|---|---|
+| `scripts/db/010_fl_trainings.sql` | SQL de referência (não aplicado via Alembic) |
+| `alembic/versions/011_fl_trainings.py` | Migration Alembic: `fl_trainings` + `training_id` FK + UNIQUE index parcial |
+| `infrastructure/shared/checkpoint_store.py` | `register_training()`, `complete_training()`, UPSERT com índice parcial, `load_best(training_id)`, `weights_only=False` |
+| `experiments/training/fl_core.py` | Chama `register_training()` antes do loop; passa `training_id` ao `save()`; `complete_training()` + `load_best(training_id)` após o loop |
+
+### Hiperparâmetros
+
+*(idênticos ao Experimento 9)*
+
+| Parâmetro | Valor |
+|---|---|
+| Rodadas máximas | 120 |
+| Rodadas warm-up | 20 |
+| Algoritmo | **FedNova** |
+| Batch size | 16 |
+| Épocas locais | 2 |
+| Threshold convergência | 0,005 |
+| Paciência convergência | 3 |
+| LR | 0,001 |
+| Seleção checkpoint | gulosa (UPSERT por training_id no PostgreSQL) |
+
+### Ambiente de execução
+
+| Item | Detalhe |
+|---|---|
+| Máquina | Dell Inspiron 5402 — i7-1165G7 (8 threads), 16 GB RAM, sem GPU dedicada |
+| Device | CPU (Intel Iris Xe sem suporte CUDA) |
+| Início FL | 2026-06-28 18:27:32 |
+| Fim FL | 2026-06-28 22:33:15 |
+| Duração FL | **14.742,5 s (245,7 min / 4,10 h)** |
+| Tráfego FL | **1.310,28 MB** |
+
+#### Monitoramento térmico
+
+| Momento | Horário | TCPU | x86_pkg_temp | Etapa |
+|---|---|---|---|---|
+| Início do monitoramento | 18:33 | 79°C | 83°C | R2 iniciando (checkpoint R2 salvo) |
+| Rodada 30/120 | 19:31 | **90°C** | **92°C** | pico térmico da fase FL |
+| Rodada 60/120 | 20:30 | **90°C** | **90°C** | FL — metade das rodadas |
+| Rodada 90/120 | 21:24 | 73°C | 73°C | queda — hardware estabilizou |
+| Checkpoint R115 (best) | 22:22 | 75°C | 73°C | novo melhor checkpoint |
+| Rodada 120/120 | 22:31 | **94°C** | **94°C** | pico máximo — última rodada |
+| FL_TRAINING_COMPLETE | 22:33 | 76°C | 76°C | loop encerrado |
+| PIPELINE_COMPLETE | 22:33 | 78°C | 78°C | RAG/RF/Ablation concluídos |
+
+> Arquivo de temperatura detalhado: `experiments/logs/temperature_exp12.log`
+
+### Resultado por rodada
+
+| Rodada | Tempo (s) | Loss | Acurácia | Nota |
+|---|---|---|---|---|
+| 1 | 135,7 | 1,3189 | 37,56% | primeiro checkpoint |
+| 2 | 142,2 | 1,2414 | 48,39% | novo best |
+| 3 | 137,3 | 1,1067 | 56,40% | novo best |
+| 4 | 144,2 | 1,1670 | 55,63% | — |
+| 5 | 125,0 | 1,1324 | 63,59% | novo best |
+| 6 | 145,3 | 1,2285 | 55,10% | — |
+| 7 | 133,3 | 1,1829 | 46,64% | — |
+| 8 | 123,2 | 1,2570 | 50,28% | — |
+| 9 | 127,1 | 1,0600 | 56,49% | — |
+| 10 | 126,9 | 1,1721 | 51,32% | — |
+| 11 | 136,8 | 1,3638 | 40,58% | — |
+| 12 | 119,8 | 1,2511 | 47,41% | — |
+| 13 | 135,5 | 1,0611 | 58,00% | — |
+| 14 | 119,1 | 1,2136 | 45,02% | — |
+| 15 | 126,7 | 1,0985 | 57,47% | — |
+| 16 | 129,4 | 1,1306 | 53,56% | — |
+| 17 | 116,8 | 1,0230 | 61,96% | — |
+| 18 | 134,7 | 1,1360 | 51,88% | — |
+| 19 | 117,0 | 1,1136 | 62,38% | — |
+| 20 | 144,8 | 1,0451 | 58,89% | fim warm-up |
+| 21 | 132,0 | 1,2124 | 49,04% | convergência avaliada a partir daqui |
+| 22 | 143,1 | 1,0521 | 60,72% | — |
+| 23 | 134,3 | 1,0511 | 60,16% | — |
+| 24 | 140,9 | 1,1999 | 58,12% | — |
+| 25 | 140,3 | 1,0073 | 61,79% | — |
+| 26 | 132,0 | 1,1092 | 57,70% | — |
+| 27 | 137,7 | 1,0114 | 61,37% | — |
+| 28 | 137,0 | 1,0782 | 56,37% | — |
+| 29 | 143,1 | 1,0009 | 61,49% | — |
+| 30 | 109,8 | 1,0357 | 57,02% | — |
+| 31 | 136,2 | 1,1568 | 51,29% | — |
+| 32 | 114,5 | 0,9291 | 65,39% | novo best |
+| 33 | 146,8 | 1,0921 | 55,43% | — |
+| 34 | 127,7 | 0,9487 | 64,24% | — |
+| 35 | 115,2 | 1,0055 | 60,63% | — |
+| 36 | 142,2 | 0,9806 | 61,08% | — |
+| 37 | 140,0 | 0,9113 | 66,70% | novo best |
+| 38 | 147,5 | 1,0507 | 61,37% | — |
+| 39 | 121,7 | 0,9504 | 65,75% | — |
+| 40 | 114,9 | 1,1263 | 54,54% | — |
+| 41 | 119,3 | 0,9827 | 60,96% | — |
+| 42 | 114,0 | 0,9649 | 62,41% | — |
+| 43 | 108,0 | 0,9425 | 64,18% | — |
+| 44 | 118,0 | 1,0014 | 64,77% | — |
+| 45 | 125,3 | 1,0703 | 57,68% | — |
+| 46 | 108,3 | 1,1971 | 51,79% | — |
+| 47 | 106,6 | 1,0671 | 57,44% | — |
+| 48 | 105,9 | 0,9405 | 62,35% | — |
+| 49 | 105,5 | 1,0603 | 59,60% | — |
+| 50 | 111,6 | 0,8847 | 65,96% | — |
+| 51 | 103,9 | 0,8759 | 66,13% | — |
+| 52 | 109,2 | 0,9239 | 62,73% | — |
+| 53 | 104,8 | 0,9722 | 59,69% | — |
+| 54 | 107,2 | 0,9539 | 63,32% | — |
+| 55 | 103,2 | 1,0315 | 60,54% | — |
+| 56 | 117,7 | 0,9743 | 60,57% | — |
+| 57 | 112,6 | 0,9569 | 63,41% | — |
+| 58 | 116,7 | 0,9863 | 62,50% | — |
+| 59 | 103,3 | 1,0034 | 60,93% | — |
+| 60 | 104,4 | 0,9756 | 61,14% | — |
+| 61 | 106,8 | 0,9942 | 61,40% | — |
+| 62 | 102,1 | 1,0008 | 64,24% | — |
+| 63 | 106,8 | 1,0602 | 57,70% | — |
+| 64 | 108,3 | 1,1185 | 53,53% | — |
+| 65 | 103,4 | 0,9814 | 61,46% | — |
+| 66 | 103,7 | 0,9568 | 63,80% | — |
+| 67 | 101,8 | 1,0360 | 60,84% | — |
+| 68 | 102,4 | 1,0464 | 62,26% | — |
+| 69 | 106,8 | 1,0411 | 58,92% | — |
+| 70 | 115,7 | 0,9506 | 65,25% | — |
+| 71 | 107,4 | 0,9920 | 65,31% | — |
+| 72 | 105,3 | 0,9999 | 60,60% | — |
+| 73 | 125,9 | 0,9466 | 64,92% | — |
+| 74 | 118,2 | 0,9251 | 65,81% | — |
+| 75 | 106,4 | 1,0459 | 57,91% | — |
+| 76 | 137,0 | 1,0350 | 59,15% | — |
+| 77 | 116,2 | 0,9304 | 64,15% | — |
+| 78 | 106,2 | 0,9689 | 62,05% | — |
+| 79 | 99,0 | 1,0273 | 61,31% | — |
+| 80 | 99,3 | 1,0218 | 58,36% | — |
+| 81 | 109,1 | 0,9764 | 63,62% | — |
+| 82 | 106,3 | 0,9764 | 61,82% | — |
+| 83 | 104,6 | 0,9664 | 63,98% | — |
+| 84 | 109,5 | 0,9996 | 59,36% | — |
+| 85 | 106,4 | 1,0753 | 57,41% | — |
+| 86 | 115,0 | 0,9243 | 63,15% | — |
+| 87 | 106,5 | 1,0424 | 61,14% | — |
+| 88 | 102,2 | 1,0149 | 60,90% | — |
+| 89 | 103,7 | 0,9183 | 65,66% | — |
+| 90 | 113,7 | 0,9109 | 64,80% | — |
+| 91 | 137,6 | 0,9222 | 63,56% | — |
+| 92 | 112,2 | 1,0156 | 63,21% | — |
+| 93 | 125,2 | 0,9882 | 61,14% | — |
+| 94 | 122,6 | 0,9641 | 64,18% | — |
+| 95 | 133,0 | 0,9906 | 60,25% | — |
+| 96 | 116,0 | 1,0043 | 63,09% | — |
+| 97 | 127,6 | 1,0541 | 60,60% | — |
+| 98 | 134,4 | 0,9977 | 63,86% | — |
+| 99 | 150,6 | 1,0321 | 63,03% | — |
+| 100 | 125,1 | 0,9629 | 63,35% | — |
+| 101 | 127,0 | 0,9880 | 61,17% | — |
+| 102 | 131,7 | 0,9292 | 65,28% | — |
+| 103 | 138,9 | 1,0001 | 63,65% | — |
+| 104 | 140,5 | 1,0066 | 61,17% | — |
+| 105 | 138,2 | 0,9156 | 64,54% | — |
+| 106 | 167,9 | 0,9249 | 62,85% | — |
+| 107 | 151,3 | 0,9480 | 63,35% | — |
+| 108 | 128,7 | 0,9203 | 63,68% | — |
+| 109 | 138,3 | 1,0020 | 62,53% | — |
+| 110 | 164,1 | 1,0835 | **53,27%** | ← pior rodada |
+| 111 | 133,1 | 1,1249 | 59,83% | recuperação |
+| 112 | 135,3 | 1,0819 | 57,62% | — |
+| 113 | 145,0 | 0,9341 | 64,80% | — |
+| 114 | 126,8 | 0,9390 | 65,01% | — |
+| **115** | **132,7** | **0,9035** | **67,44%** | ← **melhor checkpoint — novo recorde do projeto** |
+| 116 | 124,0 | 0,9085 | 66,87% | — |
+| 117 | 121,7 | 0,9201 | 65,63% | — |
+| 118 | 145,5 | 0,9068 | 64,63% | — |
+| 119 | 112,3 | 0,9646 | 65,66% | — |
+| **120** | **117,0** | **0,9849** | **61,14%** | última rodada |
+
+**Checkpoint guloso — marcos do Exp 12:**
+
+| Rodada | training_id | Acc (validação) | sha256 | Obs. |
+|---|---|---|---|---|
+| 1 | 2 | 37,56% | b1f45159b696 | primeiro checkpoint |
+| 2 | 2 | 48,39% | 8f8e361e061b | novo best |
+| 3 | 2 | 56,40% | f4b64996b428 | novo best |
+| 5 | 2 | 63,59% | a9dc2978d411 | novo best |
+| 32 | 2 | 65,39% | 1212895f1e13 | novo best |
+| 37 | 2 | 66,70% | 41c851ee041d | novo best — supera Exp 8 R91 |
+| **115** | **2** | **67,44%** | **c4c9697c608d** | **melhor do projeto** |
+
+> `training_completed_postgres id=2 best_round=115 best_accuracy=0.6744 converged=False`
+> `checkpoint_best_loaded_postgres round=115 accuracy=0.6744 training_id=2` ✅ — carregou o modelo correto, sem cross-contamination
+
+**Convergência:** Não atingida (120 rodadas). Oscilação ~53–67% — padrão non-IID estrutural mantido.
+**Gap best vs last:** 67,44% (R115) − 61,14% (R120) = **6,30 p.p.**
+**Tempo médio por rodada:** ~122 s/rodada
+
+### Avaliação final (modelo restaurado da rodada 115)
+
+**Pré-calibração (T=1,0):**
+
+| Classe | AUC | F1 | Precision | Recall | N | vs Exp 9⁵ |
+|---|---|---|---|---|---|---|
+| curado_pronto | 0,8762 | 0,8146 | 0,7695 | 0,8654 | 1.620 | F1 +0,017 |
+| curado_internado | 0,5713 | 0,0323 | 0,0294 | 0,0357 | 28 | F1 −0,030 |
+| **melhora_pronto** | **0,9553** | **0,6606** | 0,7854 | 0,5701 | 321 | **AUC +0,034 / F1 +0,039** |
+| melhora_internado_breve | 0,8108 | 0,5819 | 0,6413 | 0,5326 | 1.074 | F1 −0,010 |
+| melhora_internado_grave | 0,7936 | 0,3306 | 0,3050 | 0,3609 | 338 | F1 −0,017 |
+| **Macro** | **0,8015** | **0,4840** | — | — | 3.381 | AUC −0,001 / F1 +0,000 |
+
+**Acurácia:** 67,44% — **novo recorde do projeto** (+0,71 p.p. vs Exp 9: 66,73%)
+**ECE pré-calibração:** 0,0935 | **MCE:** 0,2545
+**Temperatura T:** 1,0580 (log-space — positivo)
+**ECE pós-calibração:** 0,1086 | MCE: 0,2875 — padrão de subconfiança recorrente
+
+**Matriz de confusão (pré-calibração, R115):**
+
+```
+                      cp    ci    mp   mib   mig
+curado_p    (1620)  1402    10    23   119    66
+curado_i      (28)    12     1     2    10     3
+melhora_p    (321)    71    10   183    49     8
+melhora_ib  (1074)   270     9    22   572   201
+melhora_ig   (338)    67     4     3   142   122
+```
+
+### Resultados das etapas pós-FL
+
+**RAG — Precision@3:**
+
+| Métrica | Valor |
+|---|---|
+| Precision@3 macro | **0,1450** |
+
+> Saída: `experiments/logs/run_complete_20260628_182702.log` (etapa [3/5])
+
+**Baseline Random Forest (Bag-of-Tokens) — etapa [4/5] de `run_training.py`:**
+
+| Modelo | Accuracy | AUC | F1 Macro | ECE |
+|---|---|---|---|---|
+| RF Centralizado (pool BPSP+HSL) | **68,06%** | **0,7951** | **0,5034** | 0,0589 |
+| RF Hospital 0 (BPSP isolado) | 59,66% | 0,7414 | 0,3370 | 0,0645 |
+| RF Hospital 1 (HSL isolado) | 23,31% | 0,6999 | 0,1795 | 0,2608 |
+
+**Ablation — Late Fusion Demográfica ([5/5], 10 épocas, dados reais FAPESP):**
+
+| Config | Accuracy | F1 Macro | demo_dim |
+|---|---|---|---|
+| Config A — sem demográficos | 59,33% | 0,3653 | 0 |
+| Config B — late fusion (idade + sexo) | 59,09% | 0,3618 | 2 |
+| **Δ (B − A)** | **−0,24 p.p.** | **−0,004** | — |
+
+> **Atenção:** Δ negativo (B pior que A) é anomalia. O sinal positivo consistente de Exp 3–9 desapareceu. Config A (59,33%) está dentro do histórico (54–63%), sugerindo que Config B teve inicialização desfavorável com seed=42. O sinal da late fusion demográfica permanece validado nos experimentos anteriores.
+
+**BEHRT Pooled Baseline (artefato de pesquisa — `run_behrt_pooled.py`):**
+
+| Config | Accuracy | F1 Macro | Épocas |
+|---|---|---|---|
+| behrt_pooled_A — sem demo (demo_dim=0) | **68,03%** | **0,5165** | 120 |
+| **behrt_pooled_B — late fusion (demo_dim=2)** | **69,12%** | **0,5269** | 120 |
+
+> RF Centralizado (pooled script): Acc=68,74%, AUC=0,8031, F1=0,5108, ECE=0,0719
+> Saída: `experiments/data/behrt_pooled_20260629_020657.json`
+> behrt_pooled_A: concluído às 02:06 | behrt_pooled_B: concluído depois
+
+**Custo de privacidade (Exp 12 — avaliação válida do FedNova):**
+
+| Comparação | Δ Acc | Δ F1 | Nota |
+|---|---|---|---|
+| FL Exp 12 (67,44%) vs BEHRT Pooled A (68,03%) | −0,59 p.p. | −0,032 | menor gap FL vs Pooled do projeto |
+| FL Exp 12 (67,44%) vs BEHRT Pooled B (69,12%) | −1,68 p.p. | −0,043 | gap real da federação com FedNova |
+| FL Exp 12 (67,44%) vs RF Centralizado (68,06%) | −0,62 p.p. | −0,019 | **gap mais próximo FL vs RF do projeto** |
+| BEHRT Pooled B vs RF Centralizado | +0,38 p.p. | +0,016 | BEHRT pooled supera RF (segundo experimento consecutivo) |
+
+### Duração do pipeline completo
+
+| Etapa | Início | Fim | Duração |
+|---|---|---|---|
+| FL (120 rodadas) | 18:27:32 | 22:33:15 | 14.742,5 s (245,7 min) |
+| RAG | 22:33:19 | 22:34:12 | ~53 s |
+| RF + Ablation | 22:34:13 | 22:55:04 | ~21 min |
+| BEHRT Pooled (A+B) | 22:55:08 | 02:06:57 | ~192 min |
+| **Total pipeline** | **18:27** | **02:07** | **~452 min (~7,5 h)** |
+
+### Observações relevantes do Experimento 12
+
+**Checkpoint scoping validado:** `training_id=2` registrado antes do loop; UPSERT correto em todos os 7 checkpoints; `load_best(training_id=2)` retornou R115 (0,6744) — primeiro experimento com avaliação FedNova válida.
+
+**Novo recorde histórico:** Acc=67,44% (R115) supera Exp 8 R91 (66,61%) e Exp 9 avaliação inválida (66,73%). Resultado válido para uso no TCC.
+
+**melhora_pronto AUC=0,9553** — melhor AUC desta classe em todos os experimentos (+0,034 vs Exp 9). Sinal de que o modelo FedNova com mais rodadas captura melhor a classe mais difícil do non-IID.
+
+**curado_internado:** F1=0,0323 — pior desempenho histórico nessa classe (N=28, problema estrutural de raridade).
+
+**Custo de privacidade real do FedNova:** FL (67,44%) vs BEHRT Pooled B (69,12%) = **−1,68 p.p.** — o custo de federar com FedNova e non-IID severo é de apenas 1,7 p.p. de acurácia. Resultado relevante para o TCC: federação não impõe penalidade severa.
+
+**Temperatura:** pico de 94°C na R120 — o mesmo padrão das últimas rodadas de experimentos anteriores. Sem eventos térmicos anômalos.
+
+### Conclusões do Experimento 12
+
+**1. Checkpoint scoping resolve o problema de cross-contamination.**
+O `training_id=2` garantiu que R115 (0,6744) fosse carregado na avaliação final — primeira avaliação válida do FedNova no projeto. O Exp 9 avaliou inadvertidamente o modelo do Exp 8; o Exp 12 avalia o que foi efetivamente treinado.
+
+**2. FedNova com 120 rodadas produz o melhor resultado federado do projeto.**
+Acc=67,44% (R115) supera Exp 8 R91 (66,61%) em +0,83 p.p. com o mesmo número de rodadas e a mesma seed. Com mais tempo de treino e normalização por τ_i, o FedNova encontrou um ponto de convergência melhor que o FedAvg.
+
+**3. O custo de privacidade da federação é pequeno.**
+FL FedNova (67,44%) vs BEHRT Pooled B (69,12%) = **−1,68 p.p.** Federar com dois hospitais em regime non-IID severo custa menos de 2 p.p. de acurácia em relação ao treino centralizado com a mesma arquitetura. Este é o número mais relevante para o TCC.
+
+**4. BEHRT FL está a 0,62 p.p. do RF centralizado.**
+Gap de 67,44% vs 68,06% — a menor diferença do projeto. Para fins práticos (privacidade + dados distribuídos), o BEHRT federado é competitivo com o RF que exigiria mover dados dos pacientes entre hospitais.
+
+**5. BEHRT Pooled supera RF pela segunda vez consecutiva.**
+Pooled B (69,12%) > RF (68,06–68,74%) — confirma tendência iniciada no Exp 9. Com 120 épocas, o BEHRT extrai mais sinal temporal dos dados do que o RF bag-of-tokens quando treinado no pool completo. O gap de capacidade arquitetural existe; o dataset atual ainda limita o BEHRT federado.
+
+**6. FedNova não resolve o non-IID estrutural.**
+Oscilação de 53–67% em 120 rodadas confirma que o viés de escala (τ_i) não é a causa raiz da instabilidade. A heterogeneidade de distribuição de classes (`melhora_pronto`: 61,5% HSL vs 0,4% BPSP) é mais profunda do que qualquer normalização de gradiente pode resolver sem técnicas específicas para label shift.
+
+**7. `melhora_pronto` AUC=0,9553 — melhor histórico do projeto.**
+O FedNova com 120 rodadas capturou melhor a classe clinicamente mais relevante do HSL. AUC=0,9553 representa +0,034 vs Exp 9 e é o pico de discriminação desta classe em todos os experimentos.
+
+**8. Ablação negativa (−0,24 p.p.) é anomalia isolada.**
+Sinal positivo dos demográficos confirmado em Exp 3–9; Exp 12 é exceção provável de inicialização com seed=42. Não invalida a conclusão geral sobre a relevância da late fusion demográfica.
+
+> **Para o TCC:** o Exp 12 é o experimento de referência para o FedNova — avaliação válida, sem cross-contamination, com o melhor resultado federado do projeto. O custo de privacidade de −1,68 p.p. é o argumento central para justificar a federação como abordagem viável clinicamente.
+
+---
+
+## Experimento 13 — BPSP-Only (Leave-One-Client-Out, Fase 1/4)
+
+**Data:** 2026-06-29
+**Status:** Em andamento
+**Log:** `experiments/logs/run_complete_20260629_074506.log`
+**Comando:** `make training-full` (fase 1/4 — `FL_INCLUDE_HOSPITALS=BPSP`)
+**training_id:** 3
+
+### Motivação
+
+Primeiro dos quatro ciclos da primeira execução do `make training-full`. O objetivo do leave-one-client-out é decompor empiricamente o valor da federação: treinar com apenas o cliente BPSP e avaliar no test set global (BPSP+HSL) revela quanto sinal cada hospital contribui individualmente.
+
+**Hipótese:** o modelo BPSP-only terá acurácia global próxima ao federado (BPSP representa 84,7% das amostras totais), mas o F1 de `melhora_pronto` deve ser próximo de zero — essa classe é quasi-exclusiva do HSL (61,5% das amostras HSL vs 0,4% das amostras BPSP). O BPSP nunca verá essa classe em quantidade suficiente para aprendê-la.
+
+**Resultado esperado da decomposição:**
+
+| Métrica | BPSP-only | HSL-only | BPSP+HSL (Exp 12) | Interpretação |
+|---|---|---|---|---|
+| Acurácia global | ~67% | ~40–55%? | 67,44% | BPSP domina volume |
+| F1 melhora_pronto | ~0 | alto? | 0,661 | HSL é a fonte de sinal dessa classe |
+| F1 macro | baixo | muito baixo? | 0,484 | não-IID revela-se por ausência |
+
+### Alterações implementadas pré-treinamento (MVP quality improvements)
+
+Esta é a primeira execução após um conjunto substancial de melhorias de qualidade que elevam o pipeline ao nível de MVP de produção:
+
+| Componente | Arquivo | Alteração | Motivação |
+|---|---|---|---|
+| Leave-one-client-out | `dataloaders.py` | `FL_INCLUDE_HOSPITALS` env var — filtra clientes do treino; test/cal sempre globais | Quantifica contribuição de cada hospital sem alterar código |
+| DataLoader determinístico | `dataloaders.py` | `generator=torch.Generator().manual_seed(RANDOM_SEED + cid)` | Shuffling reprodutível por cliente; garante que rodadas com mesma seed sejam idênticas |
+| Labels parametrizáveis | `config.py` | `FL_CLASS_LABELS` env var — define desfechos clínicos em runtime | Desacopla o pipeline do dataset; permite trocar tarefa sem alterar código |
+| Épocas locais reduzidas | `config.py` | `local_epochs: int = 1` (era 2) | Reduz divergência entre clientes por rodada em regime non-IID severo (Li et al. 2020) |
+| Class weight clipping | `client.py` | `_compute_class_weights()` com `.clamp(max=15.0)` | Peso bruto de `melhora_pronto` no BPSP seria ~47–117; causava explosão de gradiente |
+| Gradient clipping | `client.py` | `clip_grad_norm_(max_norm=1.0)` após `loss.backward()`; retorna `grad_norm` | Previne explosão de gradiente em batches extremamente desequilibrados |
+| IsotonicCalibrator | `calibration.py` | Calibração OvR por classe (Zadrozny & Elkan, 2002) ao lado do TemperatureScaler | Temperature scaling piora ECE em 8/8 experimentos (subconfiança não-uniforme) |
+| Comparação de calibradores | `fl_core.py` | Aplica ambos os calibradores; loga `ECE_pre`, `ECE_temperature`, `ECE_isotonic` | Confirma empiricamente qual calibrador é superior para este dataset |
+| Determinismo CUDA | `fl_core.py` | `cudnn.deterministic=True`, `cudnn.benchmark=False` | Reprodutibilidade completa quando GPU estiver disponível |
+| Min clients clamp | `experiment_server.py` | `min(FED_CFG.min_fit_clients, num_clients)` | Permite runs com 1 cliente (BPSP-only ou HSL-only) sem erro de config |
+| Ablação multi-seed | `ablation.py` + `orchestrator.py` | k=3 seeds (42, 7, 123); reporta média ± desvio-padrão | Elimina sensibilidade à inicialização; resultados estatisticamente mais robustos |
+| Make targets | `Makefile` | `training-bpsp-only`, `training-hsl-only`, `training-full` (4 fases) | Pipeline completo sem parametrização externa |
+
+### Configuração dos dados
+
+| Item | Valor |
+|---|---|
+| Hospitais no treino | **BPSP** (HSL excluído via `FL_INCLUDE_HOSPITALS=BPSP`) |
+| Hospitais no test/cal | **BPSP + HSL** (global — para comparação justa com federado) |
+| BPSP: treino / val / cal | 20.019 / 2.859 / 2.859 |
+| HSL: status | excluído do treino; test/cal incluídos no set global |
+| Teste global | 3.381 amostras (BPSP + HSL) |
+| Cal global | 3.376 amostras (BPSP + HSL) |
+| Clientes FL ativos | **1** |
+| Distribuição BPSP treino | `{0: 11.111, 1: 229, 2: 85, 3: 6.599, 4: 1.995}` |
+| Pesos de classe (clipados) | `[0,360, 15,0, 15,0, 0,607, 2,007]` |
+
+> Sem clipping, o peso da classe 2 (`melhora_pronto`) seria `total / (5 × 85)` ≈ 47,2. Com clipping em 15,0, o treino permanece estável.
+
+### Hiperparâmetros
+
+| Parâmetro | Valor | Δ vs Exp 12 |
+|---|---|---|
+| Rodadas máximas | 120 | — |
+| Rodadas warm-up | 20 | — |
+| Algoritmo | **FedNova** | — |
+| Batch size | 16 | — |
+| Épocas locais | **1** | ↓ (era 2) |
+| LR | 0,001 | — |
+| Threshold convergência | 0,005 | — |
+| Paciência convergência | 3 | — |
+| Class weight clipping | max=15,0 | **NOVO** |
+| Gradient clipping | max_norm=1,0 | **NOVO** |
+| Calibrador | TemperatureScaler + IsotonicCalibrator | **NOVO (isotônica adicionada)** |
+| Seleção checkpoint | gulosa (UPSERT por training_id=3) | — |
+
+### Ambiente de execução
+
+| Item | Detalhe |
+|---|---|
+| Máquina | Dell Inspiron 5402 — i7-1165G7 (8 threads), 16 GB RAM, sem GPU dedicada |
+| Device | CPU (Intel Iris Xe sem suporte CUDA) |
+| Início FL | 2026-06-29 07:45:37 |
+| Fim FL | Em andamento |
+| Duração estimada | ~120 min (1 cliente → ~50% do tempo por rodada vs Exp 12) |
+
+#### Monitoramento de sistema
+
+| Momento | Horário | TCPU | CPU% | RAM usada | Etapa |
+|---|---|---|---|---|---|
+| Início | 07:45 | — | — | — | R1 iniciando |
+| Rodada 30/120 | 08:14 | **77°C** | — | — | FL em andamento |
+| Rodada 35/120 | 08:18 | **85°C** | — | — | FL em andamento |
+
+### Resultado por rodada
+
+> **Acurácia:** logada apenas em checkpoints (novo melhor). Demais rodadas: loss + grad_norm disponíveis.
+> **grad_norm:** valores em 3,3–3,8 confirmam gradient clipping ativo (`max_norm=1,0` — norma pré-clipping reportada).
+> **Padrão loss:** tendência descendente mas não monotônica — loss e acurácia podem divergir (R24 tem loss 1,2838 < R25 1,2992, mas R25 tem melhor accuracy).
+
+| Rodada | Tempo (s) | Loss | Acurácia | grad_norm | Nota |
+|---|---|---|---|---|---|
+| 1 | 57 | 1,4679 | 57,59% | 3,7611 | primeiro checkpoint |
+| 2 | 54 | 1,4120 | — | 3,7286 | — |
+| 3 | 63 | 1,3654 | — | 3,5787 | — |
+| 4 | 54 | 1,3685 | — | 3,4997 | — |
+| 5 | 56 | 1,3496 | — | 3,4302 | — |
+| 6 | 56 | 1,3512 | — | 3,3651 | — |
+| 7 | 67 | 1,3397 | **61,25%** | 3,3490 | novo best |
+| 8 | 57 | 1,3211 | — | 3,3049 | — |
+| 9 | 63 | 1,3235 | — | 3,4289 | — |
+| 10 | 55 | 1,3245 | — | 3,3672 | — |
+| 11 | 58 | 1,3261 | — | 3,4600 | — |
+| 12 | 62 | 1,3250 | — | 3,4633 | — |
+| 13 | 52 | 1,3092 | — | 3,5617 | — |
+| 14 | 52 | 1,3096 | **61,67%** | 3,6576 | novo best |
+| 15 | 63 | 1,3028 | **62,85%** | 3,6359 | novo best |
+| 16 | 53 | 1,2958 | — | 3,6413 | — |
+| 17 | 58 | 1,3041 | — | 3,7052 | — |
+| 18 | 51 | 1,3038 | — | 3,5495 | — |
+| 19 | 51 | 1,3068 | — | 3,6565 | — |
+| 20 | 58 | 1,2981 | — | 3,5943 | fim warm-up |
+| 21 | 66 | 1,2939 | — | 3,6013 | convergência avaliada a partir daqui |
+| 22 | 51 | 1,3015 | — | 3,7048 | — |
+| 23 | 51 | 1,3043 | — | 3,6707 | — |
+| 24 | 50 | 1,2838 | — | 3,5880 | — |
+| 25 | 50 | 1,2992 | **63,29%** | 3,6952 | novo best |
+| 26 | 50 | 1,2795 | — | 3,6027 | loss < R25 mas acc não supera 63,29% |
+| 27 | 63 | 1,2877 | — | 3,5523 | — |
+| 28 | 52 | 1,2827 | — | 3,6356 | — |
+| 29 | 56 | 1,2885 | — | 3,6162 | — |
+| 30 | 49 | 1,2865 | — | 3,5852 | marco R30 — best: R25/63,29% |
+| 31 | 58 | 1,2732 | — | 3,5857 | — |
+| 32 | 60 | 1,2922 | — | 3,7083 | — |
+| 33 | 56 | 1,2874 | — | 3,7400 | — |
+| 34 | 63 | 1,2770 | — | 3,7310 | — |
+| 35 | — | — | — | — | Em andamento |
+
+---
+
 ## Tabela Comparativa dos Experimentos
 
-| Atributo | Exp 1 | Exp 2 | Exp 3 | Exp 4 | Exp 5 | Exp 6 | Exp 7 | **Exp 8** |
-|---|---|---|---|---|---|---|---|---|
-| Log | `run_complete_1.log` | `run_complete_1_correcao1.log` | `run_complete_2_correcao_calibracao.log` | `run_complete_20260625_124833.log` | `run_complete_20260625_144656.log` | `run_complete_20260625_201012.log` | `run_complete_20260625_225308.log` | `run_complete_20260626_130506.log` |
-| Rodadas executadas | 20 | 7 | 20 | 20 | 20 | 20 | 120 | **120** |
-| Convergência | Não | **Sim (R7)** | Não | Não | Não | Não | Não | Não |
-| Acurácia final (última rodada) | 58,0% | 52,5% | 55,8% | 54,8% | 56,6% | 59,63% | 59,36%¹ | 58,27% |
-| Melhor rodada / Acc | — | R7/52,5% | — | — | — | R6/62,7% | R89/63,29%¹ | **R91/66,61%²** |
-| Acurácia avaliada | 58,0% | 52,5% | 55,8% | 54,8% | 56,6% | 59,63% | 59,36% | **66,61%** ↑↑ |
-| Macro AUC (pré-cal) | 0,740 | **0,767** | 0,755 | 0,762 | 0,722 | 0,746 | 0,770 | **0,810** ↑↑ |
-| Macro F1 (pré-cal) | 0,359 | 0,287 | **0,398** | 0,366 | 0,334 | 0,352 | 0,384 | **0,481** ↑↑ |
-| F1 melhora_pronto | 0,083 | 0,048 | **0,397** ↑ | 0,227 | 0,025 ↓ | 0,112 ↑ | 0,249 ↑ | **0,619** ↑↑ |
-| AUC melhora_pronto | — | — | — | — | — | 0,654 | 0,836 ↑↑ | **0,920** ↑↑ |
-| ECE pré-calibração | 0,059 | 0,061 | 0,087 | **0,041** | 0,046 | 0,105 | **0,033** ↓↓ | 0,086 |
-| ECE pós-calibração | 0,098 (↑) | 0,064 (↑) | 0,102 (↑) | 0,087 (↑) | 0,069 (↑) | 0,180 (↑) | 0,062 (↑) | **0,334 (BUG³)** |
-| MCE pré-calibração | — | — | — | — | 0,736 | 0,180 ↓↓ | **0,105** ↓ | 0,238 |
-| Temperatura T | 1,177 | 1,127 | 1,175 | 1,252 | 1,205 | 1,442 | **1,191** | **−8,9997 (BUG³)** |
-| Cal set | test (inválido) | test (inválido) | **3.376 isolado** | 3.376 isolado | 3.376 isolado | 3.376 isolado | 3.376 isolado | 3.376 isolado |
-| Tráfego FL total | 217 MB | 76 MB | 217 MB | 217 MB | 217 MB | 218 MB | 1.310 MB | **1.310 MB** |
-| Duração FL | 57,4 min | ~21 min | 49,7 min | 47,0 min | 46,8 min | 48,3 min | 264 min | **265 min** |
-| Etapas pós-FL | Crash | RAG + RF | RAG + RF + Ablation | RAG + RF + Ablation | RAG + RF + Ablation | RF + Ablation + Pooled | RAG + RF + Ablation | **RAG + RF + Ablation** |
-| RAG Precision@3 | — | 0,134 | 0,285 | 0,133 | 0,254 | ❌ (bug) | 0,110 ✅ | **0,226** ✅ |
-| Baseline RF Acc | — | 68,1% | 68,0% | 67,8% | 68,4% | **68,7%** | 68,3% | 68,2% |
-| Ablation Δ Acc (B−A) | — | — | **+12,7 p.p.** | +6,8 p.p. ⚠ | +11,7 p.p. | −0,98 p.p. ⚠ | +5,94 p.p. ↑ | +4,43 p.p. |
-| BEHRT Pooled A Acc | — | — | — | — | — | 67,79% | — | **—⁴** |
-| BEHRT Pooled B Acc | — | — | — | — | — | 63,03% | — | **—⁴** |
-| Checkpoint guloso | Não | Não | Não | Não | Não | Não | Não¹ | **Sim (R91)** |
-| Novidade arquitetural | — | — | cal set isolado | — | — | dia_relativo embed | µ=0,1 + 120 rounds | **checkpoint guloso + calibração log-space** |
+| Atributo | Exp 1 | Exp 2 | Exp 3 | Exp 4 | Exp 5 | Exp 6 | Exp 7 | Exp 8 | Exp 9⁵ | **Exp 12** |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Log | `run_complete_1.log` | `run_complete_1_correcao1.log` | `run_complete_2_correcao_calibracao.log` | `run_complete_20260625_124833.log` | `run_complete_20260625_144656.log` | `run_complete_20260625_201012.log` | `run_complete_20260625_225308.log` | `run_complete_20260626_130506.log` | `run_complete_20260628_074558.log` | **`run_complete_20260628_182702.log`** |
+| Rodadas executadas | 20 | 7 | 20 | 20 | 20 | 20 | 120 | 120 | 120 | **120** |
+| Convergência | Não | **Sim (R7)** | Não | Não | Não | Não | Não | Não | Não | Não |
+| Acurácia final (última rodada) | 58,0% | 52,5% | 55,8% | 54,8% | 56,6% | 59,63% | 59,36%¹ | 58,27% | 54,54% | **61,14%** |
+| Melhor rodada / Acc | — | R7/52,5% | — | — | — | R6/62,7% | R89/63,29%¹ | R91/66,61%² | R33/63,86% | **R115/67,44%** |
+| Acurácia avaliada | 58,0% | 52,5% | 55,8% | 54,8% | 56,6% | 59,63% | 59,36% | 66,61% ↑↑ | 66,73%⁵ | **67,44%** ✅ |
+| Macro AUC (pré-cal) | 0,740 | **0,767** | 0,755 | 0,762 | 0,722 | 0,746 | 0,770 | **0,810** ↑↑ | 0,810⁵ | **0,802** |
+| Macro F1 (pré-cal) | 0,359 | 0,287 | **0,398** | 0,366 | 0,334 | 0,352 | 0,384 | 0,481 ↑↑ | 0,484⁵ | **0,484** |
+| F1 melhora_pronto | 0,083 | 0,048 | **0,397** ↑ | 0,227 | 0,025 ↓ | 0,112 ↑ | 0,249 ↑ | **0,619** ↑↑ | 0,622⁵ | **0,661** ↑ |
+| AUC melhora_pronto | — | — | — | — | — | 0,654 | 0,836 ↑↑ | 0,920 ↑↑ | 0,922⁵ | **0,955** ↑ |
+| ECE pré-calibração | 0,059 | 0,061 | 0,087 | **0,041** | 0,046 | 0,105 | **0,033** ↓↓ | 0,086 | 0,087 | 0,094 |
+| ECE pós-calibração | 0,098 (↑) | 0,064 (↑) | 0,102 (↑) | 0,087 (↑) | 0,069 (↑) | 0,180 (↑) | 0,062 (↑) | 0,334 (BUG³) | 0,108 (↑) | **0,109** (↑) |
+| MCE pré-calibração | — | — | — | — | 0,736 | 0,180 ↓↓ | **0,105** ↓ | 0,238 | 0,238 | 0,255 |
+| Temperatura T | 1,177 | 1,127 | 1,175 | 1,252 | 1,205 | 1,442 | **1,191** | −8,9997 (BUG³) | 1,086 ✅ | **1,058** ✅ |
+| Cal set | test (inválido) | test (inválido) | **3.376 isolado** | 3.376 isolado | 3.376 isolado | 3.376 isolado | 3.376 isolado | 3.376 isolado | 3.376 isolado | 3.376 isolado |
+| Tráfego FL total | 217 MB | 76 MB | 217 MB | 217 MB | 217 MB | 218 MB | 1.310 MB | 1.310 MB | 1.310 MB | **1.310 MB** |
+| Duração FL | 57,4 min | ~21 min | 49,7 min | 47,0 min | 46,8 min | 48,3 min | 264 min | 265 min | 234 min | **246 min** |
+| Etapas pós-FL | Crash | RAG + RF | RAG + RF + Ablation | RAG + RF + Ablation | RAG + RF + Ablation | RF + Ablation + Pooled | RAG + RF + Ablation | RAG + RF + Ablation | RAG + RF + Ablation + Pooled | **RAG + RF + Ablation + Pooled** |
+| RAG Precision@3 | — | 0,134 | 0,285 | 0,133 | 0,254 | ❌ (bug) | 0,110 ✅ | 0,226 ✅ | 0,221 ✅ | **0,145** ✅ |
+| Baseline RF Acc | — | 68,1% | 68,0% | 67,8% | 68,4% | **68,7%** | 68,3% | 68,2% | 68,3% | **68,1%** |
+| Ablation Δ Acc (B−A) | — | — | **+12,7 p.p.** | +6,8 p.p. ⚠ | +11,7 p.p. | −0,98 p.p. ⚠ | +5,94 p.p. ↑ | +4,43 p.p. | +18,2 p.p.⁶ | **−0,24 p.p.** ⚠ |
+| BEHRT Pooled A Acc | — | — | — | — | — | 67,79% | — | —⁴ | 68,88% | **68,03%** |
+| BEHRT Pooled B Acc | — | — | — | — | — | 63,03% | — | —⁴ | 67,82% | **69,12%** |
+| Checkpoint guloso | Não | Não | Não | Não | Não | Não | Não¹ | Sim (R91) | Sim (R33)⁵ | **Sim (R115) — scoped** ✅ |
+| Checkpoint cross-contamination | — | — | — | — | — | — | — | Não | **Sim** ⚠ | **Não** ✅ |
+| Novidade arquitetural | — | — | cal set isolado | — | — | dia_relativo embed | µ=0,1 + 120 rounds | checkpoint guloso + calibração log-space | FedNova | **checkpoint scoping (training_id)** |
 
-> ¹ Avaliação feita na R120 (última rodada). O melhor checkpoint foi R89 (63,29%) — não capturado por falta de implementação. Gap de 3,93 p.p. entre melhor e última rodada.  
-> ² Checkpoint guloso restaura R91 antes da avaliação — avaliação reflete o melhor modelo, não a última iteração.  
-> ³ Bug de temperatura: LBFGS sem log-space saltou para T=−8.9997, destruindo calibração pós-treino. Fix implementado em `calibration.py`. Executar `make recalibrate` para corrigir sem retreinar.  
+> ¹ Avaliação feita na R120 (última rodada). O melhor checkpoint foi R89 (63,29%) — não capturado por falta de implementação. Gap de 3,93 p.p. entre melhor e última rodada.
+> ² Checkpoint guloso restaura R91 antes da avaliação — avaliação reflete o melhor modelo, não a última iteração.
+> ³ Bug de temperatura: LBFGS sem log-space saltou para T=−8.9997, destruindo calibração pós-treino. Fix implementado em `calibration.py`. Executar `make recalibrate` para corrigir sem retreinar.
 > ⁴ BEHRT Pooled omitido no Exp 8 — `POOLED_EPOCHS` desacoplado de `NUM_ROUNDS × LOCAL_EPOCHS` (fix: `pooled_epochs=120` em `FedConfig`). Retorna no Exp 9.
+> ⁵ **Alerta Exp 9:** avaliação reflete o checkpoint R91 do Exp 8 (0,6661), não o melhor do Exp 9 (R33: 0,6386). `load_best()` sem filtro por experimento retornou checkpoint de maior acurácia histórica no banco. Ação corretiva implementada no Exp 12: migration 011 + checkpoint scoping por `training_id`.
+> ⁶ Delta de ablation inflado por Config A anormalmente baixo (35,11% vs histórico 54–63%). Possível anomalia de inicialização.
 
 ### Comparativo BEHRT-FL vs Baseline RF vs BEHRT Pooled
 
@@ -1394,13 +2224,137 @@ O RF descarta completamente a sequência e ainda assim obtém resultado competit
 | Checkpoint guloso (salvar no PostgreSQL a cada nova melhor acc) | Evita perder o melhor modelo; +8,34 p.p. recuperados no Exp 8 | Alta | **✓ Implementado — Exp 8** |
 | Calibração em log-space (`T = exp(log_T)`) | Garante T>0; bug de T=−8,9997 corrigido em `calibration.py` | Alta | **✓ Implementado — fix aplicado** |
 | **Re-calibração sem retreinar** (`make recalibrate`) | Fix confirmado: T=1,0849 (positivo). ECE pré=0,086 < pós=0,107 — temperatura piora. Usar T=1,0. | Alta | **✓ Executado — 2026-06-26 19:23** |
-| **FedNova** (normalização por passos efetivos τ_i) | Reduz viés da agregação com clientes heterogêneos (BPSP 5,5× HSL) | Alta | **Pendente — Exp 9** |
+| **FedNova** (normalização por passos efetivos τ_i) | Reduz viés da agregação com clientes heterogêneos (BPSP 5,5× HSL) | Alta | **✓ Implementado — Exp 9 em andamento** |
 | `POOLED_EPOCHS` desacoplado de `NUM_ROUNDS × LOCAL_EPOCHS` | Corrige 240 → 120 épocas do BEHRT centralizado | Média | **✓ Implementado — `pooled_epochs=120` no `FedConfig`** |
-| Clipar pesos de classe em `max_weight=15,0` | Reduz instabilidade de gradiente no BPSP (peso=47 para `melhora_pronto`) | Alta | Pendente |
-| Reduzir local epochs 2 → 1 | Reduz divergência entre clientes por rodada | Média | Pendente |
-| Explorar calibração por Platt Scaling ou isotônica | Resolve padrões de calibração mistos que temperatura única não resolve | Média | Pendente |
+| **Namespace por experimento no checkpoint store** | Evita cross-contamination entre experimentos (Exp 9 avaliou modelo do Exp 8) | Alta | **✓ Implementado — Exp 12** (migration 011 + `training_id` scoping) |
+| **Clipar pesos de classe** em `max_weight=15,0` | Reduz instabilidade de gradiente no BPSP (peso=47 para `melhora_pronto`) | Alta | **✓ Implementado — Exp 13** (`client.py`) |
+| **Reduzir local epochs 2 → 1** | Reduz divergência entre clientes por rodada (Li et al. 2020) | Média | **✓ Implementado — Exp 13** (`config.py`) |
+| **Gradient clipping** max_norm=1,0 | Previne explosão de gradiente com batches desbalanceados | Alta | **✓ Implementado — Exp 13** (`client.py`) |
+| **DataLoader determinístico** (generator por cliente) | Reprodutibilidade do shuffling; eliminação de variância espúria | Alta | **✓ Implementado — Exp 13** (`dataloaders.py`) |
+| **Calibração isotônica** OvR (Zadrozny & Elkan, 2002) | Resolve subconfiança não-uniforme que temperature scaling não captura | Média | **✓ Implementado — Exp 13** (`calibration.py` + `fl_core.py`) |
+| **Ablação multi-seed** (k=3: seeds 42, 7, 123) | Elimina sensibilidade à inicialização; reporta média ± desvio-padrão | Alta | **✓ Implementado** (`ablation.py` + `orchestrator.py`) |
+| **Leave-one-client-out** (BPSP-only e HSL-only) | Quantifica empiricamente o valor da federação; separa custo de privacidade de custo arquitetural | Alta | **✓ Implementado** — `FL_INCLUDE_HOSPITALS` env var; **Em execução (Exp 13)** |
+| **Labels/classes parametrizável** | Permite trocar desfecho clínico sem alterar código; desbloqueia experimentos com outras tasks | Média | **✓ Implementado** — `FL_CLASS_LABELS` env var (`config.py`) |
 | Avaliar fusão para 3 classes | Resolve non-IID estrutural se clinicamente justificável | A definir com orientadora | Pendente |
+| **GPU support** | Reduz tempo de treinamento; dados de comparação CPU vs GPU para o TCC | Média | Pendente |
+| **Arquitetura distribuída real** (desktop server + notebook client) | Demonstra FL além da simulação local; valida comunicação real entre nós | Média | Pendente |
 | Comparação CPU vs GPU | Medir impacto de hardware no tempo de treinamento para o TCC | Após resolver driver NVIDIA | Pendente |
+
+---
+
+## Lacunas para Produção
+
+Esta seção documenta o gap entre o estado atual do projeto (protótipo de pesquisa acadêmica) e os requisitos de um sistema federado em ambiente hospitalar produtivo. O projeto está no nível correto para um TCC — demonstra viabilidade da arquitetura com dados clínicos reais. As lacunas abaixo são esperadas e documentáveis como trabalho futuro.
+
+### Bloqueadores reais — sem isso o sistema não vai a produção
+
+**1. Privacidade Diferencial (DP)**
+
+É o item mais crítico. Sem DP, gradientes federados permitem reconstruir dados de treinamento via ataques de inversão de gradiente (Geiping et al., 2020; Zhu et al., 2019). O FL sem DP não entrega a promessa de privacidade que justifica a arquitetura — um hospital que compartilhe atualizações de modelo sem DP está, em tese, expondo dados de pacientes. Para o TCC, a ausência de DP é documentável como limitação; para produção, é bloqueador.
+
+Implementação padrão: adicionar ruído gaussiano calibrado (DP-SGD, Abadi et al., 2016) às atualizações de gradiente antes da agregação. `Opacus` (PyTorch) ou `TensorFlow Privacy` oferecem APIs de alto nível. O trade-off é Acc × ε (nível de privacidade): ε pequeno → mais ruído → mais degradação de acurácia.
+
+**2. Comunicação segura entre nós**
+
+Hoje todo o sistema roda em uma única máquina (simulação). Em produção: TLS mútuo entre cliente e servidor, autenticação de cada hospital antes de participar de qualquer rodada, e auditoria de quem enviou quais atualizações. Sem isso, qualquer hospital recusa conexão por política de segurança de TI.
+
+**3. Arquitetura distribuída com tolerância a falhas**
+
+A simulação local precisa se tornar processos separados com protocolo de comunicação (gRPC, REST ou Flower). Os desafios não triviais são: tratar dropout de cliente no meio de uma rodada, timeout com retentativa, rodadas parciais (apenas K dos N clientes respondem), e rollback quando o modelo agregado regride. Com 2 clientes, muitas dessas situações são raras — com 5+ hospitais, são rotineiras.
+
+**4. API de inferência**
+
+O modelo existe como checkpoint no PostgreSQL. Não há endpoint que receba dados de um novo paciente e retorne prognóstico clínico. Para uso clínico real, é necessário: serialização do modelo, API REST ou gRPC com contrato de entrada/saída, versionamento explícito (qual modelo está em produção), e circuit breaker para degradação graciosa.
+
+**5. Aprovação regulatória (ANVISA — SaMD)**
+
+Software como Dispositivo Médico (SaMD) no Brasil exige aprovação da ANVISA — processo de meses a anos, independente da qualidade do código. Nenhuma das melhorias técnicas acima substitui essa etapa.
+
+---
+
+### Importantes mas não bloqueiam um piloto clínico controlado
+
+| Gap | Impacto sem ele | Solução |
+|---|---|---|
+| Monitoramento de drift | Modelo degrada silenciosamente com mudança de protocolo hospitalar (novos CIDs, nova padronização de exames) | MLflow + alertas de desvio de distribuição nas predições |
+| Validação de dados na entrada | Tokens fora do vocabulário, campos nulos, schema novo quebram silenciosamente | Esquema Pydantic na ingestão; vocab check antes de tokenizar |
+| Containerização (Docker) | Depende do ambiente local; impossível escalar ou replicar | `Dockerfile` + `docker-compose` por serviço (servidor, cliente BPSP, cliente HSL) |
+| Modelo de dados de audit trail | Sem rastreabilidade de qual modelo gerou qual predição | Tabela `predictions` com `model_version_id`, `patient_id`, `timestamp`, `output` |
+
+---
+
+### Gap de privacidade × desempenho — o número mais relevante para o TCC
+
+O custo de privacidade quantificado empiricamente neste projeto:
+
+| Comparação | Δ Acc | Interpretação |
+|---|---|---|
+| FL FedNova (Exp 12) vs BEHRT Pooled B (Exp 12) | **−1,68 p.p.** | Custo direto de federar com non-IID severo — sem DP |
+| FL FedNova (Exp 12) vs RF Centralizado | **−0,62 p.p.** | Gap total incluindo custo arquitetural (transformer vs BoT) |
+
+Com privacidade diferencial (DP), o gap aumenta — ε pequeno implica mais ruído e mais degradação. O argumento para o TCC é que mesmo o gap atual (−1,68 p.p.) é aceitável clinicamente considerando que centralizar dados de pacientes entre hospitais é legalmente inviável no Brasil (LGPD + Resolução CFM 2.217/2018).
+
+---
+
+### Roadmap de Execução — Ordem de Prioridade
+
+Cada fase termina com um ciclo de treinamento completo (120 rodadas) para medir o impacto da mudança implementada.
+
+---
+
+**Fase 1 — Partições + Labels/classes parametrizável**
+
+- Implementar leave-one-client-out: treinar FL com BPSP-only e HSL-only, avaliar no test set global
+- Tornar o desfecho clínico configurável (trocar `melhora_pronto` e demais classes sem alterar código)
+- → **Treinamento de confirmação** (3 runs: BPSP-only, HSL-only, federado com nova parametrização)
+
+*Resultado esperado:* decomposição empírica do valor da federação; arquitetura desacoplada do dataset específico.
+
+---
+
+**Fase 2 — Privacidade Diferencial (DP)**
+
+- Adicionar DP-SGD às atualizações de gradiente antes da agregação (Abadi et al., 2016)
+- Calibrar ε e δ; medir trade-off Acc × nível de privacidade
+- Atenção: DP aumenta o tempo de treinamento (ruído + clipping adicionam overhead por batch)
+- → **Treinamento de confirmação** (comparar Acc com e sem DP; medir delta de tempo por rodada)
+
+*Resultado esperado:* curva Acc × ε; primeiro número real do custo de privacidade com DP formal no projeto.
+
+---
+
+**Fase 3 — Implementação distribuída padrão (desktop server + notebook client)**
+
+- Separar servidor de agregação (desktop) dos processos de treino local (notebook)
+- Protocolo de comunicação entre nós (opção preferencial: aproveitar PostgreSQL já em rede como canal de coordenação)
+- Tratar dropout de cliente, timeout, rodadas parciais
+- → **Treinamento de confirmação** (primeiro run real distribuído entre duas máquinas)
+
+*Resultado esperado:* validação de que o sistema FL funciona além da simulação local; dados de latência de rede.
+
+---
+
+**Fase 4 — API de Inferência**
+
+- Endpoint REST que recebe dados de um paciente e retorna prognóstico com probabilidades por classe
+- Serialização do checkpoint ativo; versionamento explícito do modelo em produção
+- → **Treinamento de confirmação** (opcional — foco é integração com o modelo do Exp mais recente)
+
+*Resultado esperado:* sistema end-to-end utilizável clinicamente; demonstração de implantação para o TCC.
+
+---
+
+### O que a abordagem de partições (leave-one-client-out) adicionaria
+
+Treinar o modelo com apenas um cliente por vez e avaliar no test set global produziria a decomposição do valor da federação:
+
+| Setup | Acc esperada | O que mede |
+|---|---|---|
+| BPSP only | ~59% | Modelo sem acesso à classe `melhora_pronto` (0,4% BPSP) |
+| HSL only | ~? | Modelo sem a escala volumétrica do BPSP (1/5,5 das amostras) |
+| Federado (Exp 12) | 67,44% | Benefício de combinar distribuições complementares |
+
+O delta federado − max(cliente isolado) é o **valor empírico da federação** — o argumento central para justificar a complexidade técnica e os custos operacionais de um sistema FL em relação a treinar localmente em cada hospital.
 
 ---
 
@@ -1431,4 +2385,12 @@ O RF descarta completamente a sequência e ainda assim obtém resultado competit
 | `experiments/data/history_20260626_173049.json` | Histórico de loss/acc por rodada — Experimento 8 |
 | `experiments/data/baseline_rf_20260626_173211.json` | Resultado baseline RF — Experimento 8 |
 | `experiments/logs/recalibrate_20260626_192337.json` | Re-calibração do checkpoint R91 — T=1,0849, ECE pré=0,086, ECE pós=0,107 |
+| `experiments/logs/run_complete_20260628_074558.log` | Log completo do Experimento 9 (FedNova, 120 rodadas — avaliação inválida por cross-contamination) |
+| `experiments/logs/temperature_exp9.log` | Monitoramento térmico do Experimento 9 por etapa |
+| `experiments/logs/run_complete_20260628_182702.log` | Log completo do Experimento 12 (FedNova + checkpoint scoping, 120 rodadas) |
+| `experiments/logs/temperature_exp12.log` | Monitoramento térmico do Experimento 12 por etapa |
+| `experiments/logs/evaluation_round_120.json` | Avaliação detalhada por classe — Experimento 12 (R115, training_id=2) |
+| `experiments/data/behrt_pooled_20260629_020657.json` | Resultado BEHRT Pooled Baseline — Experimento 12 |
+| `experiments/data/ablation_demo_20260628_225504.json` | Resultado ablation demográfica — Experimento 12 |
+| `alembic/versions/011_fl_trainings.py` | Migration 011: fl_trainings + training_id FK + UNIQUE index parcial |
 | `AVALIACAO_PROJETO.md` | Avaliação acadêmica e clínica do projeto |

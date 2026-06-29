@@ -1,0 +1,124 @@
+2026-06-25 15:57:48,185 [INFO] setup plugin alembic.autogenerate.schemas
+2026-06-25 15:57:48,185 [INFO] setup plugin alembic.autogenerate.tables
+2026-06-25 15:57:48,185 [INFO] setup plugin alembic.autogenerate.types
+2026-06-25 15:57:48,185 [INFO] setup plugin alembic.autogenerate.constraints
+2026-06-25 15:57:48,185 [INFO] setup plugin alembic.autogenerate.defaults
+2026-06-25 15:57:48,185 [INFO] setup plugin alembic.autogenerate.comments
+2026-06-25 15:57:49,872 [INFO] ============================================================
+2026-06-25 15:57:49,872 [INFO] MOSAIC-FL — BEHRT Pooled Baseline (Artefato de Pesquisa)
+2026-06-25 15:57:49,872 [INFO] Autora: Jacqueline Abreu | ICMC/USP
+2026-06-25 15:57:49,872 [INFO] AVISO: Este script não deve ser executado em produção.
+2026-06-25 15:57:49,872 [INFO] ============================================================
+2026-06-25 15:57:49,872 [INFO] [1/3] Carregando dados do banco (SequencePipeline)...
+2026-06-25 15:57:49,872 [INFO] [db] Iniciando carregamento via SequencePipeline...
+2026-06-25 15:57:49,872 [INFO] [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+2026-06-25 15:57:49,890 [INFO] [pipeline] conexão OK
+2026-06-25 15:57:49,890 [INFO] [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+2026-06-25 15:58:11,502 [INFO] [pipeline] query concluída em 21.6s — 4,145,906 linhas
+2026-06-25 15:58:11,680 [INFO] [pipeline/per_hospital] hospitais encontrados: ['BPSP', 'HSL']
+2026-06-25 15:58:11,680 [INFO] [pipeline/per_hospital] construindo vocabulário global...
+2026-06-25 15:58:12,867 [INFO] vocab_built mode=FULL tokens=645 total=648
+2026-06-25 15:58:12,890 [INFO] [pipeline/per_hospital] vocabulário: 648 tokens em 1.2s
+2026-06-25 15:58:14,037 [INFO] [pipeline/per_hospital] BPSP: construindo tensores (28,599 atendimentos)...
+2026-06-25 15:58:15,989 [INFO] [pipeline] tensores: 2,859/28,599 (10%)
+2026-06-25 15:58:16,211 [INFO] [pipeline] tensores: 5,718/28,599 (20%)
+2026-06-25 15:58:16,433 [INFO] [pipeline] tensores: 8,577/28,599 (30%)
+2026-06-25 15:58:16,654 [INFO] [pipeline] tensores: 11,436/28,599 (40%)
+2026-06-25 15:58:16,876 [INFO] [pipeline] tensores: 14,295/28,599 (50%)
+2026-06-25 15:58:17,098 [INFO] [pipeline] tensores: 17,154/28,599 (60%)
+2026-06-25 15:58:17,319 [INFO] [pipeline] tensores: 20,013/28,599 (70%)
+2026-06-25 15:58:17,543 [INFO] [pipeline] tensores: 22,872/28,599 (80%)
+2026-06-25 15:58:17,765 [INFO] [pipeline] tensores: 25,731/28,599 (90%)
+2026-06-25 15:58:17,987 [INFO] [pipeline] tensores: 28,590/28,599 (100%)
+2026-06-25 15:58:18,152 [INFO] [pipeline/per_hospital] BPSP: 28,599 sequências em 4.1s | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | age_mean=0.51 sex_M=13664
+2026-06-25 15:58:18,604 [INFO] [pipeline/per_hospital] HSL: construindo tensores (5,174 atendimentos)...
+2026-06-25 15:58:18,959 [INFO] [pipeline] tensores: 517/5,174 (10%)
+2026-06-25 15:58:19,000 [INFO] [pipeline] tensores: 1,034/5,174 (20%)
+2026-06-25 15:58:19,042 [INFO] [pipeline] tensores: 1,551/5,174 (30%)
+2026-06-25 15:58:19,082 [INFO] [pipeline] tensores: 2,068/5,174 (40%)
+2026-06-25 15:58:19,124 [INFO] [pipeline] tensores: 2,585/5,174 (50%)
+2026-06-25 15:58:19,164 [INFO] [pipeline] tensores: 3,102/5,174 (60%)
+2026-06-25 15:58:19,206 [INFO] [pipeline] tensores: 3,619/5,174 (70%)
+2026-06-25 15:58:19,246 [INFO] [pipeline] tensores: 4,136/5,174 (80%)
+2026-06-25 15:58:19,288 [INFO] [pipeline] tensores: 4,653/5,174 (90%)
+2026-06-25 15:58:19,336 [INFO] [pipeline] tensores: 5,170/5,174 (100%)
+2026-06-25 15:58:19,367 [INFO] [pipeline/per_hospital] HSL: 5,174 sequências em 0.8s | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | age_mean=0.52 sex_M=2859
+2026-06-25 15:58:19,367 [INFO] [pipeline/per_hospital] concluído em 29.5s total
+2026-06-25 15:58:19,575 [INFO] [db] Hospital BPSP → cliente 0: 20019 treino | 2859 val | 2859 cal | age_mean=0.51 sex_M=9591
+2026-06-25 15:58:19,576 [INFO] [db] Hospital HSL → cliente 1: 3621 treino | 517 val | 517 cal | age_mean=0.52 sex_M=1981
+2026-06-25 15:58:19,576 [INFO] [db] Teste global: 3381 amostras | Cal global: 3376 amostras | 2 clientes FL
+2026-06-25 15:58:19,579 [INFO] [2/3] BEHRT pooled baseline (pool BPSP+HSL)...
+2026-06-25 15:58:19,581 [INFO] ============================================================
+2026-06-25 15:58:19,581 [INFO] POOLED BASELINE — SimplifiedBEHRT (artefato de pesquisa)
+2026-06-25 15:58:19,581 [INFO]   Este experimento NUNCA deve rodar em produção.
+2026-06-25 15:58:19,581 [INFO]   Épocas: 40 (= NUM_ROUNDS × LOCAL_EPOCHS) | seed: 42
+2026-06-25 15:58:19,581 [INFO]   Fonte demográficos: dados reais FAPESP
+2026-06-25 15:58:19,581 [INFO] ============================================================
+2026-06-25 15:58:19,721 [INFO]   Pool total: 23640 amostras (BPSP + HSL combinados)
+2026-06-25 15:58:19,721 [INFO] 
+[Pooled] Treinando behrt_pooled_A_sem_demo (demo_dim=0)...
+2026-06-25 16:06:47,419 [INFO]     época 8/40 loss=1.0178
+2026-06-25 16:15:01,899 [INFO]     época 16/40 loss=0.9988
+2026-06-25 16:22:29,910 [INFO]     época 24/40 loss=0.9706
+2026-06-25 16:29:24,268 [INFO]     época 32/40 loss=0.9610
+2026-06-25 16:35:59,594 [INFO]     época 40/40 loss=0.9438
+2026-06-25 16:36:00,725 [INFO]   behrt_pooled_A_sem_demo: Acc=0.6347 | F1=0.4964
+2026-06-25 16:36:00,725 [INFO] 
+[Pooled] Treinando behrt_pooled_B_late_fusion (demo_dim=2)...
+2026-06-25 16:45:07,527 [INFO]     época 8/40 loss=1.0157
+2026-06-25 16:53:39,709 [INFO]     época 16/40 loss=0.9920
+2026-06-25 17:01:04,398 [INFO]     época 24/40 loss=0.9664
+2026-06-25 17:07:44,877 [INFO]     época 32/40 loss=0.9530
+2026-06-25 17:14:22,583 [INFO]     época 40/40 loss=0.9341
+2026-06-25 17:14:23,819 [INFO]   behrt_pooled_B_late_fusion: Acc=0.6359 | F1=0.4942
+2026-06-25 17:14:23,820 [INFO] 
+======================================================================
+2026-06-25 17:14:23,820 [INFO] RESULTADO POOLED BASELINE
+2026-06-25 17:14:23,820 [INFO] ======================================================================
+2026-06-25 17:14:23,820 [INFO] Variante                                 Accuracy F1 Macro
+2026-06-25 17:14:23,820 [INFO] ------------------------------------------------------------
+2026-06-25 17:14:23,820 [INFO] behrt_pooled_A_sem_demo                    0.6347   0.4964
+2026-06-25 17:14:23,820 [INFO] behrt_pooled_B_late_fusion                 0.6359   0.4942
+2026-06-25 17:14:23,820 [INFO] Δ (B − A)                                 +0.0012  -0.0022
+2026-06-25 17:14:23,820 [INFO] ======================================================================
+2026-06-25 17:14:23,822 [INFO] [3/3] RF centralizado (referência comparativa de arquitetura)...
+2026-06-25 17:14:23,858 [INFO] ============================================================
+2026-06-25 17:14:23,858 [INFO] BASELINE — Random Forest (Bag-of-Tokens)
+2026-06-25 17:14:23,858 [INFO] ============================================================
+2026-06-25 17:14:23,858 [INFO]   vocab_size: 10000 | classes: ['curado_pronto', 'curado_internado', 'melhora_pronto', 'melhora_internado_breve', 'melhora_internado_grave']
+2026-06-25 17:14:23,954 [INFO]   Teste: 3381 amostras | distribuição: {'curado_pronto': 1620, 'curado_internado': 28, 'melhora_pronto': 321, 'melhora_internado_breve': 1074, 'melhora_internado_grave': 338}
+2026-06-25 17:14:23,954 [INFO] 
+[Opção A] RF Centralizado — pool de todos os clientes
+2026-06-25 17:14:24,539 [INFO]   Cliente 0: 20019 amostras
+2026-06-25 17:14:24,643 [INFO]   Cliente 1: 3621 amostras
+2026-06-25 17:14:24,834 [INFO]   Pool total: 23640 amostras
+2026-06-25 17:14:35,662 [INFO]   Resultado → Acc=0.6773  AUC=0.7877  F1=0.5018  ECE=0.0569
+2026-06-25 17:14:35,662 [INFO] 
+[Opção B] RF por Hospital — modelo independente por cliente
+2026-06-25 17:14:43,936 [INFO]   Hospital 0: Acc=0.5921  AUC=0.7394  F1=0.3367  (treino=20019, classes_locais=5)
+2026-06-25 17:14:44,874 [INFO]   Hospital 1: Acc=0.2585  AUC=0.6978  F1=0.1884  (treino=3621, classes_locais=5)
+2026-06-25 17:14:44,874 [INFO] 
+============================================================
+2026-06-25 17:14:44,874 [INFO] TABELA COMPARATIVA — Baseline vs. BEHRT (FL)
+2026-06-25 17:14:44,874 [INFO] ============================================================
+2026-06-25 17:14:44,874 [INFO] Modelo                                     Accuracy  AUC-ROC F1 Macro     ECE
+2026-06-25 17:14:44,874 [INFO] ----------------------------------------------------------------------------
+2026-06-25 17:14:44,874 [INFO] RF Centralizado (BoT)                        0.6773   0.7877   0.5018   0.0569
+2026-06-25 17:14:44,874 [INFO]   RF Hospital 0 (BoT)                        0.5921   0.7394   0.3367   0.0466
+2026-06-25 17:14:44,874 [INFO]   RF Hospital 1 (BoT)                        0.2585   0.6978   0.1884   0.2341
+2026-06-25 17:14:44,874 [INFO] ----------------------------------------------------------------------------
+2026-06-25 17:14:44,874 [INFO] SimplifiedBEHRT (FL) — ver evaluation_round_*.json
+2026-06-25 17:14:44,874 [INFO] ============================================================
+2026-06-25 17:14:44,880 [INFO] Resultado salvo: experiments/data/behrt_pooled_20260625_171444.json
+2026-06-25 17:14:44,880 [INFO] 
+======================================================================
+2026-06-25 17:14:44,880 [INFO] RESUMO — Custo de Privacidade da Federação (BEHRT × BEHRT)
+2026-06-25 17:14:44,880 [INFO] ======================================================================
+2026-06-25 17:14:44,880 [INFO] Configuração                                  Accuracy F1 Macro
+2026-06-25 17:14:44,880 [INFO] -----------------------------------------------------------------
+2026-06-25 17:14:44,880 [INFO] behrt_pooled_A_sem_demo                         0.6347   0.4964
+2026-06-25 17:14:44,880 [INFO] behrt_pooled_B_late_fusion                      0.6359   0.4942
+2026-06-25 17:14:44,880 [INFO] rf_centralizado (bag-of-tokens)                 0.6773   0.5018
+2026-06-25 17:14:44,880 [INFO] -----------------------------------------------------------------
+2026-06-25 17:14:44,880 [INFO] Compare behrt_pooled_B_late_fusion com FL Config B (ablation study) para o custo real de privacidade (mesma arquitetura, mesmo split).
+2026-06-25 17:14:44,880 [INFO] ======================================================================

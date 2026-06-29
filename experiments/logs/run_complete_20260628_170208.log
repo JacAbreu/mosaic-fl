@@ -1,0 +1,132 @@
+2026-06-28 17:02:09,874 [INFO] setup plugin alembic.autogenerate.schemas
+2026-06-28 17:02:09,874 [INFO] setup plugin alembic.autogenerate.tables
+2026-06-28 17:02:09,874 [INFO] setup plugin alembic.autogenerate.types
+2026-06-28 17:02:09,874 [INFO] setup plugin alembic.autogenerate.constraints
+2026-06-28 17:02:09,874 [INFO] setup plugin alembic.autogenerate.defaults
+2026-06-28 17:02:09,874 [INFO] setup plugin alembic.autogenerate.comments
+2026-06-28 17:02:11,554 [INFO] ============================================================
+2026-06-28 17:02:11,554 [INFO] MOSAIC-FL — Treinamento Federado com Dados Reais FAPESP
+2026-06-28 17:02:11,554 [INFO] Autora: Jacqueline Abreu | ICMC/USP
+2026-06-28 17:02:11,554 [INFO] ============================================================
+2026-06-28 17:02:11,554 [INFO] Ambiente: production | Log: experiments/logs/run_complete_20260628_170208.log
+2026-06-28 17:02:11,568 [INFO] postgres_metrics_store_ready
+2026-06-28 17:02:11,568 [INFO] [1/5] Carregando dados do banco (SequencePipeline)...
+2026-06-28 17:02:11,568 [INFO] [db] Iniciando carregamento via SequencePipeline...
+2026-06-28 17:02:11,568 [INFO] [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+2026-06-28 17:02:11,581 [INFO] [pipeline] conexão OK
+2026-06-28 17:02:11,581 [INFO] [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+2026-06-28 17:02:31,660 [INFO] [pipeline] query concluída em 20.1s — 4,145,906 linhas
+2026-06-28 17:02:31,827 [INFO] [pipeline/per_hospital] hospitais encontrados: ['BPSP', 'HSL']
+2026-06-28 17:02:31,828 [INFO] [pipeline/per_hospital] construindo vocabulário global...
+2026-06-28 17:02:32,883 [INFO] vocab_built mode=FULL tokens=645 total=648
+2026-06-28 17:02:32,906 [INFO] [pipeline/per_hospital] vocabulário: 648 tokens em 1.1s
+2026-06-28 17:02:33,936 [INFO] [pipeline/per_hospital] BPSP: construindo tensores (28,599 atendimentos)...
+2026-06-28 17:02:35,748 [INFO] [pipeline] tensores: 2,859/28,599 (10%)
+2026-06-28 17:02:35,975 [INFO] [pipeline] tensores: 5,718/28,599 (20%)
+2026-06-28 17:02:36,201 [INFO] [pipeline] tensores: 8,577/28,599 (30%)
+2026-06-28 17:02:36,430 [INFO] [pipeline] tensores: 11,436/28,599 (40%)
+2026-06-28 17:02:36,657 [INFO] [pipeline] tensores: 14,295/28,599 (50%)
+2026-06-28 17:02:36,885 [INFO] [pipeline] tensores: 17,154/28,599 (60%)
+2026-06-28 17:02:37,112 [INFO] [pipeline] tensores: 20,013/28,599 (70%)
+2026-06-28 17:02:37,339 [INFO] [pipeline] tensores: 22,872/28,599 (80%)
+2026-06-28 17:02:37,565 [INFO] [pipeline] tensores: 25,731/28,599 (90%)
+2026-06-28 17:02:37,796 [INFO] [pipeline] tensores: 28,590/28,599 (100%)
+2026-06-28 17:02:38,081 [INFO] [pipeline/per_hospital] BPSP: 28,599 sequências em 4.1s | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | age_mean=0.51 sex_M=13664
+2026-06-28 17:02:38,517 [INFO] [pipeline/per_hospital] HSL: construindo tensores (5,174 atendimentos)...
+2026-06-28 17:02:38,858 [INFO] [pipeline] tensores: 517/5,174 (10%)
+2026-06-28 17:02:38,902 [INFO] [pipeline] tensores: 1,034/5,174 (20%)
+2026-06-28 17:02:38,946 [INFO] [pipeline] tensores: 1,551/5,174 (30%)
+2026-06-28 17:02:38,989 [INFO] [pipeline] tensores: 2,068/5,174 (40%)
+2026-06-28 17:02:39,033 [INFO] [pipeline] tensores: 2,585/5,174 (50%)
+2026-06-28 17:02:39,077 [INFO] [pipeline] tensores: 3,102/5,174 (60%)
+2026-06-28 17:02:39,120 [INFO] [pipeline] tensores: 3,619/5,174 (70%)
+2026-06-28 17:02:39,164 [INFO] [pipeline] tensores: 4,136/5,174 (80%)
+2026-06-28 17:02:39,208 [INFO] [pipeline] tensores: 4,653/5,174 (90%)
+2026-06-28 17:02:39,251 [INFO] [pipeline] tensores: 5,170/5,174 (100%)
+2026-06-28 17:02:39,306 [INFO] [pipeline/per_hospital] HSL: 5,174 sequências em 0.8s | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | age_mean=0.52 sex_M=2859
+2026-06-28 17:02:39,306 [INFO] [pipeline/per_hospital] concluído em 27.7s total
+2026-06-28 17:02:39,508 [INFO] [db] Hospital BPSP → cliente 0: 20019 treino | 2859 val | 2859 cal | age_mean=0.51 sex_M=9591
+2026-06-28 17:02:39,509 [INFO] [db] Hospital HSL → cliente 1: 3621 treino | 517 val | 517 cal | age_mean=0.52 sex_M=1981
+2026-06-28 17:02:39,509 [INFO] [db] Teste global: 3381 amostras | Cal global: 3376 amostras | 2 clientes FL
+2026-06-28 17:02:39,513 [INFO] [2/5] Aprendizado Federado...
+2026-06-28 17:02:39,513 [INFO] Modo manual ativado (USE_RAY=False). Ray NÃO é necessário.
+2026-06-28 17:02:39,514 [INFO] ============================================================
+2026-06-28 17:02:39,514 [INFO] APRENDIZADO FEDERADO — SIMULAÇÃO MANUAL (SEM RAY)
+2026-06-28 17:02:39,514 [INFO] ============================================================
+2026-06-28 17:02:39,514 [INFO] Clientes: 2 | Rodadas: até 120 | Agregação: FedNova | seed=42
+2026-06-28 17:02:39,518 [INFO] postgres_checkpoint_store_ready
+2026-06-28 17:02:39,556 [INFO] training_registered_postgres id=1 algorithm=FedNova
+2026-06-28 17:02:39,556 [INFO] training_registered id=1 algorithm=FedNova n_rounds_max=120
+2026-06-28 17:02:39,556 [INFO] 
+============================================================
+2026-06-28 17:02:39,557 [INFO] RODADA 1/120
+2026-06-28 17:02:39,557 [INFO] ============================================================
+2026-06-28 17:02:39,557 [INFO]   [Cliente 0] Treinando...
+2026-06-28 17:02:39,654 [INFO] class_weights client_id=0 weights=[0.36, 17.484, 47.104, 0.607, 2.007] counts={0: 11111, 4: 1995, 3: 6599, 1: 229, 2: 85}
+2026-06-28 17:04:37,285 [INFO]   [Cliente 0] Loss: 1.4826 | Amostras: 20019 | τ=2504
+2026-06-28 17:04:37,285 [INFO]   [Cliente 1] Treinando...
+2026-06-28 17:04:37,300 [INFO] class_weights client_id=1 weights=[15.743, 25.864, 0.324, 0.813, 1.724] counts={3: 891, 2: 2236, 4: 420, 0: 46, 1: 28}
+2026-06-28 17:05:00,805 [INFO]   [Cliente 1] Loss: 1.5406 | Amostras: 3621 | τ=454
+2026-06-28 17:05:00,805 [INFO]   [Servidor] Agregando pesos de 2 clientes...
+2026-06-28 17:05:00,809 [INFO]   [FedNova] τ=[2504, 454] | τ_eff=2190.0
+2026-06-28 17:05:02,302 [INFO]   [Servidor] Rodada 1 em 142.75s | Loss: 1.3267 | Acc: 0.3588
+2026-06-28 17:05:03,864 [INFO] setup plugin alembic.autogenerate.schemas
+2026-06-28 17:05:03,864 [INFO] setup plugin alembic.autogenerate.tables
+2026-06-28 17:05:03,864 [INFO] setup plugin alembic.autogenerate.types
+2026-06-28 17:05:03,864 [INFO] setup plugin alembic.autogenerate.constraints
+2026-06-28 17:05:03,864 [INFO] setup plugin alembic.autogenerate.defaults
+2026-06-28 17:05:03,864 [INFO] setup plugin alembic.autogenerate.comments
+2026-06-28 17:05:05,401 [INFO] ============================================================
+2026-06-28 17:05:05,401 [INFO] MOSAIC-FL — BEHRT Pooled Baseline (Artefato de Pesquisa)
+2026-06-28 17:05:05,401 [INFO] Autora: Jacqueline Abreu | ICMC/USP
+2026-06-28 17:05:05,401 [INFO] AVISO: Este script não deve ser executado em produção.
+2026-06-28 17:05:05,401 [INFO] ============================================================
+2026-06-28 17:05:05,401 [INFO] [1/3] Carregando dados do banco (SequencePipeline)...
+2026-06-28 17:05:05,401 [INFO] [db] Iniciando carregamento via SequencePipeline...
+2026-06-28 17:05:05,401 [INFO] [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+2026-06-28 17:05:05,417 [INFO] [pipeline] conexão OK
+2026-06-28 17:05:05,417 [INFO] [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+2026-06-28 17:05:25,471 [INFO] [pipeline] query concluída em 20.1s — 4,145,906 linhas
+2026-06-28 17:05:25,634 [INFO] [pipeline/per_hospital] hospitais encontrados: ['BPSP', 'HSL']
+2026-06-28 17:05:25,634 [INFO] [pipeline/per_hospital] construindo vocabulário global...
+2026-06-28 17:05:26,708 [INFO] vocab_built mode=FULL tokens=646 total=649
+2026-06-28 17:05:26,731 [INFO] [pipeline/per_hospital] vocabulário: 649 tokens em 1.1s
+2026-06-28 17:05:27,782 [INFO] [pipeline/per_hospital] BPSP: construindo tensores (28,599 atendimentos)...
+2026-06-28 17:05:29,657 [INFO] [pipeline] tensores: 2,859/28,599 (10%)
+2026-06-28 17:05:29,891 [INFO] [pipeline] tensores: 5,718/28,599 (20%)
+2026-06-28 17:05:30,128 [INFO] [pipeline] tensores: 8,577/28,599 (30%)
+2026-06-28 17:05:30,362 [INFO] [pipeline] tensores: 11,436/28,599 (40%)
+2026-06-28 17:05:30,601 [INFO] [pipeline] tensores: 14,295/28,599 (50%)
+2026-06-28 17:05:30,837 [INFO] [pipeline] tensores: 17,154/28,599 (60%)
+2026-06-28 17:05:31,068 [INFO] [pipeline] tensores: 20,013/28,599 (70%)
+2026-06-28 17:05:31,301 [INFO] [pipeline] tensores: 22,872/28,599 (80%)
+2026-06-28 17:05:31,541 [INFO] [pipeline] tensores: 25,731/28,599 (90%)
+2026-06-28 17:05:31,779 [INFO] [pipeline] tensores: 28,590/28,599 (100%)
+2026-06-28 17:05:32,070 [INFO] [pipeline/per_hospital] BPSP: 28,599 sequências em 4.3s | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | age_mean=0.51 sex_M=13664
+2026-06-28 17:05:32,516 [INFO] [pipeline/per_hospital] HSL: construindo tensores (5,174 atendimentos)...
+2026-06-28 17:05:32,865 [INFO] [pipeline] tensores: 517/5,174 (10%)
+2026-06-28 17:05:32,912 [INFO] [pipeline] tensores: 1,034/5,174 (20%)
+2026-06-28 17:05:32,956 [INFO] [pipeline] tensores: 1,551/5,174 (30%)
+2026-06-28 17:05:33,000 [INFO] [pipeline] tensores: 2,068/5,174 (40%)
+2026-06-28 17:05:33,043 [INFO] [pipeline] tensores: 2,585/5,174 (50%)
+2026-06-28 17:05:33,088 [INFO] [pipeline] tensores: 3,102/5,174 (60%)
+2026-06-28 17:05:33,132 [INFO] [pipeline] tensores: 3,619/5,174 (70%)
+2026-06-28 17:05:33,175 [INFO] [pipeline] tensores: 4,136/5,174 (80%)
+2026-06-28 17:05:33,219 [INFO] [pipeline] tensores: 4,653/5,174 (90%)
+2026-06-28 17:05:33,264 [INFO] [pipeline] tensores: 5,170/5,174 (100%)
+2026-06-28 17:05:33,319 [INFO] [pipeline/per_hospital] HSL: 5,174 sequências em 0.8s | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | age_mean=0.52 sex_M=2859
+2026-06-28 17:05:33,319 [INFO] [pipeline/per_hospital] concluído em 27.9s total
+2026-06-28 17:05:33,527 [INFO] [db] Hospital BPSP → cliente 0: 20019 treino | 2859 val | 2859 cal | age_mean=0.51 sex_M=9591
+2026-06-28 17:05:33,528 [INFO] [db] Hospital HSL → cliente 1: 3621 treino | 517 val | 517 cal | age_mean=0.52 sex_M=1981
+2026-06-28 17:05:33,529 [INFO] [db] Teste global: 3381 amostras | Cal global: 3376 amostras | 2 clientes FL
+2026-06-28 17:05:33,529 [INFO] [2/3] BEHRT pooled baseline (pool BPSP+HSL)...
+2026-06-28 17:05:33,531 [INFO] ============================================================
+2026-06-28 17:05:33,531 [INFO] POOLED BASELINE — SimplifiedBEHRT (artefato de pesquisa)
+2026-06-28 17:05:33,531 [INFO]   Este experimento NUNCA deve rodar em produção.
+2026-06-28 17:05:33,532 [INFO]   Épocas: 120 (POOLED_EPOCHS) | seed: 42
+2026-06-28 17:05:33,532 [INFO]   Fonte demográficos: dados reais FAPESP
+2026-06-28 17:05:33,532 [INFO] ============================================================
+2026-06-28 17:05:33,705 [INFO]   Pool total: 23640 amostras (BPSP + HSL combinados)
+2026-06-28 17:05:33,706 [INFO] 
+[Pooled] Treinando behrt_pooled_A_sem_demo (demo_dim=0)...
+2026-06-28 17:30:49,966 [INFO]     época 24/120 loss=0.9676

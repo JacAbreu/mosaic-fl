@@ -57,8 +57,16 @@ cover/
 
 # Django stuff:
 *.log
+# Logs de experimentos — incluir todos os arquivos de resultado
 !experiments/logs/run_complete*.log
 !experiments/logs/run_20260625_*.log
+!experiments/logs/temperature_exp*.log
+!experiments/logs/recalibrate_*.log
+!experiments/logs/behrt_pooled_*.log
+!experiments/logs/training_*.log
+!experiments/logs/bootstrap_ci_*.log
+!experiments/logs/seed_sensitivity_*.log
+!experiments/logs/evaluation_round_*.json
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -247,14 +255,17 @@ __pycache__/
 .Python
 
 # =============================================================================
-# Dados — não versionar datasets clínicos
+# Dados — não versionar datasets clínicos (arquivos brutos FAPESP fora do repo)
+# /data/ protege apenas o diretório raiz; experiments/data/ contém resultados
+# e deve ser versionado.
 # =============================================================================
-data/
+/data/
 *.csv
 *.parquet
 *.feather
 *.h5
 *.hdf5
+!experiments/data/
 
 # =============================================================================
 # Modelos baixados pelo HuggingFace

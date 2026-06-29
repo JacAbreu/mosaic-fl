@@ -36,13 +36,21 @@ os.environ.setdefault("MKL_NUM_THREADS", "4")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
-_DEFAULT_CLASS_LABELS = (
-    "curado_pronto",
-    "curado_internado",
-    "melhora_pronto",
-    "melhora_internado_breve",
-    "melhora_internado_grave",
-)
+def _resolve_class_labels() -> tuple[str, ...]:
+    """Lê FL_CLASS_LABELS (CSV) ou usa o conjunto padrão de 5 desfechos clínicos."""
+    raw = os.getenv("FL_CLASS_LABELS", "").strip()
+    if raw:
+        return tuple(lbl.strip() for lbl in raw.split(",") if lbl.strip())
+    return (
+        "curado_pronto",
+        "curado_internado",
+        "melhora_pronto",
+        "melhora_internado_breve",
+        "melhora_internado_grave",
+    )
+
+
+_CLASS_LABELS = _resolve_class_labels()
 
 
 @dataclass(frozen=True)
@@ -54,15 +62,15 @@ class ModelConfig:
     num_layers:   int            = 2
     num_heads:    int            = 4
     ff_dim:       int            = 128
-    num_classes:  int            = 5
-    class_labels: tuple[str, ...] = _DEFAULT_CLASS_LABELS
+    num_classes:  int            = len(_CLASS_LABELS)
+    class_labels: tuple[str, ...] = _CLASS_LABELS
     dropout:      float          = 0.1
 
     def __post_init__(self) -> None:
         if len(self.class_labels) != self.num_classes:
             raise ValueError(
                 f"FL_CLASS_LABELS tem {len(self.class_labels)} label(s) "
-                f"mas FL_NUM_CLASSES={self.num_classes}. Devem ser iguais."
+                f"mas num_classes={self.num_classes}. Devem ser iguais."
             )
 
 
@@ -80,7 +88,7 @@ class FedConfig:
     convergence_threshold: float = 0.005
     convergence_patience:  int   = 3
     batch_size:            int   = 16
-    local_epochs:          int   = 2
+    local_epochs:          int   = 1   # reduzido de 2→1: menos client drift em regime non-IID severo (Li et al. 2020)
     lr:                    float = 0.001
     num_clients:           int   = 2
     random_seed:           int   = 42

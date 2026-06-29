@@ -145,6 +145,7 @@ class FederatedTraining:
             demographics_by_client=self.demographics_by_client,
             test_loader_demo=self.test_loader_demo,
             n_epochs=10,
+            seeds=[42, 7, 123],
         )
         ablation_path = (
             Path("experiments/data")

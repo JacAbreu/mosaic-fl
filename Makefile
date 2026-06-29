@@ -31,7 +31,8 @@ FL_DATA_DIR      ?= $(HOME)/studies/usp/mba-bigdata-art-int/tcc/data/Dados/Covid
 HSL_SEED         ?= scripts/db/seeds/hsl_seed.sql.gz
 BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
 
-.PHONY: setup test test-integration test-e2e test-all test-cov experiment training training-full clean \
+.PHONY: setup test test-integration test-e2e test-all test-cov experiment training training-full \
+        training-bpsp-only training-hsl-only clean \
         superlink server-app supernode sim test-pipeline behrt-pooled recalibrate \
         bootstrap-ci seed-sensitivity \
         db-up db-down db-wait fl-server fl-client fl-check \
@@ -99,11 +100,32 @@ seed-sensitivity:
 	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_seed_sensitivity.py \
 		--rounds $(ROUNDS) --seeds $(SEEDS)
 
-## Treinamento completo + pooled baseline em sequência, em arquivo de log único.
-## FL_LOG_FILE é definido uma vez e passado para ambos os scripts via variável de shell.
+## Treinamento federado com apenas clientes BPSP (leave-one-client-out).
+## Test/cal sempre no set global (BPSP+HSL) para comparação justa. Requer FL_DB_URL.
+training-bpsp-only:
+	@LOG="experiments/logs/training_bpsp_only_$$(date +%Y%m%d_%H%M%S).log"; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LOG_FILE="$$LOG" \
+	$(PYTHON) experiments/run_training.py
+
+## Treinamento federado com apenas clientes HSL (leave-one-client-out).
+## Test/cal sempre no set global (BPSP+HSL) para comparação justa. Requer FL_DB_URL.
+training-hsl-only:
+	@LOG="experiments/logs/training_hsl_only_$$(date +%Y%m%d_%H%M%S).log"; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LOG_FILE="$$LOG" \
+	$(PYTHON) experiments/run_training.py
+
+## Pipeline completo: BPSP-only → HSL-only → federado (BPSP+HSL) → pooled baseline.
+## Sem parametrização externa — env vars definidas internamente.
+## Requer FL_DB_URL e dados de ambos os hospitais no banco.
 training-full:
 	@LOG="experiments/logs/run_complete_$$(date +%Y%m%d_%H%M%S).log"; \
+	echo "=== 1/4 training-bpsp-only ===" | tee -a "$$LOG"; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	echo "=== 2/4 training-hsl-only ===" | tee -a "$$LOG"; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	echo "=== 3/4 training-federated (BPSP+HSL) ===" | tee -a "$$LOG"; \
 	FL_ENV=production FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	echo "=== 4/4 behrt-pooled baseline ===" | tee -a "$$LOG"; \
 	FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_behrt_pooled.py
 
 # ── Banco de dados (PostgreSQL via Docker) ────────────────────────────────────

@@ -83,7 +83,7 @@ class FedProxClient(fl.client.NumPyClient):
         weights = torch.tensor(
             [total / (n * counts[i]) if counts.get(i, 0) > 0 else 0.0 for i in range(n)],
             dtype=torch.float,
-        )
+        ).clamp(max=15.0)  # teto: peso 47 no BPSP causava explosão de gradiente
         logger.info(
             "class_weights client_id=%s weights=%s counts=%s",
             self.client_id, [round(w, 3) for w in weights.tolist()], dict(counts),
@@ -101,30 +101,36 @@ class FedProxClient(fl.client.NumPyClient):
 
     def fit(self, parameters: List[np.ndarray], config: Dict) -> Tuple[List[np.ndarray], int, Dict]:
         local_epochs = int(config.get("local_epochs", FED_CFG.local_epochs))
-        proximal_mu = float(config.get("proximal_mu", FED_CFG.proximal_mu))
+        proximal_mu  = float(config.get("proximal_mu",  FED_CFG.proximal_mu))
 
         self.set_parameters(parameters)
         self.model.train()
-        epoch_losses = []
-        tau = 0  # passos efetivos reais (batches processados × épocas)
+        epoch_losses: List[float] = []
+        tau = 0           # passos efetivos reais (batches processados × épocas)
+        total_grad_norm = 0.0
+        total_batches   = 0
 
         for epoch in range(local_epochs):
             running_loss = 0.0
             total_samples = 0
             for batch_x, batch_y, batch_dia in self.train_loader:
                 try:
-                    batch_x = batch_x.to(RUNTIME_CFG.device)
-                    batch_y = batch_y.to(RUNTIME_CFG.device)
+                    batch_x   = batch_x.to(RUNTIME_CFG.device)
+                    batch_y   = batch_y.to(RUNTIME_CFG.device)
                     batch_dia = batch_dia.to(RUNTIME_CFG.device)
                     self.optimizer.zero_grad()
                     outputs = self.model(batch_x, dia_relativo=batch_dia)
                     loss = self.criterion(outputs, batch_y)
                     loss = self._proximal_loss(loss, proximal_mu)
                     loss.backward()
+                    # clipping antes do step — impede explosão de gradiente com pesos de classe altos
+                    grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                     self.optimizer.step()
-                    running_loss += loss.item() * batch_y.size(0)
-                    total_samples += batch_y.size(0)
-                    tau += 1
+                    running_loss    += loss.item() * batch_y.size(0)
+                    total_samples   += batch_y.size(0)
+                    tau             += 1
+                    total_grad_norm += grad_norm.item()
+                    total_batches   += 1
                 except Exception as e:
                     logger.error("batch_failed", extra={"client_id": self.client_id, "error": str(e)})
                     raise
@@ -132,8 +138,15 @@ class FedProxClient(fl.client.NumPyClient):
             epoch_loss = running_loss / total_samples if total_samples > 0 else 0.0
             epoch_losses.append(epoch_loss)
 
-        avg_loss = sum(epoch_losses) / len(epoch_losses)
-        return self.get_parameters(config), total_samples, {"loss": avg_loss, "tau": tau}
+        avg_loss      = sum(epoch_losses) / len(epoch_losses)
+        avg_grad_norm = total_grad_norm / total_batches if total_batches > 0 else 0.0
+        logger.info(
+            "client_fit client_id=%s loss=%.4f grad_norm=%.4f tau=%d",
+            self.client_id, avg_loss, avg_grad_norm, tau,
+        )
+        return self.get_parameters(config), total_samples, {
+            "loss": avg_loss, "tau": tau, "grad_norm": avg_grad_norm,
+        }
 
     def evaluate(self, parameters: List[np.ndarray], config: Dict) -> Tuple[float, int, Dict]:
         self.set_parameters(parameters)

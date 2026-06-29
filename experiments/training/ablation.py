@@ -5,7 +5,7 @@ Ablation study de late fusion demográfica e pooled baseline (artefato de pesqui
   run_pooled_behrt          — behrt_pooled_A_sem_demo vs behrt_pooled_B_late_fusion
 """
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -43,16 +43,22 @@ def run_ablation_demographics(
     test_loader_demo: Optional[DataLoader] = None,
     n_epochs: int = 10,
     random_seed: Optional[int] = None,
+    seeds: Optional[List[int]] = None,
 ) -> Dict:
     """
     Ablation study: late fusion demográfica (age_norm + sex_binary) no SimplifiedBEHRT.
 
     ablation_A_sem_demo:    demo_dim=0 (modelo base)
     ablation_B_late_fusion: demo_dim=2 (late fusion com age_norm + sex_binary)
+
+    seeds: lista de seeds para múltiplos runs (recomendado: [42, 7, 123]).
+           Resultado reporta média ± desvio-padrão, eliminando sensibilidade à inicialização.
+           Padrão: [random_seed] (run único, retrocompatível).
     """
     from mosaicfl.core.evaluation import evaluate, print_report
 
-    random_seed   = random_seed   if random_seed   is not None else RANDOM_SEED
+    random_seed   = random_seed if random_seed is not None else RANDOM_SEED
+    seeds         = seeds if seeds is not None else [random_seed]
     use_real_demo = demographics_by_client is not None
 
     logger.info("=" * 60)
@@ -60,10 +66,13 @@ def run_ablation_demographics(
     logger.info(f"  Fonte dos demográficos: {'dados reais (FAPESP)' if use_real_demo else 'sintéticos correlacionados'}")
     logger.info("  ablation_A_sem_demo:    SimplifiedBEHRT sem demográficos (demo_dim=0)")
     logger.info("  ablation_B_late_fusion: SimplifiedBEHRT + late fusion (demo_dim=2)")
-    logger.info(f"  Épocas locais: {n_epochs} | seed: {random_seed}")
+    logger.info(f"  Épocas locais: {n_epochs} | seeds: {seeds}")
     logger.info("=" * 60)
 
-    def _train_local(model: nn.Module, loaders: Dict, with_demo: bool, demo_loaders: Optional[Dict]) -> None:
+    def _train_local(
+        model: nn.Module, loaders: Dict, with_demo: bool,
+        demo_loaders: Optional[Dict], seed: int,
+    ) -> None:
         optimizer = torch.optim.Adam(model.parameters(), lr=LR)
         criterion = nn.CrossEntropyLoss()
         model.train()
@@ -75,7 +84,7 @@ def run_ablation_demographics(
                 for bx, by, bdia in train_loader:
                     all_x.append(bx); all_y.append(by); all_dia.append(bdia)
                 all_x = torch.cat(all_x); all_y = torch.cat(all_y); all_dia = torch.cat(all_dia)
-                synth_demo_cache[cid] = (all_x, all_y, _make_correlated_demo(all_y, seed=random_seed + cid), all_dia)
+                synth_demo_cache[cid] = (all_x, all_y, _make_correlated_demo(all_y, seed=seed + cid), all_dia)
 
         for _ in range(n_epochs):
             if with_demo and use_real_demo and demo_loaders:
@@ -106,7 +115,7 @@ def run_ablation_demographics(
                         criterion(model(batch_x, dia_relativo=batch_dia), batch_y).backward()
                         optimizer.step()
 
-    def _eval_with_demo(model: nn.Module, t_loader_demo: DataLoader) -> Dict:
+    def _eval_with_demo(model: nn.Module, t_loader_demo: DataLoader, seed: int) -> Dict:
         model.eval()
         all_preds, all_labels = [], []
         criterion = nn.CrossEntropyLoss()
@@ -121,7 +130,7 @@ def run_ablation_demographics(
                     bdia = None
                 else:
                     bx, by = batch[0], batch[1]
-                    bd   = _make_correlated_demo(by, seed=random_seed + 99)
+                    bd   = _make_correlated_demo(by, seed=seed + 99)
                     bdia = None
                 bx  = bx.to(DEVICE)
                 by  = by.to(DEVICE)
@@ -146,38 +155,66 @@ def run_ablation_demographics(
         ("ablation_A_sem_demo",    0, False),
         ("ablation_B_late_fusion", 2, True),
     ]:
-        logger.info(f"\n[Ablação] Treinando {config_name} (demo_dim={demo_dim}, épocas={n_epochs})...")
-        torch.manual_seed(random_seed)
-        model = SimplifiedBEHRT(use_cls_token=True, demo_dim=demo_dim).to(DEVICE)
+        logger.info(f"\n[Ablação] Treinando {config_name} (demo_dim={demo_dim}, épocas={n_epochs}, seeds={seeds})...")
 
-        _train_local(model, client_loaders, with_demo, demographics_by_client)
+        seed_metrics: List[Dict] = []
+        for seed in seeds:
+            torch.manual_seed(seed)
+            model = SimplifiedBEHRT(use_cls_token=True, demo_dim=demo_dim).to(DEVICE)
+            _train_local(model, client_loaders, with_demo, demographics_by_client, seed)
 
-        if with_demo:
-            t_loader = test_loader_demo if (use_real_demo and test_loader_demo is not None) else test_loader
-            metrics = _eval_with_demo(model, t_loader)
-            metrics["descricao"] = (
-                "SimplifiedBEHRT + late fusion demográfica "
-                f"({'dados reais FAPESP' if use_real_demo else 'sintéticos correlacionados'})"
-            )
+            if with_demo:
+                t_loader = test_loader_demo if (use_real_demo and test_loader_demo is not None) else test_loader
+                m = _eval_with_demo(model, t_loader, seed)
+                m["descricao"] = (
+                    "SimplifiedBEHRT + late fusion demográfica "
+                    f"({'dados reais FAPESP' if use_real_demo else 'sintéticos correlacionados'})"
+                )
+            else:
+                try:
+                    report = evaluate(model, test_loader, class_labels=MODEL_CFG.class_labels,
+                                      device=str(DEVICE), temperature=1.0)
+                    m = {
+                        "accuracy":  round(report.accuracy, 4),
+                        "macro_f1":  round(report.macro_f1, 4),
+                        "macro_auc": round(report.macro_auc, 4) if report.macro_auc else None,
+                        "ece":       round(report.calibration.ece, 4),
+                        "descricao": "SimplifiedBEHRT sem demográficos (baseline)",
+                    }
+                except Exception as exc:
+                    logger.warning(f"evaluate() falhou para {config_name} seed={seed}: {exc}")
+                    m = {"erro": str(exc)}
+
+            m["seed"]     = seed
+            m["demo_dim"] = demo_dim
+            m["n_epochs"] = n_epochs
+            seed_metrics.append(m)
+            logger.info(f"    seed={seed}: Acc={m.get('accuracy','n/a')} | F1={m.get('macro_f1','n/a')}")
+
+        valid = [m for m in seed_metrics if "accuracy" in m]
+        if valid:
+            accs = [m["accuracy"] for m in valid]
+            f1s  = [m["macro_f1"] for m in valid if "macro_f1" in m]
+            agg: Dict = {
+                "accuracy":     round(float(np.mean(accs)), 4),
+                "std_accuracy": round(float(np.std(accs)), 4),
+                "macro_f1":     round(float(np.mean(f1s)), 4) if f1s else None,
+                "std_macro_f1": round(float(np.std(f1s)), 4)  if f1s else None,
+                "demo_dim":     demo_dim,
+                "n_epochs":     n_epochs,
+                "n_seeds":      len(valid),
+                "seeds_detail": seed_metrics,
+                "descricao":    valid[0].get("descricao", ""),
+            }
         else:
-            try:
-                report = evaluate(model, test_loader, class_labels=MODEL_CFG.class_labels,
-                                  device=str(DEVICE), temperature=1.0)
-                metrics = {
-                    "accuracy":  round(report.accuracy, 4),
-                    "macro_f1":  round(report.macro_f1, 4),
-                    "macro_auc": round(report.macro_auc, 4) if report.macro_auc else None,
-                    "ece":       round(report.calibration.ece, 4),
-                    "descricao": "SimplifiedBEHRT sem demográficos (baseline)",
-                }
-            except Exception as exc:
-                logger.warning(f"evaluate() falhou para {config_name}: {exc}")
-                metrics = {"erro": str(exc)}
+            agg = {"erro": "all seeds failed", "seeds_detail": seed_metrics}
 
-        metrics["demo_dim"] = demo_dim
-        metrics["n_epochs"] = n_epochs
-        results[config_name] = metrics
-        logger.info(f"  {config_name}: Acc={metrics.get('accuracy','n/a')} | F1={metrics.get('macro_f1','n/a')}")
+        results[config_name] = agg
+        acc_str = (f"{agg.get('accuracy','n/a')} ± {agg.get('std_accuracy','n/a')}"
+                   if "std_accuracy" in agg else str(agg.get("accuracy", "n/a")))
+        f1_str  = (f"{agg.get('macro_f1','n/a')} ± {agg.get('std_macro_f1','n/a')}"
+                   if "std_macro_f1" in agg else str(agg.get("macro_f1", "n/a")))
+        logger.info(f"  {config_name}: Acc={acc_str} | F1={f1_str}")
 
     a = results.get("ablation_A_sem_demo",    {})
     b = results.get("ablation_B_late_fusion", {})
@@ -188,26 +225,29 @@ def run_ablation_demographics(
         logger.info(f"\n[Ablação] Δ (B − A): Acc={delta_acc:+.4f}"
                     + (f" | F1={delta_f1:+.4f}" if delta_f1 is not None else ""))
 
-    logger.info("\n" + "=" * 70)
+    logger.info("\n" + "=" * 75)
     logger.info("RESULTADO ABLAÇÃO — Late Fusion Demográfica")
-    logger.info("=" * 70)
-    logger.info(f"{'Config':<35} {'Accuracy':>8} {'F1 Macro':>8}")
-    logger.info("-" * 55)
+    logger.info("=" * 75)
+    logger.info(f"{'Config':<35} {'Acc (média±std)':>18} {'F1 (média±std)':>18}")
+    logger.info("-" * 75)
     for key in ["ablation_A_sem_demo", "ablation_B_late_fusion"]:
         m = results.get(key, {})
-        logger.info(f"{key:<35} {m.get('accuracy','n/a'):>8} {m.get('macro_f1','n/a'):>8}")
+        acc_str = (f"{m.get('accuracy','n/a')} ± {m.get('std_accuracy','n/a')}"
+                   if "std_accuracy" in m else str(m.get("accuracy", "n/a")))
+        f1_str  = (f"{m.get('macro_f1','n/a')} ± {m.get('std_macro_f1','n/a')}"
+                   if "std_macro_f1" in m else str(m.get("macro_f1", "n/a")))
+        logger.info(f"{key:<35} {acc_str:>18} {f1_str:>18}")
     if "delta_B_minus_A" in results:
         d = results["delta_B_minus_A"]
-        logger.info(
-            f"{'Δ (B − A)':<35} {d.get('accuracy','n/a'):>+8} "
-            + (f"{d.get('macro_f1','n/a'):>+8}" if d.get('macro_f1') is not None else "     n/a")
-        )
-    logger.info("=" * 70)
+        f1_delta_str = f"{d.get('macro_f1','n/a'):>+18}" if d.get("macro_f1") is not None else "               n/a"
+        logger.info(f"{'Δ (B − A)':<35} {d.get('accuracy','n/a'):>+18} {f1_delta_str}")
+    logger.info("=" * 75)
 
     results["meta"] = {
         "fonte_demo":    "real_fapesp" if use_real_demo else "sintetico_correlacionado",
         "n_epochs":      n_epochs,
         "random_seed":   random_seed,
+        "seeds":         seeds,
         "demo_features": ["age_norm (birth_year / ref_year=2021)", "sex_binary (M=1, F=0)"],
     }
     return results

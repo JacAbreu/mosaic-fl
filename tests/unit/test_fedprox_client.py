@@ -24,11 +24,14 @@ class TestFedProxClient:
     VAL_SIZE = 8
     CONTRACT_CLIENT_ID = 42
 
+    SEQ_LEN = 16
+
     @pytest.fixture
     def dummy_loader(self):
-        x = torch.randint(1, VOCAB_SIZE, (8, 16))
-        y = torch.randint(0, NUM_CLASSES, (8,))
-        return DataLoader(TensorDataset(x, y), batch_size=4)
+        x   = torch.randint(1, VOCAB_SIZE, (8, self.SEQ_LEN))
+        y   = torch.randint(0, NUM_CLASSES, (8,))
+        dia = torch.randint(0, 100, (8, self.SEQ_LEN))
+        return DataLoader(TensorDataset(x, y, dia), batch_size=4)
 
     @pytest.fixture
     def client_v2(self, dummy_loader):
@@ -38,12 +41,15 @@ class TestFedProxClient:
     @pytest.fixture(scope="class")
     def contract_client(self):
         from mosaicfl.core.client import FedProxClient
-        x_tr = torch.randint(1, VOCAB_SIZE, (self.TRAIN_SIZE, 16))
-        y_tr = torch.randint(0, NUM_CLASSES, (self.TRAIN_SIZE,))
-        x_va = torch.randint(1, VOCAB_SIZE, (self.VAL_SIZE, 16))
-        y_va = torch.randint(0, NUM_CLASSES, (self.VAL_SIZE,))
-        train_loader = DataLoader(TensorDataset(x_tr, y_tr), batch_size=4)
-        val_loader   = DataLoader(TensorDataset(x_va, y_va), batch_size=4)
+        seq_len = 16
+        x_tr   = torch.randint(1, VOCAB_SIZE, (self.TRAIN_SIZE, seq_len))
+        y_tr   = torch.randint(0, NUM_CLASSES, (self.TRAIN_SIZE,))
+        dia_tr = torch.randint(0, 100, (self.TRAIN_SIZE, seq_len))
+        x_va   = torch.randint(1, VOCAB_SIZE, (self.VAL_SIZE, seq_len))
+        y_va   = torch.randint(0, NUM_CLASSES, (self.VAL_SIZE,))
+        dia_va = torch.randint(0, 100, (self.VAL_SIZE, seq_len))
+        train_loader = DataLoader(TensorDataset(x_tr, y_tr, dia_tr), batch_size=4)
+        val_loader   = DataLoader(TensorDataset(x_va, y_va, dia_va), batch_size=4)
         return FedProxClient(client_id=self.CONTRACT_CLIENT_ID,
                              train_loader=train_loader, val_loader=val_loader)
 
@@ -113,9 +119,10 @@ class TestFedProxClient:
 
     def test_fit_does_not_crash_on_edge_case_batch(self):
         from mosaicfl.core.client import FedProxClient
-        x = torch.randint(0, VOCAB_SIZE, (4, MAX_SEQ_LEN))
-        y = torch.randint(0, NUM_CLASSES, (4,))
-        loader = DataLoader(TensorDataset(x, y), batch_size=4)
+        x   = torch.randint(0, VOCAB_SIZE, (4, MAX_SEQ_LEN))
+        y   = torch.randint(0, NUM_CLASSES, (4,))
+        dia = torch.randint(0, 100, (4, MAX_SEQ_LEN))
+        loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
         client = FedProxClient(0, loader, loader)
         params = client.get_parameters({})
         updated, n, metrics = client.fit(params, {})

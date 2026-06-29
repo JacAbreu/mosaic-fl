@@ -444,3 +444,7 @@ porque motivo voce acha que uma das implementacoes nao eh o foco do meu trabalho
 
   Impacto na implementação: a mudança é contida — aggregate_fedavg vira aggregate_fednova, o fit() do cliente passa a retornar o número de passos efetivos (τ), e o servidor normaliza
   antes de agregar. O resto do pipeline não muda.
+
+claude, quando for avaliar o sistema, nao foque em um trabalho simples para TCC, foque em um sistema que tem que estar        
+  prestes a ser um MVP solido em producao em relacao ao treinamento do modelo. As outras partes realmente sao importantes, mas  
+  talvez nao fique tao boas assim, mas o modelo precisa estar em nivel profissional.

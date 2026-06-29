@@ -149,6 +149,11 @@ def start_server(
     history = {"rounds": [], "accuracy": [], "communication_mb": [], "last_checkpoint": None}
     checkpoint_store = get_checkpoint_store(RUNTIME_CFG.db_url)
 
+    # clampear ao número real de clientes — permite leave-one-client-out com 1 cliente
+    min_fit       = min(FED_CFG.min_fit_clients,       num_clients)
+    min_evaluate  = min(FED_CFG.min_evaluate_clients,  num_clients)
+    min_available = min(FED_CFG.min_available_clients, num_clients)
+
     strategy = CustomFedProxStrategy(
         tracker=tracker,
         history=history,
@@ -157,9 +162,9 @@ def start_server(
         on_converged=on_converged,
         fraction_fit=FED_CFG.fraction_fit,
         fraction_evaluate=FED_CFG.fraction_evaluate,
-        min_fit_clients=FED_CFG.min_fit_clients,
-        min_evaluate_clients=FED_CFG.min_evaluate_clients,
-        min_available_clients=FED_CFG.min_available_clients,
+        min_fit_clients=min_fit,
+        min_evaluate_clients=min_evaluate,
+        min_available_clients=min_available,
         proximal_mu=FED_CFG.proximal_mu,
         evaluate_fn=evaluate_fn,
         evaluate_metrics_aggregation_fn=weighted_average_accuracy,
@@ -167,7 +172,7 @@ def start_server(
     )
 
     print(f"Iniciando servidor FedProx por até {num_rounds} rodadas...")
-    print(f"Mu proximal: {FED_CFG.proximal_mu} | Clientes mínimos: {FED_CFG.min_fit_clients}")
+    print(f"Mu proximal: {FED_CFG.proximal_mu} | Clientes mínimos: {min_fit}")
     print(f"Convergência: Δ < {FED_CFG.convergence_threshold} por {FED_CFG.convergence_patience} rodadas.")
     if evaluate_fn:
         print("Avaliação global: ATIVA (test_loader fornecido)")

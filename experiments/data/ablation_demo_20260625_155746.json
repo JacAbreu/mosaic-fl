@@ -1,0 +1,32 @@
+{
+  "ablation_A_sem_demo": {
+    "accuracy": 0.5735,
+    "macro_f1": 0.4051,
+    "macro_auc": 0.7875,
+    "ece": 0.0669,
+    "descricao": "SimplifiedBEHRT sem demográficos (baseline)",
+    "demo_dim": 0,
+    "n_epochs": 10
+  },
+  "ablation_B_late_fusion": {
+    "accuracy": 0.6906,
+    "macro_f1": 0.4642,
+    "loss": 0.8466,
+    "descricao": "SimplifiedBEHRT + late fusion demográfica (dados reais FAPESP)",
+    "demo_dim": 2,
+    "n_epochs": 10
+  },
+  "delta_B_minus_A": {
+    "accuracy": 0.1171,
+    "macro_f1": 0.0591
+  },
+  "meta": {
+    "fonte_demo": "real_fapesp",
+    "n_epochs": 10,
+    "random_seed": 42,
+    "demo_features": [
+      "age_norm (birth_year / ref_year=2021)",
+      "sex_binary (M=1, F=0)"
+    ]
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "predicao": {
+    "diagnostico": "curado_internado",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "- adultoPadultoAadultoDentado (probabilidade 0.83) para o paciente com sintomas: Basofilos_NORMAL, Basofilos_NORMAL, Basofilos_NORMAL, Basofilos_NORMAL",
+  "fontes": [
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adulto<adultoPadultoAadultoDadulto>adulto,adulto adultoCadultoladultooadultoradultooadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoUadultoradultoéadultoiadultoaadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoVadultoCadultoMadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoHadultoCadultoOadulto3adulto adultovadultoeadultonadultooadultosadultooadulto_adultoHadultoIadultoGadultoHadulto",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6298303824764255
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adulto<adultoPadultoAadultoDadulto>adulto,adulto adultoPadultooadultotadultoaadultosadultosadultoiadultooadulto_adultoLadultoOadultoWadulto,adulto adultoTadultoPadulto/adultoIadultoNadultoRadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoRadultoDadultoWadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoLadultoiadultonadultofadultooadultocadultoiadultotadultooadultosadulto_adultoHadultoIadultoGadultoHadulto",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6336403250145324
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoCadultoradultoeadultoaadultotadultoiadultonadultoiadultonadultoaadulto_adultoLadultoOadultoWadulto,adulto adultoRadultoDadultoWadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoHadultoCadultoOadulto3adulto adultovadultoeadultonadultooadultosadultooadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoCadultoKadulto_adultoHadultoIadultoGadultoHadulto,adulto adulto<adultoPadultoAadultoDadulto>adulto",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6349828460822786
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "precision_metrics": {
+    "precision_at_3": 0.145,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.115,
+      "curado_internado": 0.2262,
+      "melhora_pronto": 0.0966,
+      "melhora_internado_breve": 0.2008,
+      "melhora_internado_grave": 0.1509
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

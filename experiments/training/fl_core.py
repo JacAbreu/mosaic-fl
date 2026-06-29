@@ -138,6 +138,8 @@ def run_federated_learning_manual(
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark     = False
 
     logger.info("=" * 60)
     logger.info("APRENDIZADO FEDERADO — SIMULAÇÃO MANUAL (SEM RAY)")
@@ -159,6 +161,19 @@ def run_federated_learning_manual(
     best_accuracy = 0.0
     best_round = 0
     checkpoint_store = override_checkpoint_store if override_checkpoint_store is not None else get_checkpoint_store(FL_DB_URL)
+
+    # Registra o treinamento antes do loop — garante 1 checkpoint por treinamento
+    training_id: Optional[int] = None
+    if not sensitivity_mode:
+        import os
+        log_file = os.environ.get("FL_LOG_FILE", "")
+        training_id = checkpoint_store.register_training(
+            algorithm=agregador,
+            log_file=log_file,
+            n_rounds_max=n_rounds,
+        )
+        logger.info("training_registered id=%d algorithm=%s n_rounds_max=%d", training_id, agregador, n_rounds)
+
     overall_start = time.time()
 
     for round_num in range(1, n_rounds + 1):
@@ -183,8 +198,12 @@ def run_federated_learning_manual(
             client_states.append(fit_state)
             client_weights.append(num_samples)
             client_metrics.append(metrics)
-            tau_i = metrics.get("tau", 0)
-            logger.info(f"  [Cliente {cid}] Loss: {metrics['loss']:.4f} | Amostras: {num_samples} | τ={tau_i}")
+            tau_i     = metrics.get("tau", 0)
+            grad_norm = metrics.get("grad_norm", 0.0)
+            logger.info(
+                f"  [Cliente {cid}] Loss: {metrics['loss']:.4f} | Amostras: {num_samples} "
+                f"| τ={tau_i} | grad_norm={grad_norm:.4f}"
+            )
 
         logger.info(f"  [Servidor] Agregando pesos de {len(client_states)} clientes...")
         if use_fednova:
@@ -220,8 +239,9 @@ def run_federated_learning_manual(
                 vocab=vocab or {},
                 accuracy=acc_global,
                 loss=loss_global,
+                training_id=training_id,
             )
-            logger.info(f"  [Best] Novo melhor checkpoint — rodada {round_num} Acc={acc_global:.4f} salvo no banco")
+            logger.info(f"  [Best] Novo melhor checkpoint — rodada {round_num} Acc={acc_global:.4f} salvo no banco (training_id={training_id})")
 
         if round_num > 1:
             delta = abs(acc_global - prev_accuracy)
@@ -242,10 +262,20 @@ def run_federated_learning_manual(
 
     overall_duration = time.time() - overall_start
 
-    best_ckpt = checkpoint_store.load_best()
+    if training_id is not None:
+        checkpoint_store.complete_training(
+            training_id=training_id,
+            n_rounds_done=round_num,
+            best_round=best_round,
+            best_accuracy=best_accuracy,
+            converged=bool(converged_round),
+        )
+
+    best_ckpt = checkpoint_store.load_best(training_id=training_id)
     if best_ckpt is not None:
         global_model.load_state_dict(best_ckpt["model_state"])
-        logger.info(f"  [Best] Modelo restaurado da rodada {best_round} (Acc={best_accuracy:.4f})")
+        loaded_round = best_ckpt.get("checkpoint_round", best_round)
+        logger.info(f"  [Best] Modelo restaurado da rodada {loaded_round} (Acc={best_accuracy:.4f}) training_id={training_id}")
     else:
         logger.warning("  [Best] load_best retornou None — usando modelo da última rodada")
 
@@ -279,7 +309,7 @@ def run_federated_learning_manual(
         json.dump(history, f, indent=2, ensure_ascii=False)
     logger.info(f"Histórico salvo: {hist_path}")
 
-    from mosaicfl.core.calibration import TemperatureScaler
+    from mosaicfl.core.calibration import IsotonicCalibrator, TemperatureScaler
     from mosaicfl.core.evaluation import evaluate, print_report
 
     try:
@@ -295,33 +325,63 @@ def run_federated_learning_manual(
     _calib_loader = cal_loader if cal_loader is not None else test_loader
     if cal_loader is None:
         logger.warning("calibration_set_fallback: cal_loader ausente — usando test_loader (modo sintético)")
+
+    # ── Temperature scaling ───────────────────────────────────────────────────
     scaler = TemperatureScaler()
     try:
         scaler.fit(global_model, _calib_loader, device=str(DEVICE))
         n_cal = len(_calib_loader.dataset) if hasattr(_calib_loader, "dataset") else "?"
-        logger.info(f"Calibração concluída — T={scaler.T:.4f} (cal_set={n_cal} amostras)")
+        logger.info(f"temperature_scaling T={scaler.T:.4f} (cal_set={n_cal} amostras)")
     except Exception as exc:
-        logger.warning(f"Calibração falhou ({exc}) — T mantido em 1.0")
+        logger.warning(f"temperature_scaling_failed ({exc}) — T mantido em 1.0")
 
     try:
         report_cal = evaluate(global_model, test_loader, class_labels=MODEL_CFG.class_labels,
                               device=str(DEVICE), temperature=scaler.T)
-        logger.info(f"Avaliação pós-calibração  — ECE={report_cal.calibration.ece:.4f} "
+        logger.info(f"Avaliação pós-temperature — ECE={report_cal.calibration.ece:.4f} "
                     f"AUC={report_cal.macro_auc:.4f} F1={report_cal.macro_f1:.4f}")
         print_report(report_cal)
     except Exception as exc:
-        logger.warning(f"Avaliação pós-calibração falhou: {exc}")
+        logger.warning(f"Avaliação pós-temperature falhou: {exc}")
         report_cal = None
+
+    # ── Calibração Isotônica OvR ─────────────────────────────────────────────
+    iso = IsotonicCalibrator()
+    ece_iso: Optional[float] = None
+    try:
+        iso.fit(global_model, _calib_loader, device=str(DEVICE), num_classes=MODEL_CFG.num_classes)
+        # ECE com calibração isotônica (avaliado no test_loader para comparação justa)
+        all_logits, all_labels_t = [], []
+        global_model.eval()
+        with torch.no_grad():
+            for batch in test_loader:
+                bx, by, bdia = batch[0].to(DEVICE), batch[1], batch[2].to(DEVICE)
+                all_logits.append(global_model(bx, dia_relativo=bdia).cpu())
+                all_labels_t.append(by)
+        all_logits   = torch.cat(all_logits)
+        all_labels_t = torch.cat(all_labels_t)
+        ece_iso = iso.compute_ece(all_logits, all_labels_t)
+        ece_temp = report_cal.calibration.ece if report_cal else None
+        logger.info(
+            "calibration_comparison ECE_pre=%.4f ECE_temperature=%.4f ECE_isotonic=%.4f — melhor=%s",
+            report_raw.calibration.ece if report_raw else float("nan"),
+            ece_temp if ece_temp is not None else float("nan"),
+            ece_iso,
+            "isotonic" if (ece_temp is not None and ece_iso < ece_temp) else "temperature",
+        )
+    except Exception as exc:
+        logger.warning(f"isotonic_calibration_failed: {exc}")
 
     eval_path = Path("experiments/logs") / f"evaluation_round_{round_num}.json"
     try:
         import dataclasses
         eval_path.parent.mkdir(parents=True, exist_ok=True)
         eval_path.write_text(json.dumps({
-            "round": round_num,
-            "temperature": round(scaler.T, 4),
-            "pre_calibration":  dataclasses.asdict(report_raw)  if report_raw  else None,
-            "post_calibration": dataclasses.asdict(report_cal) if report_cal else None,
+            "round":             round_num,
+            "temperature":       round(scaler.T, 4),
+            "ece_isotonic":      ece_iso,
+            "pre_calibration":   dataclasses.asdict(report_raw) if report_raw  else None,
+            "post_calibration":  dataclasses.asdict(report_cal) if report_cal  else None,
         }, indent=2, ensure_ascii=False), encoding="utf-8")
         logger.info(f"Relatório de avaliação salvo: {eval_path}")
     except Exception as exc:

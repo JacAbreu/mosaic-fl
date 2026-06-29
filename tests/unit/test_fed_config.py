@@ -9,8 +9,8 @@ from mosaicfl.core.config import NUM_ROUNDS, PROXIMAL_MU, BATCH_SIZE
 
 class TestFedConfig:
 
-    def test_num_rounds_limited(self):
-        assert NUM_ROUNDS <= 50
+    def test_num_rounds_positive(self):
+        assert NUM_ROUNDS >= 20
 
     def test_proximal_mu_small(self):
         assert 0 < PROXIMAL_MU < 1
