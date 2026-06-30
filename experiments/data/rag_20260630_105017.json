@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"curado_pronto\" (0.81) para este paciente é razoável considerando os resultados dos exames que se assemelham fortemente aos casos similares previamente registrados. A predominância de linfócitos, juntamente com os demais parâmetros sanguíneos normais (Basofilos",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Basofilos NORMAL, RDW NORMAL, Eritrocitos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Linfocitos HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.39891792516432745
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Basofilos NORMAL, RDW NORMAL, Eritrocitos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Linfocitos HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.39891792516432745
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Basofilos NORMAL, RDW NORMAL, Eritrocitos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Linfocitos HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.39891792516432745
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.2442,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.1337,
+      "curado_internado": 0.1014,
+      "melhora_pronto": 0.1521,
+      "melhora_internado_breve": 0.4933,
+      "melhora_internado_grave": 0.0561
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

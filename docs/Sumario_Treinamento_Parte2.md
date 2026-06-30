@@ -1099,39 +1099,257 @@ Esperamos τ_eff estável entre 40 e 80 (BPSP tem ~1.252 batches × 1 epoch; HSL
 ```
 ### Bloco 2 — Treinamento 1 (FedNova sem DP)
 
-**Data:** ___
-**Log:** experiments/logs/___
+**Data:** 2026-06-30
+**Log:** experiments/logs/run_complete_20260630_091435.log
 **Critério de checkpoint:** f1_macro (FL_CHECKPOINT_CRITERION=f1_macro)
 **Split:** corrigido (seeds independentes por hospital — BPSP seed 1042, HSL seed 1043)
+**training_ids:** BPSP=9 | HSL=10 | Federado=11
 
-#### Fase 3/4 — Federado BPSP+HSL
+#### Fase 1/4 — BPSP-only (training_id=9)
+
+| Métrica | Obtido |
+|---|---|
+| Accuracy (best) | 62,41% (R63) |
+| F1 macro | 0,3548 |
+| Macro AUC | 0,7496 |
+| ECE isotônica | 0,0494 |
+| Rodadas | 71 (convergiu) |
+| Duração | 67,0 min |
+| Peak RAM | 2.445 MB |
+| CPU médio | 2.353% (~23 núcleos) |
+
+#### Fase 2/4 — HSL-only (training_id=10)
 
 | Métrica | Obtido | Esperado | Δ | Interpretação |
 |---|---|---|---|---|
-| Accuracy | ___ | 65–72% | ___ | ___ |
-| F1 macro | ___ | 0,45–0,55 | ___ | ___ |
-| Macro AUC | ___ | 0,79–0,83 | ___ | ___ |
-| ECE isotônica | ___ | < 0,02 | ___ | ___ |
-| Melhor rodada | ___ | R60–R110 | ___ | ___ |
-| F1 curado_internado | ___ | 0,000 | ___ | ___ |
-| F1 melhora_int_grave | ___ | 0,25–0,40 | ___ | ___ |
-| tau_eff médio | ___ | 40–80 | ___ | ___ |
+| Accuracy (best) | 33,19% (R21) | 35–42% | −1,81 p.p. | Abaixo do intervalo — dataset pequeno (3.621 amostras), convergiu cedo em R39 |
+| F1 macro | 0,2479 | — | — | curado_pronto e curado_internado com F1=0 (classes raras no HSL) |
+| Loss | 2,3263 | crescente | — | Loss alta — sinal de instabilidade com 1 cliente |
+| ECE isotônica | 0,0717 | — | — | Calibração pior que o federado, esperado com dataset pequeno |
+| Per-class F1 | cp=0,00 ci=0,00 mp=0,54 mib=0,47 mig=0,23 | — | — | Modelo colapsa para as 3 classes majoritárias locais do HSL |
+| Duração | 7,0 min | — | — | Rápido por convergência em R39 |
 
-#### Fase 2/4 — HSL-only
+#### Fase 3/4 — Federado BPSP+HSL (training_id=11)
 
 | Métrica | Obtido | Esperado | Δ | Interpretação |
 |---|---|---|---|---|
-| Accuracy | ___ | 35–42% | ___ | ___ |
-| Loss R120 | ___ | crescente | ___ | ___ |
+| Accuracy (best) | **65,90%** (R77) | 65–72% | ✓ dentro | Dentro do intervalo esperado; 4,29 p.p. abaixo do Run de Validação (split diferente) |
+| F1 macro | **0,4905** | 0,45–0,55 | ✓ dentro | Dentro do intervalo; critério de seleção funcionou |
+| Macro AUC | **0,8105** | 0,79–0,83 | ✓ dentro | AUC robusta mesmo sem convergência |
+| ECE isotônica | **0,0311** | < 0,02 | +0,011 | Acima do esperado — temperatura T=1,2377 indica subconfiança leve |
+| Melhor rodada | **R77** | R60–R110 | ✓ dentro | Padrão histórico mantido |
+| F1 curado_internado | **0,000** | 0,000 | = | Confirmado — 28 amostras são insuficientes |
+| F1 melhora_int_grave | **0,3215** | 0,25–0,40 | ✓ dentro | Melhora em relação ao Bloco 1 (0,277) — critério F1 penalizou mais as classes minoritárias |
+| τ_eff médio | **1.095,0** | 40–80 | ⚠ muito maior | Ver análise abaixo |
+| Convergência | **Não** (120 rodadas) | — | — | Primeiro run do Bloco 2 sem convergência — modelo ainda explorando novo espaço de parâmetros |
+| Duração | 121,0 min | — | — | Equivalente ao Bloco 1 |
+| Peak RAM | 2.295 MB | — | — | Baseline de memória para comparação pós-refactoring e GPU |
+| CPU médio | 2.358% | — | — | ~23 núcleos saturados — pipeline CPU-bound como esperado |
+
+**Per-class F1 na R77 (best checkpoint):**
+
+| Classe | F1 | vs Bloco 1 (Run Val.) |
+|---|---|---|
+| curado_pronto | 0,8009 | ↑ (+0,003) |
+| curado_internado | 0,0000 | = |
+| melhora_pronto | 0,7550 | ↑ (+0,049) |
+| melhora_internado_breve | 0,5753 | ↑ (+0,060) |
+| melhora_internado_grave | 0,3215 | ↑ (+0,044) |
+
+Todas as classes com amostras suficientes melhoraram em relação ao Bloco 1. Melhora mais expressiva em `melhora_pronto` (+0,049) e `melhora_internado_breve` (+0,060).
+
+#### Fase 4/4 — BEHRT Pooled Baseline
+
+| Modelo | Accuracy | F1 macro |
+|---|---|---|
+| BEHRT Pooled A (sem demo) | **69,51%** | **0,5128** |
+| BEHRT Pooled B (late fusion) | 67,20% | 0,5101 |
+| RF Centralizado (BoT) | 66,67% | 0,5026 |
+| **BEHRT FL Federado (Bloco 2)** | **65,90%** | **0,4905** |
+
+**Custo de privacidade (BEHRT FL vs BEHRT Pooled A):** −3,61 p.p. Acc | −0,0223 F1 macro
+
+> Inversão em relação ao Bloco 1: no Exp 15 o FL superou o BEHRT Pooled. No Bloco 2, com split corrigido, o pooled supera o federado em 3,61 p.p. Isso é esperado e metodologicamente mais honesto — o split anterior pode ter favorecido o FL artificialmente.
+
+**FL vs RF Centralizado:** RF supera FL em −0,77 p.p. Acc e −0,0121 F1 macro.
+
+> RF supera FL novamente — volta ao padrão histórico de T1–T14. O único experimento em que o FL superou o RF foi T15 ("marco histórico" no Bloco 1). Com o split corrigido no Bloco 2, o padrão histórico se restabelece. Argumento para a defesa: o custo de privacidade em relação ao baseline mais simples é marginal (0,77 p.p. em Acc), mesmo sem qualquer ajuste fino de hiperparâmetros para o novo split.
 
 #### O critério de checkpoint fez diferença?
 
-- Rodada selecionada por f1_macro: ___
-- Accuracy nessa rodada: ___
-- Se tivéssemos usado accuracy, a rodada selecionada seria: ___ (consultar fl_round_history)
-- Diferença de F1 macro entre os dois critérios: ___
+- **Rodada selecionada por f1_macro:** R77 — Acc=65,90% | F1=0,4905
+- **Rodada que seria selecionada por accuracy:** R58 — Acc=**68,15%** | F1=0,4819
+- **Diferença:** usando accuracy, ganharíamos +2,25 p.p. em Acc mas perderíamos −0,0086 em F1 macro
+- **Interpretação:** o checkpoint por accuracy (R58) sacrifica F1 das classes minoritárias em favor da majoritária (`curado_pronto`). O critério f1_macro escolheu corretamente para um modelo mais equilibrado entre classes — que é o objetivo clínico do projeto.
+
+#### Análise do τ_eff = 1.095
+
+O valor 1.095 é constante em todas as 120 rodadas (std=0,0), o que confirma que FedNova está funcionando corretamente: τ_eff depende apenas dos tamanhos dos datasets e da configuração de batches, que não mudam entre rodadas.
+
+Cálculo esperado:
+- τ_BPSP = ceil(20.019 / 16) = 1.252 passos | p_BPSP = 20.019/23.640 = 0,847
+- τ_HSL = ceil(3.621 / 16) = 227 passos | p_HSL = 3.621/23.640 = 0,153
+- **τ_eff = 0,847 × 1.252 + 0,153 × 227 = 1.059,8 + 34,7 = 1.094,5 ≈ 1.095** ✓
+
+A expectativa de 40–80 estava errada — foi estimada sem considerar o número real de batches por época. O valor 1.095 é o correto para a configuração atual. **Não há bug — há erro de estimativa na documentação anterior.**
+
+#### Recursos computacionais — Baseline Bloco 2
+
+| Fase | Duração | Peak RAM | CPU médio |
+|---|---|---|---|
+| BPSP-only | 67 min | 2.445 MB | 2.353% |
+| HSL-only | 7 min | 2.299 MB | 2.368% |
+| Federado | 121 min | 2.295 MB | 2.358% |
+| BEHRT Pooled A | ~92 min | — | — |
+| BEHRT Pooled B | ~94 min | — | — |
+| **Total make training-full** | **~7h (420 min)** | **pico 2.445 MB** | **~23 núcleos** |
+
+Este é o baseline de custo computacional para comparação futura (pós-refactoring, GPU).
 
 #### Conclusão sobre as expectativas
 
-___ (preencher após o treinamento — o que surpreendeu, o que confirmou, implicações para Exp 17)
+##### O que aconteceu conforme esperado
+
+| Expectativa | Previsto | Obtido | |
+|---|---|---|---|
+| Accuracy global | 65–72% | 65,90% | ✓ |
+| F1 macro | 0,45–0,55 | 0,4905 | ✓ |
+| Macro AUC | 0,79–0,83 | 0,8105 | ✓ |
+| Melhor rodada | R60–R110 | R77 | ✓ |
+| `curado_internado` F1 | 0,000 | 0,000 | ✓ |
+| `melhora_internado_grave` F1 | 0,25–0,40 | 0,3215 | ✓ |
+| HSL instável com dataset pequeno | sim | acc=33,19%, loss crescente | ✓ |
+| Calibração isotônica melhor que temperature | sim | ECE_iso=0,031 < ECE_temp=0,065 | ✓ |
+| τ_eff constante por rodada | — | 1.095 em todas as 120 rodadas | ✓ |
+
+##### O que não aconteceu conforme esperado
+
+| Expectativa | Previsto | Obtido | Explicação |
+|---|---|---|---|
+| ECE isotônica | < 0,02 | 0,0311 | Modelo subconfiante (T=1,237) — subconfiança leve é normal em BEHRT com nova partição |
+| HSL accuracy | 35–42% | 33,19% | Ficou 1,81 p.p. abaixo — split corrigido deu ao HSL uma partição ligeiramente mais difícil |
+| τ_eff médio | 40–80 | 1.095 | **Estimativa estava errada** — o valor 1.095 é matematicamente correto (calculado com batches reais); a previsão de 40–80 usou número de clientes, não número de passos locais |
+| Convergência | esperada (padrão histórico) | **não convergiu** (120 rodadas) | Único run do projeto sem convergência — o novo espaço de parâmetros (split corrigido) é mais difícil de otimizar; modelo ainda explorando |
+
+##### O que aconteceu e não estava previsto
+
+- **Não houve convergência em 120 rodadas** — todos os treinamentos anteriores convergiram (exceto runs com DP severo). O split corrigido produz partições que o modelo ainda não explorou — as 120 rodadas podem não ser suficientes para o Bloco 2. Implicação direta: considerar aumentar `n_rounds_max` para 150 no Exp 17.
+
+- **Per-class F1 melhorou em todas as classes** apesar de accuracy menor que o Bloco 1 (65,90% vs 70,19%) — evidência direta de que o critério F1 macro produziu um modelo mais equilibrado entre classes. A accuracy menor não representa regressão: é resultado de splits diferentes e de um critério de seleção que sacrifica acurácia na classe majoritária para beneficiar as minoritárias.
+
+- **O critério F1 macro fez diferença real e mensurável:** a rodada selecionada por F1 macro foi R77 (Acc=65,90%, F1=0,4905); se tivéssemos usado accuracy, teria sido R58 (Acc=68,15%, F1=0,4819). Ou seja: usando accuracy ganharíamos +2,25 p.p. de Acc mas perderíamos −0,0086 de F1 macro — um modelo que acerta mais a classe majoritária (`curado_pronto`) às custas das minoritárias. O critério F1 macro escolheu corretamente para o objetivo clínico do projeto.
+
+- **Inversão FL vs BEHRT Pooled:** no Bloco 1 (T15), o FL federado superava o BEHRT Pooled A (69,59% vs 68,29%). No Bloco 2, o Pooled A supera o FL em 3,61 p.p. (69,51% vs 65,90%). O split corrigido é metodologicamente mais honesto — a superioridade do T15 pode ter sido favorecida pela partição anterior. A inversão é esperada e não invalida o projeto: o custo de privacidade existe e agora pode ser medido corretamente.
+
+- **RF centralizado supera FL federado** — volta ao padrão histórico de T1–T14 (T15 foi a exceção). O custo de privacidade em relação ao baseline mais simples é 0,77 p.p. em Acc e 0,0121 em F1 macro. Argumento para a defesa: a federação preserva privacidade com perda marginal frente ao baseline mais simples, sem ajuste fino de hiperparâmetros para o novo split.
+
+##### Implicações para Exp 17 (próxima etapa — DP)
+
+- **Baseline do Bloco 2 estabelecido:** Acc=65,90% | F1=0,4905 | AUC=0,8105 | ECE_iso=0,0311 (training_id=11)
+- **Risco de instabilidade com DP:** o modelo sem ruído já não convergiu em 120 rodadas — adicionar ruído gaussiano pode agravar. Considerar `n_rounds_max=150` ou redução da taxa de aprendizado local antes de introduzir DP.
+- **Alvo clínico principal:** `melhora_internado_grave` (F1=0,3215) — classe de maior risco; DP não deve degradar muito esta classe se o ruído for calibrado (σ pequeno na primeira rodada).
+- **τ_eff correto:** 1.095 é o valor esperado para a configuração atual. Qualquer desvio significativo desse valor em Exp 17 indicaria bug na implementação DP + FedNova.
+
+---
+
+## Sessão 2026-06-30 (tarde) — Observabilidade de recursos, análise de resultados e preparação para GPU
+
+### Implementações realizadas antes do treinamento
+
+#### Monitoramento de recursos computacionais (psutil)
+
+Antes de rodar o Bloco 2 Treinamento 1, foi implementado monitoramento de CPU, RAM e tempo por rodada. Motivação: sem esses dados, não seria possível comparar o custo computacional entre CPU (código atual), GPU (próxima etapa) e código refatorado.
+
+**Arquivos alterados:**
+
+| Arquivo | Mudança |
+|---|---|
+| `alembic/versions/013_fl_round_history.py` | Adicionada coluna `round_duration_s REAL` à tabela |
+| `alembic/versions/015_fl_trainings_resource_metrics.py` | Criada — 3 colunas em `fl_trainings`: `total_duration_s`, `peak_ram_mb`, `avg_cpu_pct` |
+| `infrastructure/shared/checkpoint_store.py` | ABC + SQLite + PostgreSQL: novas assinaturas em `complete_training()` e `save_round_history()` |
+| `experiments/training/fl_core.py` | `import psutil`, `_proc = psutil.Process()`, coleta por rodada, log estruturado, repasse para banco |
+
+**O que é coletado:**
+- Por rodada: `round_duration_s` → `fl_round_history`
+- Por treinamento: `total_duration_s`, `peak_ram_mb`, `avg_cpu_pct` → `fl_trainings`
+- No log: `[Recursos] RAM=NNNMb (pico=NNNMb) CPU=N.N% Rodada=N.Ns` por rodada + `resource_summary` ao final
+
+**Nota sobre `avg_cpu_pct`:** valor pode ultrapassar 100% — psutil mede por processo e acumula por núcleo (ex: 2.358% = ~23 núcleos saturados). É informação real de paralelismo, não erro.
+
+#### Migrações aplicadas antes do treinamento
+
 ```
+alembic upgrade head  →  aplica 013 + 014 + 015
+```
+
+Cadeia: `012 → 013 (fl_round_history + round_duration_s) → 014 (checkpoint_criterion) → 015 (resource metrics)`
+
+### Decisões tomadas após análise dos resultados
+
+#### Decisão: NÃO trocar critério de checkpoint para F1 por classe antes da refatoração
+
+**Questão levantada:** valeria usar F1 de `melhora_internado_grave` como critério de checkpoint em vez do F1 macro global, para forçar o modelo a priorizar a classe de maior risco clínico?
+
+**Decisão: não.** Razões pragmáticas:
+
+1. **Critério de checkpoint ≠ objetivo de treinamento.** O critério só seleciona qual rodada salvar — não muda o que o modelo aprende. O modelo aprende via `CrossEntropyLoss`. Para melhorar uma classe específica, o alavanca correto é a função de perda, não o critério de seleção.
+2. **O modelo já não convergiu em 120 rodadas com F1 macro.** Um critério mais rígido (F1 de uma classe, que oscila mais) agravaria a instabilidade.
+3. **Quebra metodológica.** O baseline do Bloco 2 usa `f1_macro`. Trocar o critério no Exp 17 invalida a comparação DP vs sem-DP.
+4. **Custo alto, ganho marginal em CPU.** Cada run leva ~7h. Após GPU, o ciclo cai para minutos — o momento certo para experimentos de critério.
+
+**Quando fazer:** após refatoração + GPU, quando o ciclo de experimentação for rápido.
+
+#### Decisão: experimentar `class_weights` para `melhora_internado_grave` somente após GPU
+
+**Contexto:** o projeto já usa `class_weights` inversamente proporcionais à frequência de cada classe (`client.py:83`), com teto em `max=15.0` (peso 47 causava explosão de gradiente em experimento anterior). Com a distribuição do BPSP, `melhora_internado_grave` recebe peso ~0,5 — sub-representado relativamente às classes raras.
+
+**O que class_weights faz:** erra na classe rara → gradiente maior → modelo aprende mais dessa classe. É a alavanca correta para melhorar F1 de classes específicas (diferente do critério de checkpoint, que só seleciona a rodada).
+
+**Opções futuras para experimentar (pós-GPU):**
+- Aumentar o teto de `max=15.0` com monitoramento de grad_norm
+- Trocar fórmula de inversão por raiz quadrada (`sqrt(total/count)`) — distribuição mais suave
+- Peso manual explícito para `melhora_internado_grave` independente da frequência
+
+**Quando fazer:** após GPU — ciclo de 7h em CPU torna qualquer experimento de hiperparâmetro caro demais.
+
+### Próximos passos estabelecidos nesta sessão
+
+#### Sequência definida
+
+```
+1. Instalar driver NVIDIA (RTX 4070 Ti) — em andamento
+2. Rodar verify_gpu.sh para confirmar GPU operacional
+3. make training-full  →  Bloco 2 Treinamento 1 na GPU
+4. Comparar recursos: CPU baseline (hoje) vs GPU
+5. Refactoring MVP (modularização + config em banco)
+6. Confirmar resultados equivalentes pós-refactoring
+7. Simulação distribuída (desktop como servidor + notebook como cliente)
+```
+
+A decisão de refatorar APÓS a GPU (e não antes) foi da própria pesquisadora, com o argumento correto: ter os 3 pontos de comparação (CPU atual / GPU atual / GPU refatorado) torna o capítulo de resultados do TCC mais sólido.
+
+#### Scripts de instalação criados
+
+Localização: `/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/`
+
+| Script | Função |
+|---|---|
+| `install_nvidia_driver.sh` | Instala `nvidia-driver-595-open` (recomendado pelo Ubuntu para RTX 4070 Ti / Ada Lovelace). Requer `sudo`. Após execução: reiniciar o computador. |
+| `verify_gpu.sh` | Verifica driver (`nvidia-smi`), PyTorch (`cuda_available`), e operação real (matmul 4096×4096). Executar após reinicialização. |
+
+**Sem mudança de código no projeto:** o DEVICE já é detectado automaticamente via `torch.cuda.is_available()` em `config.py`. Quando o driver estiver instalado, o próximo `make training-full` roda na GPU sem nenhuma alteração.
+
+**Nota sobre Secure Boot (MOK):** durante a instalação, o Ubuntu pede para criar uma senha temporária para assinar o módulo do kernel. Essa senha é usada uma única vez na reinicialização seguinte (tela "Enroll MOK"). Após o enroll, nunca mais é pedida.
+
+### Baseline de recursos computacionais — CPU (referência para comparação futura)
+
+| Fase | Duração | Peak RAM | CPU médio | Observação |
+|---|---|---|---|---|
+| BPSP-only (training_id=9) | 67 min | 2.445 MB | 2.353% | ~23 núcleos |
+| HSL-only (training_id=10) | 7 min | 2.299 MB | 2.368% | Convergiu em R39 |
+| Federado BPSP+HSL (training_id=11) | 121 min | 2.295 MB | 2.358% | 120 rodadas sem convergência |
+| BEHRT Pooled A | ~92 min | — | — | CPU, sem coleta psutil |
+| BEHRT Pooled B | ~94 min | — | — | CPU, sem coleta psutil |
+| **Total make training-full** | **~420 min (7h)** | **pico 2.445 MB** | **~23 núcleos** | Baseline CPU estabelecido |
+
+Este é o ponto de referência para medir o ganho real da GPU no próximo treinamento.

@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"curado_pronto\" (com alta probabilidade) para este paciente é razoável, considerando que os resultados dos exames se alinham com casos anteriores que resultaram em recuperação completa do internamento. Especificamente, a normalidade dos basofilos e da concentração de hemoglobina",
+  "fontes": [
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Bilirrubina Total NORMAL, Bilirrubina Direta NORMAL, Hematocrito LOW.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.40074259645425614
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: VCM LOW, DHL - IFCC HIGH, Globulinas NORMAL, Calcio Ionizado, sangue LOW, Concentracao de Hemoglobina Corpuscular LOW.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.41627362869538154
+    },
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Creatinina NORMAL, Plaquetas HIGH, Leucocitos HIGH.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.4229008635491902
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.2141,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0763,
+      "curado_internado": 0.2536,
+      "melhora_pronto": 0.0073,
+      "melhora_internado_breve": 0.524,
+      "melhora_internado_grave": 0.0426
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

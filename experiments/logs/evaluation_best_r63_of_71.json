@@ -1,0 +1,324 @@
+{
+  "best_round": 63,
+  "total_rounds": 71,
+  "best_f1_macro": 0.3547763058999814,
+  "best_accuracy": 0.6240757172434191,
+  "temperature": 1.3733,
+  "ece_isotonic": 0.0494,
+  "pre_calibration": {
+    "accuracy": 0.6241,
+    "macro_f1": 0.3548,
+    "macro_auc": 0.7496,
+    "per_class": {
+      "curado_pronto": {
+        "auc_roc": 0.8805,
+        "f1": 0.793,
+        "precision": 0.7234,
+        "recall": 0.8773,
+        "support": 1598
+      },
+      "curado_internado": {
+        "auc_roc": 0.6255,
+        "f1": 0.1111,
+        "precision": 0.375,
+        "recall": 0.0652,
+        "support": 46
+      },
+      "melhora_pronto": {
+        "auc_roc": 0.6809,
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "support": 320
+      },
+      "melhora_internado_breve": {
+        "auc_roc": 0.7773,
+        "f1": 0.5513,
+        "precision": 0.5609,
+        "recall": 0.542,
+        "support": 1096
+      },
+      "melhora_internado_grave": {
+        "auc_roc": 0.7835,
+        "f1": 0.3185,
+        "precision": 0.2952,
+        "recall": 0.3458,
+        "support": 321
+      }
+    },
+    "calibration": {
+      "ece": 0.0297,
+      "mce": 0.2565,
+      "bins": [
+        {
+          "confidence_mean": 0.3268,
+          "accuracy": 0.5833,
+          "count": 12,
+          "gap": 0.2565
+        },
+        {
+          "confidence_mean": 0.3723,
+          "accuracy": 0.3764,
+          "count": 271,
+          "gap": 0.0041
+        },
+        {
+          "confidence_mean": 0.4356,
+          "accuracy": 0.408,
+          "count": 375,
+          "gap": 0.0276
+        },
+        {
+          "confidence_mean": 0.5017,
+          "accuracy": 0.5203,
+          "count": 567,
+          "gap": 0.0186
+        },
+        {
+          "confidence_mean": 0.5658,
+          "accuracy": 0.551,
+          "count": 461,
+          "gap": 0.0148
+        },
+        {
+          "confidence_mean": 0.6337,
+          "accuracy": 0.6392,
+          "count": 424,
+          "gap": 0.0054
+        },
+        {
+          "confidence_mean": 0.6967,
+          "accuracy": 0.7344,
+          "count": 433,
+          "gap": 0.0377
+        },
+        {
+          "confidence_mean": 0.7616,
+          "accuracy": 0.8257,
+          "count": 413,
+          "gap": 0.064
+        },
+        {
+          "confidence_mean": 0.8339,
+          "accuracy": 0.8864,
+          "count": 264,
+          "gap": 0.0524
+        },
+        {
+          "confidence_mean": 0.8872,
+          "accuracy": 0.8209,
+          "count": 134,
+          "gap": 0.0663
+        },
+        {
+          "confidence_mean": 0.9561,
+          "accuracy": 0.9259,
+          "count": 27,
+          "gap": 0.0301
+        }
+      ],
+      "temperature": 1.0,
+      "n_samples": 3381
+    },
+    "confusion_matrix": [
+      [
+        1402,
+        1,
+        0,
+        132,
+        63
+      ],
+      [
+        19,
+        3,
+        0,
+        19,
+        5
+      ],
+      [
+        131,
+        1,
+        0,
+        185,
+        3
+      ],
+      [
+        305,
+        3,
+        0,
+        594,
+        194
+      ],
+      [
+        81,
+        0,
+        0,
+        129,
+        111
+      ]
+    ],
+    "n_samples": 3381,
+    "class_labels": [
+      "curado_pronto",
+      "curado_internado",
+      "melhora_pronto",
+      "melhora_internado_breve",
+      "melhora_internado_grave"
+    ]
+  },
+  "post_calibration": {
+    "accuracy": 0.6241,
+    "macro_f1": 0.3548,
+    "macro_auc": 0.7491,
+    "per_class": {
+      "curado_pronto": {
+        "auc_roc": 0.88,
+        "f1": 0.793,
+        "precision": 0.7234,
+        "recall": 0.8773,
+        "support": 1598
+      },
+      "curado_internado": {
+        "auc_roc": 0.6233,
+        "f1": 0.1111,
+        "precision": 0.375,
+        "recall": 0.0652,
+        "support": 46
+      },
+      "melhora_pronto": {
+        "auc_roc": 0.6802,
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "support": 320
+      },
+      "melhora_internado_breve": {
+        "auc_roc": 0.7788,
+        "f1": 0.5513,
+        "precision": 0.5609,
+        "recall": 0.542,
+        "support": 1096
+      },
+      "melhora_internado_grave": {
+        "auc_roc": 0.7832,
+        "f1": 0.3185,
+        "precision": 0.2952,
+        "recall": 0.3458,
+        "support": 321
+      }
+    },
+    "calibration": {
+      "ece": 0.1017,
+      "mce": 0.1727,
+      "bins": [
+        {
+          "confidence_mean": 0.3208,
+          "accuracy": 0.4118,
+          "count": 102,
+          "gap": 0.0909
+        },
+        {
+          "confidence_mean": 0.3671,
+          "accuracy": 0.382,
+          "count": 479,
+          "gap": 0.0149
+        },
+        {
+          "confidence_mean": 0.435,
+          "accuracy": 0.5299,
+          "count": 670,
+          "gap": 0.0949
+        },
+        {
+          "confidence_mean": 0.498,
+          "accuracy": 0.5797,
+          "count": 640,
+          "gap": 0.0817
+        },
+        {
+          "confidence_mean": 0.5671,
+          "accuracy": 0.701,
+          "count": 572,
+          "gap": 0.134
+        },
+        {
+          "confidence_mean": 0.627,
+          "accuracy": 0.7901,
+          "count": 467,
+          "gap": 0.1632
+        },
+        {
+          "confidence_mean": 0.6995,
+          "accuracy": 0.8722,
+          "count": 266,
+          "gap": 0.1727
+        },
+        {
+          "confidence_mean": 0.7524,
+          "accuracy": 0.8346,
+          "count": 133,
+          "gap": 0.0822
+        },
+        {
+          "confidence_mean": 0.8314,
+          "accuracy": 0.8611,
+          "count": 36,
+          "gap": 0.0297
+        },
+        {
+          "confidence_mean": 0.8913,
+          "accuracy": 0.9375,
+          "count": 16,
+          "gap": 0.0462
+        }
+      ],
+      "temperature": 1.3733373880386353,
+      "n_samples": 3381
+    },
+    "confusion_matrix": [
+      [
+        1402,
+        1,
+        0,
+        132,
+        63
+      ],
+      [
+        19,
+        3,
+        0,
+        19,
+        5
+      ],
+      [
+        131,
+        1,
+        0,
+        185,
+        3
+      ],
+      [
+        305,
+        3,
+        0,
+        594,
+        194
+      ],
+      [
+        81,
+        0,
+        0,
+        129,
+        111
+      ]
+    ],
+    "n_samples": 3381,
+    "class_labels": [
+      "curado_pronto",
+      "curado_internado",
+      "melhora_pronto",
+      "melhora_internado_breve",
+      "melhora_internado_grave"
+    ]
+  }
+}

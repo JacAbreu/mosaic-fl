@@ -496,3 +496,56 @@ claude, quando for avaliar o sistema, nao foque em um trabalho simples para TCC,
   deletar -> docs/avaliacao_metodologia_mosaicfl.md desatualizado
 
   make db-up && alembic upgrade head && make training-full -> subir banco, rodar migrations, iniciar treinamento
+
+treinamento ocorrido no inicio do dia 30 de junho 2026
+
+O que aconteceu conforme esperado:
+
+  ┌──────────────────────┬───────────┬────────────────────────────────────┐
+  │     Expectativa      │ Previsto  │               Obtido               │
+  ├──────────────────────┼───────────┼────────────────────────────────────┤
+  │ Accuracy global      │ 65–72%    │ 65,90% ✓                           │
+  ├──────────────────────┼───────────┼────────────────────────────────────┤
+  │ F1 macro             │ 0,45–0,55 │ 0,4905 ✓                           │
+  ├──────────────────────┼───────────┼────────────────────────────────────┤
+  │ AUC macro            │ 0,79–0,83 │ 0,8105 ✓                           │
+  ├──────────────────────┼───────────┼────────────────────────────────────┤
+  │ Melhor rodada        │ R60–R110  │ R77 ✓                              │
+  ├──────────────────────┼───────────┼────────────────────────────────────┤
+  │ curado_internado F1  │ 0,000     │ 0,000 ✓                            │
+  ├──────────────────────┼───────────┼────────────────────────────────────┤
+  │ melhora_int_grave F1 │ 0,25–0,40 │ 0,3215 ✓                           │
+  ├──────────────────────┼───────────┼────────────────────────────────────┤
+  │ HSL instável         │ sim       │ sim (acc=33,19%, loss crescente) ✓ │
+  └──────────────────────┴───────────┴────────────────────────────────────┘
+
+  ---
+  O que não aconteceu conforme esperado:
+
+  ┌───────────────┬──────────┬───────────────────────────────┬──────────────────────────────────────────────────────────────────────────┐
+  │  Expectativa  │ Previsto │            Obtido             │                                 Problema                                 │
+  ├───────────────┼──────────┼───────────────────────────────┼──────────────────────────────────────────────────────────────────────────┤
+  │ ECE isotônica │ < 0,02   │ 0,0311 ✗                      │ Modelo subconfiante (T=1,237)                                            │
+  ├───────────────┼──────────┼───────────────────────────────┼──────────────────────────────────────────────────────────────────────────┤
+  │ HSL accuracy  │ 35–42%   │ 33,19% ✗                      │ Ficou abaixo do intervalo                                                │
+  ├───────────────┼──────────┼───────────────────────────────┼──────────────────────────────────────────────────────────────────────────┤
+  │ τ_eff médio   │ 40–80    │ 1.095 ✗                       │ Estimativa estava errada — valor é correto matematicamente, previsão não │
+  ├───────────────┼──────────┼───────────────────────────────┼──────────────────────────────────────────────────────────────────────────┤
+  │ Convergência  │ esperada │ não convergiu (120 rodadas) ✗ │ Único run do projeto sem convergência                                    │
+  └───────────────┴──────────┴───────────────────────────────┴──────────────────────────────────────────────────────────────────────────┘
+
+  ---                   
+    ---
+  O que aconteceu e não estava previsto:
+
+  - Todas as classes melhoraram em relação ao Bloco 1 (exceto curado_internado que era 0 dos dois lados) — efeito do critério F1 macro.
+  - Inversão FL vs Pooled: no Bloco 1 T15 o FL superava o Pooled; agora o Pooled supera em 3,61 p.p. Split corrigido é mais honesto.
+  - Critério F1 macro fez diferença real: R77 (F1=0,4905) vs o que seria R58 por accuracy (Acc=68,15%, F1=0,4819) — escolhemos um modelo 2,25 p.p. menos acurado mas 0,0086 mais
+  equilibrado entre classes.
+
+instalacao do driver placa de video - gpu
+! sudo mokutil --list-new; echo ---; sudo efibootmgr -v; echo ---; ls /boot/efi/EFI/ /boot/efi/EFI/*/; echo ---; dpkg -l | grep shim
+
+ sudo mokutil --import /var/lib/shim-signed/mok/MOK.der
+
+ sudo reboot
