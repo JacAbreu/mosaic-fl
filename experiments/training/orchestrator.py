@@ -8,7 +8,7 @@ from typing import Dict, Optional
 from torch.utils.data import DataLoader
 
 from infrastructure.shared.metrics_store import get_metrics_store
-from mosaicfl.core.config import FL_DB_URL, MODEL_CFG
+from mosaicfl.core.config import ABLATION_SEEDS, FL_DB_URL, MODEL_CFG
 from mosaicfl.core.data_loader import load_with_fallback
 from mosaicfl.core.model import SimplifiedBEHRT
 from mosaicfl.core.preprocessor import EHRPreprocessor
@@ -145,7 +145,7 @@ class FederatedTraining:
             demographics_by_client=self.demographics_by_client,
             test_loader_demo=self.test_loader_demo,
             n_epochs=10,
-            seeds=[42, 7, 123],
+            seeds=ABLATION_SEEDS,
         )
         ablation_path = (
             Path("experiments/data")

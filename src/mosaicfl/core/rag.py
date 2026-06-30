@@ -1,19 +1,27 @@
 """
 Sistema RAG: construção de base de conhecimento + recuperação + geração.
-Usa pgvector (knowledge.clinical_profiles) + all-MiniLM-L6-v2 + DistilGPT-2.
+Usa pgvector (knowledge.clinical_profiles) + all-MiniLM-L6-v2 + LLM configurável.
+Backend LLM selecionado por FL_LLM_BACKEND:
+  huggingface  → AutoModelForCausalLM (padrão: distilgpt2)
+  ollama       → POST localhost:11434/api/generate (ex: gemma3:4b)
 Quando FL_DB_URL não está configurado, usa _InMemoryStore (numpy) para experimentos.
 """
+import json
+import logging
 import os
+import urllib.error
+import urllib.request
 
-import sqlalchemy as sa
-from sqlalchemy import text
-from sentence_transformers import SentenceTransformer
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-import torch
 import numpy as np
+import sqlalchemy as sa
+import torch
+from sentence_transformers import SentenceTransformer
+from sqlalchemy import text
 from typing import List, Dict, Tuple
 
-from .config import FED_CFG, MAX_SEQ_LEN, RUNTIME_CFG
+from .config import FED_CFG, LLM_BACKEND, MAX_SEQ_LEN, RUNTIME_CFG
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_DB_URL = os.getenv("FL_DB_URL", "")
 
@@ -131,6 +139,61 @@ class _PostgreSQLStore:
 
 
 # ---------------------------------------------------------------------------
+# Backends de geração LLM
+# ---------------------------------------------------------------------------
+
+def _check_ollama_available(timeout: int = 5) -> bool:
+    """Testa se o Ollama está acessível em localhost:11434. Retorna False se não estiver."""
+    try:
+        with urllib.request.urlopen("http://localhost:11434/api/tags", timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def _generate_ollama(model: str, prompt: str, max_tokens: int, timeout: int = 120) -> str:
+    """Gera texto via Ollama (POST localhost:11434/api/generate). Sem dependências externas."""
+    payload = json.dumps({
+        "model":  model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"num_predict": max_tokens, "temperature": 0.7},
+    }).encode()
+    req = urllib.request.Request(
+        "http://localhost:11434/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read())["response"].strip()
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            "Ollama não está acessível em localhost:11434. "
+            "Inicie o Ollama com 'ollama serve' e verifique se o modelo está disponível "
+            f"com 'ollama pull {model}'."
+        ) from exc
+
+
+def _load_huggingface_backend(llm_model: str):
+    """Carrega tokenizer + pipeline HuggingFace. Retorna (tokenizer, generator)."""
+    from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline as hf_pipeline
+    tokenizer = AutoTokenizer.from_pretrained(llm_model)
+    tokenizer.clean_up_tokenization_spaces = False
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    _llm = AutoModelForCausalLM.from_pretrained(llm_model)
+    generator = hf_pipeline(
+        "text-generation",
+        model=_llm,
+        tokenizer=tokenizer,
+        device=0 if torch.cuda.is_available() else -1,
+        truncation=True,
+    )
+    return tokenizer, generator
+
+
+# ---------------------------------------------------------------------------
 # ClinicalRAG
 # ---------------------------------------------------------------------------
 
@@ -144,18 +207,29 @@ class ClinicalRAG:
 
         self.embedder = SentenceTransformer(RUNTIME_CFG.embedding_model)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(RUNTIME_CFG.llm_model)
-        self.tokenizer.clean_up_tokenization_spaces = False
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.llm = AutoModelForCausalLM.from_pretrained(RUNTIME_CFG.llm_model)
-        self.generator = pipeline(
-            "text-generation",
-            model=self.llm,
-            tokenizer=self.tokenizer,
-            device=0 if torch.cuda.is_available() else -1,
-            truncation=True,
-        )
+        self._llm_model = RUNTIME_CFG.llm_model
+
+        requested_backend = LLM_BACKEND
+        if requested_backend == "ollama" and not _check_ollama_available():
+            hf_fallback = RUNTIME_CFG.llm_hf_model
+            logger.warning(
+                "RAG: Ollama solicitado (modelo: %s) mas não está acessível em "
+                "localhost:11434. Usando HuggingFace (%s) como fallback. "
+                "Para usar Ollama: 'ollama serve' e 'ollama pull %s'.",
+                self._llm_model, hf_fallback, self._llm_model,
+            )
+            requested_backend = "huggingface"
+            self._llm_model = hf_fallback
+
+        self._llm_backend = requested_backend
+
+        if self._llm_backend == "ollama":
+            self.tokenizer = None
+            self.generator = None
+            logger.info("RAG LLM backend: ollama | model: %s", self._llm_model)
+        else:
+            self.tokenizer, self.generator = _load_huggingface_backend(self._llm_model)
+            logger.info("RAG LLM backend: huggingface | model: %s", self._llm_model)
 
     def build_knowledge_base(self, patterns: List[Dict]) -> None:
         """
@@ -164,9 +238,11 @@ class ClinicalRAG:
         """
         texts, metadatas, ids = [], [], []
         for i, p in enumerate(patterns):
-            anon_text = p["texto"].replace(
-                str(p.get("idade_exacta", "")), p.get("faixa_etaria", "adulto")
-            )
+            idade_exacta = str(p.get("idade_exacta", ""))
+            if idade_exacta:
+                anon_text = p["texto"].replace(idade_exacta, p.get("faixa_etaria", "adulto"))
+            else:
+                anon_text = p["texto"]
             texts.append(anon_text)
             metadatas.append({
                 "desfecho":    p["desfecho"],
@@ -204,34 +280,53 @@ class ClinicalRAG:
         symptoms: str,
         retrieved_cases: List[Dict],
     ) -> Tuple:
-        MAX_CASE_TOKENS = 100
-        truncated_cases = []
-        for c in retrieved_cases[:3]:
-            ids = self.tokenizer.encode(c["texto"], max_length=MAX_CASE_TOKENS, truncation=True)
-            truncated_cases.append(self.tokenizer.decode(ids, skip_special_tokens=True))
-        cases_text = "\n".join([f"- {t}" for t in truncated_cases])
+        if self._llm_backend == "ollama":
+            # Truncagem por caracteres (~4 chars/token) — sem tokenizador.
+            MAX_CASE_CHARS = 400
+            truncated_cases = [c["texto"][:MAX_CASE_CHARS] for c in retrieved_cases[:3]]
+            cases_text = "\n".join([f"- {t}" for t in truncated_cases])
+            symptoms_trunc = symptoms[:MAX_SEQ_LEN * 4]
 
-        symptoms_ids = self.tokenizer.encode(symptoms, max_length=MAX_SEQ_LEN, truncation=True)
-        symptoms_trunc = self.tokenizer.decode(symptoms_ids, skip_special_tokens=True)
+            prompt = (
+                f"Você é um assistente clínico especializado. "
+                f"Com base nos seguintes casos similares recuperados:\n{cases_text}\n\n"
+                f"O modelo de IA previu o desfecho '{prediction}' "
+                f"(probabilidade {probability:.2f}) para um paciente com os seguintes exames: {symptoms_trunc}.\n\n"
+                f"Em 2 a 3 frases, justifique clinicamente esta predição com base nos casos similares:"
+            )
+            max_prompt_chars = (1024 - FED_CFG.max_new_tokens) * 4
+            if len(prompt) > max_prompt_chars:
+                prompt = prompt[:max_prompt_chars]
+            justification = _generate_ollama(self._llm_model, prompt, FED_CFG.max_new_tokens)
+        else:
+            MAX_CASE_TOKENS = 100
+            truncated_cases = []
+            for c in retrieved_cases[:3]:
+                ids = self.tokenizer.encode(c["texto"], max_length=MAX_CASE_TOKENS, truncation=True)
+                truncated_cases.append(self.tokenizer.decode(ids, skip_special_tokens=True))
+            cases_text = "\n".join([f"- {t}" for t in truncated_cases])
 
-        prompt = (
-            f"Com base nos seguintes casos clínicos semelhantes:\n{cases_text}\n\n"
-            f"O modelo previu {prediction} (probabilidade {probability:.2f}) "
-            f"para o paciente com sintomas: {symptoms_trunc}.\n"
-            f"Justifique brevemente a predição:"
-        )
-        max_prompt_tokens = 1024 - FED_CFG.max_new_tokens - 10
-        prompt_ids = self.tokenizer.encode(prompt, max_length=max_prompt_tokens, truncation=True)
-        prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=True)
+            symptoms_ids = self.tokenizer.encode(symptoms, max_length=MAX_SEQ_LEN, truncation=True)
+            symptoms_trunc = self.tokenizer.decode(symptoms_ids, skip_special_tokens=True)
 
-        output = self.generator(
-            prompt,
-            max_new_tokens=FED_CFG.max_new_tokens,
-            do_sample=True,
-            temperature=0.7,
-            num_return_sequences=1,
-        )
-        justification = output[0]["generated_text"].replace(prompt, "").strip()
+            prompt = (
+                f"Você é um assistente clínico especializado. "
+                f"Com base nos seguintes casos similares recuperados:\n{cases_text}\n\n"
+                f"O modelo de IA previu o desfecho '{prediction}' "
+                f"(probabilidade {probability:.2f}) para um paciente com os seguintes exames: {symptoms_trunc}.\n\n"
+                f"Em 2 a 3 frases, justifique clinicamente esta predição com base nos casos similares:"
+            )
+            max_prompt_tokens = 1024 - FED_CFG.max_new_tokens - 10
+            prompt_ids = self.tokenizer.encode(prompt, max_length=max_prompt_tokens, truncation=True)
+            prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=True)
+            output = self.generator(
+                prompt,
+                max_new_tokens=FED_CFG.max_new_tokens,
+                do_sample=True,
+                temperature=0.7,
+                num_return_sequences=1,
+            )
+            justification = output[0]["generated_text"].replace(prompt, "").strip()
 
         hallucination = probability < 0.6 and "certeza" in justification.lower()
         return justification, retrieved_cases, hallucination

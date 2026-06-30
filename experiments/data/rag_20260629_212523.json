@@ -1,0 +1,50 @@
+{
+  "predicao": {
+    "diagnostico": "curado_internado",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"curado_internado\" com uma probabilidade alta (0.81) é razoável considerando os casos similares recuperados. A predominância de resultados com Basofilos NORMAL e Concentração de Hemoglobina Corpuscular NORMAL, juntamente com valores de RDW e Creatinina",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, RDW NORMAL, Plaquetas HIGH, Creatinina NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.38521968390589534
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Eosinofilos LOW, Hemoglobina LOW, Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Creatinina NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3979699970501652
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Concentracao de Hemoglobina Corpuscular HIGH, CK NORMAL, VCM NORMAL, Basófilos NORMAL, Hormonio Tiroestimulante NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.40000758171036244
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "precision_metrics": {
+    "precision_at_3": 0.2544,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.071,
+      "curado_internado": 0.0476,
+      "melhora_pronto": 0.136,
+      "melhora_internado_breve": 0.6316,
+      "melhora_internado_grave": 0.0641
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

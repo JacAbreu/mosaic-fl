@@ -1,0 +1,101 @@
+{
+  "ablation_A_sem_demo": {
+    "accuracy": 0.6554,
+    "std_accuracy": 0.0417,
+    "macro_f1": 0.4198,
+    "std_macro_f1": 0.0298,
+    "demo_dim": 0,
+    "n_epochs": 10,
+    "n_seeds": 3,
+    "seeds_detail": [
+      {
+        "accuracy": 0.7122,
+        "macro_f1": 0.4601,
+        "macro_auc": 0.8255,
+        "ece": 0.0432,
+        "descricao": "SimplifiedBEHRT sem demográficos (baseline)",
+        "seed": 42,
+        "demo_dim": 0,
+        "n_epochs": 10
+      },
+      {
+        "accuracy": 0.6131,
+        "macro_f1": 0.3891,
+        "macro_auc": 0.8066,
+        "ece": 0.0901,
+        "descricao": "SimplifiedBEHRT sem demográficos (baseline)",
+        "seed": 7,
+        "demo_dim": 0,
+        "n_epochs": 10
+      },
+      {
+        "accuracy": 0.6409,
+        "macro_f1": 0.4103,
+        "macro_auc": 0.8103,
+        "ece": 0.0365,
+        "descricao": "SimplifiedBEHRT sem demográficos (baseline)",
+        "seed": 123,
+        "demo_dim": 0,
+        "n_epochs": 10
+      }
+    ],
+    "descricao": "SimplifiedBEHRT sem demográficos (baseline)"
+  },
+  "ablation_B_late_fusion": {
+    "accuracy": 0.5051,
+    "std_accuracy": 0.0934,
+    "macro_f1": 0.3433,
+    "std_macro_f1": 0.0565,
+    "demo_dim": 2,
+    "n_epochs": 10,
+    "n_seeds": 3,
+    "seeds_detail": [
+      {
+        "accuracy": 0.4374,
+        "macro_f1": 0.3135,
+        "loss": 1.6096,
+        "descricao": "SimplifiedBEHRT + late fusion demográfica (dados reais FAPESP)",
+        "seed": 42,
+        "demo_dim": 2,
+        "n_epochs": 10
+      },
+      {
+        "accuracy": 0.6371,
+        "macro_f1": 0.4224,
+        "loss": 0.9258,
+        "descricao": "SimplifiedBEHRT + late fusion demográfica (dados reais FAPESP)",
+        "seed": 7,
+        "demo_dim": 2,
+        "n_epochs": 10
+      },
+      {
+        "accuracy": 0.4407,
+        "macro_f1": 0.2941,
+        "loss": 1.2734,
+        "descricao": "SimplifiedBEHRT + late fusion demográfica (dados reais FAPESP)",
+        "seed": 123,
+        "demo_dim": 2,
+        "n_epochs": 10
+      }
+    ],
+    "descricao": "SimplifiedBEHRT + late fusion demográfica (dados reais FAPESP)"
+  },
+  "delta_B_minus_A": {
+    "accuracy": -0.1503,
+    "macro_f1": -0.0765
+  },
+  "meta": {
+    "fonte_demo": "real_fapesp",
+    "n_epochs": 10,
+    "random_seed": 42,
+    "seeds": [
+      42,
+      7,
+      123
+    ],
+    "demo_features": [
+      "age_norm (birth_year / ref_year=2021)",
+      "sex_binary (M=1, F=0)"
+    ]
+  }
+}

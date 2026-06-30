@@ -307,3 +307,6 @@ certs/
 
 # Emails pessoais — não devem ser versionados
 email_*.md
+
+# Checkpoints exportados (gerados por make export-checkpoint — não versionar binários grandes)
+checkpoints/*.pt

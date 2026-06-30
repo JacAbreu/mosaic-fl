@@ -1,0 +1,50 @@
+{
+  "predicao": {
+    "diagnostico": "curado_internado",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A predição de \"curado_internado\" com uma probabilidade alta (0.81) é suportada pelos casos similares que apresentam resultados benéficos após internação breve. A predominância de valores normais para Basofilos e Concentração de Hemoglobina Corpuscular, juntamente com",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Hemoglobina Corpuscular Media NORMAL, Basofilos NORMAL, Leucocitos HIGH, Creatinina NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3771661891242142
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Hemoglobina Corpuscular Media NORMAL, Basofilos NORMAL, Leucocitos HIGH, Creatinina NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3771661891242142
+    },
+    {
+      "texto": "Desfecho: curado_pronto. Marcadores de maior atenção: Basofilos NORMAL, Plaquetas HIGH, Concentracao de Hemoglobina Corpuscular NORMAL, Hemoglobina Corpuscular Media NORMAL, Creatinina NORMAL.",
+      "metadata": {
+        "desfecho": "curado_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3946410597967761
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "precision_metrics": {
+    "precision_at_3": 0.4291,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.5356,
+      "curado_internado": 0.0238,
+      "melhora_pronto": 0.4351,
+      "melhora_internado_breve": 0.4103,
+      "melhora_internado_grave": 0.0059
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

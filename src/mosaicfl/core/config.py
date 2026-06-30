@@ -91,11 +91,18 @@ class FedConfig:
     local_epochs:          int   = 1   # reduzido de 2→1: menos client drift em regime non-IID severo (Li et al. 2020)
     lr:                    float = 0.001
     num_clients:           int   = 2
-    random_seed:           int   = 42
-    top_k:                 int   = 3
+    random_seed:           int        = 42
+    ablation_seeds:        list[int]  = field(default_factory=lambda: [42])  # deve incluir random_seed; lista única = mesmo contexto do FL
+    top_k:                 int        = 3
     max_new_tokens:        int   = 64
     pooled_epochs:         int   = 120  # épocas do BEHRT centralizado — equivalente ao budget de rodadas do FL (num_rounds)
     use_fednova:           bool  = True  # Exp 9: substitui FedAvg por normalização por passos efetivos τ_i (Wang et al. 2020)
+    # Privacidade Diferencial (DP-FedAvg, McMahan et al. 2018)
+    # dp_noise_multiplier=0.0 desabilita DP completamente (sem overhead).
+    # dp_noise_multiplier=σ > 0: cada rodada adiciona N(0, (σ·S/n)²) ao modelo agregado,
+    # onde S=dp_max_grad_norm (sensitivity) e n=num_clients.
+    dp_noise_multiplier: float = field(default_factory=lambda: float(os.getenv("FL_DP_NOISE", "0.0")))
+    dp_max_grad_norm:    float = field(default_factory=lambda: float(os.getenv("FL_DP_CLIP",  "1.0")))
 
 
 @dataclass
@@ -106,6 +113,8 @@ class RuntimeConfig:
     chroma_path:     Path   = field(default_factory=lambda: Path(os.getenv("FL_CHROMA_PATH", "chroma_db")))
     embedding_model: str    = field(default_factory=lambda: os.getenv("FL_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"))
     llm_model:       str    = field(default_factory=lambda: os.getenv("FL_LLM_MODEL", "distilgpt2"))
+    llm_hf_model:   str    = field(default_factory=lambda: os.getenv("FL_LLM_HF_MODEL", "distilgpt2"))
+    llm_backend:     str    = field(default_factory=lambda: os.getenv("FL_LLM_BACKEND", "huggingface"))
     use_ray:         bool   = field(default_factory=lambda: os.getenv("FL_USE_RAY", "false").lower() == "true")
     db_url:          str    = field(default_factory=lambda: os.getenv("FL_DB_URL", ""))
     # "production" exige FL_DB_URL e rejeita dados sintéticos.
@@ -143,14 +152,18 @@ POOLED_EPOCHS         = FED_CFG.pooled_epochs
 LR                    = FED_CFG.lr
 NUM_CLIENTS           = FED_CFG.num_clients
 RANDOM_SEED           = FED_CFG.random_seed
+ABLATION_SEEDS        = FED_CFG.ablation_seeds
 TOP_K                 = FED_CFG.top_k
 MAX_NEW_TOKENS        = FED_CFG.max_new_tokens
+DP_NOISE_MULTIPLIER   = FED_CFG.dp_noise_multiplier
+DP_MAX_GRAD_NORM      = FED_CFG.dp_max_grad_norm
 
 DATA_PATH             = RUNTIME_CFG.data_path
 DEVICE                = RUNTIME_CFG.device
 CHROMA_DB_PATH        = str(RUNTIME_CFG.chroma_path)
 EMBEDDING_MODEL       = RUNTIME_CFG.embedding_model
 LLM_MODEL             = RUNTIME_CFG.llm_model
+LLM_BACKEND           = RUNTIME_CFG.llm_backend
 USE_RAY               = RUNTIME_CFG.use_ray
 FL_DB_URL             = RUNTIME_CFG.db_url
 FL_ENV                = RUNTIME_CFG.env

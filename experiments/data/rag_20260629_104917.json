@@ -1,0 +1,50 @@
+{
+  "predicao": {
+    "diagnostico": "curado_internado",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "O modelo preemendia caisso seguintos contentente de o cualcaque de quelque, o o cualcaque de quelque podermente o cualcaque de quelque, o cualcaque de quelque.\nO",
+  "fontes": [
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoGadultoladultoiadultocadultooadultosadultoeadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoHadultoIadultoGadultoHadulto,adulto adulto<adultoPadultoAadultoDadulto>adulto,adulto adultoRadultoDadultoWadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoVadultoCadultoMadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoDadultoHadultoLadulto adulto-adulto adultoIadultoFadultoCadultoCadulto_adultoHadultoIadultoGadultoHadulto",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6175840383048026
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoGadultoladultoiadultocadultooadultosadultoeadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoRadultoDadultoWadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoVadultoCadultoMadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adulto<adultoPadultoAadultoDadulto>adulto,adulto adultoDadultoHadultoLadulto adulto-adulto adultoIadultoFadultoCadultoCadulto_adultoHadultoIadultoGadultoHadulto",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6214753018930368
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoLadultoiadultonadultofadultoóadultocadultoiadultotadultooadultosadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoLadultoaadultocadultotadultoaadultotadultooadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoDadultoHadultoLadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoCadultoKadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoCadultoHadultoCadultoMadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6246676668722821
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "precision_metrics": {
+    "precision_at_3": 0.1236,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.1331,
+      "curado_internado": 0.2976,
+      "melhora_pronto": 0.5244,
+      "melhora_internado_breve": 0.0186,
+      "melhora_internado_grave": 0.0168
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

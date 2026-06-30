@@ -238,6 +238,26 @@ class InferenceEngine:
         """Recarrega alias cache e refs canônicas — use quando analyte_references mudar."""
         self._load_references(db_url)
 
+    def load_from_store(self, checkpoint: dict) -> None:
+        """Carrega pesos e vocabulário a partir do dict retornado pelo CheckpointStore.
+
+        Usado quando não há checkpoint em arquivo — o training pipeline salva no banco
+        (SQLite ou PostgreSQL) e a API carrega via CheckpointStore.load_best().
+        """
+        if "vocab" not in checkpoint or "model_state" not in checkpoint:
+            raise ValueError("checkpoint inválido: faltam campos 'vocab' e/ou 'model_state'")
+        self._vocab            = checkpoint["vocab"]
+        self._temperature      = float(checkpoint.get("temperature", 1.0))
+        self._checkpoint_round = checkpoint.get("checkpoint_round")
+        self._checkpoint_at    = checkpoint.get("checkpoint_at")
+        self._model_version    = checkpoint.get("model_version")
+        self.model.load_state_dict(checkpoint["model_state"])
+        self._checkpoint_path  = Path("<checkpoint_store>")
+        logger.info(
+            "inference_engine_loaded_from_store vocab_size=%d T=%.4f round=%s",
+            len(self._vocab), self._temperature, self._checkpoint_round,
+        )
+
     def _tokenize(self, exam_records: list) -> "tuple[torch.Tensor, torch.Tensor]":
         tokens = records_to_tokens(
             records        = exam_records,

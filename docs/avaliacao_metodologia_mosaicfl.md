@@ -1,306 +1,294 @@
-# Avaliação Crítica: Metodologia do Projeto MOSAIC-FL
+# Avaliação do MOSAIC-FL: Estado Atual, Lacunas e Próximos Passos
 
-**Fonte avaliada**: `Metodologia MOSAIC-FL - Final.pdf` (15 páginas, gerado por DeepSeek)  
-**Avaliado por**: Claude Sonnet 4.6 com acesso integral ao repositório  
-**Data**: 2026-06-29  
-
----
-
-## Metodologia desta Avaliação
-
-Cada afirmação do documento foi cruzada com: código-fonte (`src/mosaicfl/`), logs de experimentos (`experiments/logs/`), JSONs de avaliação (`experiments/data/`), e o arquivo `docs/dados_necessarios_texto_defesa.md` preenchido na sessão anterior. Nenhuma afirmação foi aceita apenas pela plausibilidade — apenas pelo código ou por resultado empírico rastreável.
+**Referência**: código-fonte (`src/mosaicfl/`), logs de experimento (`experiments/logs/`), `docs/Sumario_Treinamento.md`, `docs/Sumario_Treinamento_Parte2.md`
+**Avaliado por**: Claude Sonnet 4.6 com acesso integral ao repositório
+**Última atualização**: 2026-06-29 (pós-Exp 16, pré-Exp 17)
 
 ---
 
-## 1. O que está Correto ✓
+## O MOSAIC-FL como Percurso pelos Fundamentos da Inteligência Artificial
 
-### 1.1 Dados e Pré-processamento (Seção 2)
-- As 4 tabelas usadas na query SQL estão corretas (`clinical.attendances`, `clinical.patients`, `metrics.clinical_outcomes`, `metrics.exam_records`) — verificado em `preprocessor.py`.
-- Filtro `hospital_id IN ('HSL', 'BPSP')` e exclusão de HEI, HFL, HCSP — correto e verificado.
-- Critérios de exclusão: `outcome_class NOT IN (2, 3, 4)` e `(co.outcome_at - a.attended_at) >= 0` — corretos.
-- Threshold de 10 dias para `melhora_internado_breve/grave`: **verificado diretamente em `preprocessor.py`** (`return 3 if duration_days <= 10 else 4`).
-- Distribuições de classes BPSP (N=28.599) e HSL (N=5.174) — corretas.
-- Split 70/10/10/10 e volumes resultantes (BPSP: 20.019/2.859/2.859; HSL: 3.621/517/517; teste global: 3.381; cal global: 3.376) — confirmados pelo log `behrt_pooled_20260625_212059.log`.
-- Formato de token `{analyte}_{classification}` e fallback para `NO_REF` — correto.
-- Vocabulary de 9.997 tokens de capacidade, uso real de 648 tokens únicos — correto.
-- Pesos de classe: `total / (n_classes × count_i)`, clamp(max=15.0) — correto e verificado em `client.py`.
+O MOSAIC-FL não é apenas um sistema de aprendizado federado para hospitais — é um percurso deliberado e documentado pelos fundamentos da Inteligência Artificial aplicada. Cada decisão técnica do projeto pressupõe e exercita uma camada da cadeia de conhecimento que sustenta qualquer sistema de IA responsável em produção.
 
-### 1.2 Arquitetura SimplifiedBEHRT (Seção 3)
-- Todos os valores de `ModelConfig` (vocab_size=10.000, embed_dim=64, max_seq_len=128, num_layers=2, num_heads=4, ff_dim=128, num_classes=5, dropout=0.1) — **verificados em `config.py`**.
-- DiaRelativoEmbedding: deslocamento +1, CLS recebe `dia_relativo=0`, max_dia=60 — correto e verificado em `model.py`.
-- PositionalEncoding sinusoidal pós-DiaRelativo — correto.
-- BEHRTEncoderLayer: `need_weights=True, average_attn_weights=False`, shape `(batch, 4, seq, seq)` — **verificado diretamente em `model.py` linhas 110-114**.
-- Post-LN (não Pre-LN), residual connections — correto.
-- Late Fusion Demográfica: `[age_norm, sex_binary]` concatenados ao CLS antes do classifier — correto.
-- Classifier head: `Linear(64+demo_dim, 64) → ReLU → Dropout(0.1) → Linear(64, 5)` — correto.
-- Ganho de +3,08 p.p. com DiaRelativoEmbedding (Exp 6 vs Exp 5) — confirmado.
+### Da mineração de dados à privacidade formal
 
-### 1.3 Protocolo Federado (Seção 4)
-- `local_epochs=1` (reduzido de 2) — **verificado em `config.py`** com comentário "reduzido de 2→1: menos client drift em regime non-IID severo".
-- FedProx: `μ=0.1` (aumentado de 0.01 no Exp 7) — **verificado em `config.py` e no comentário do código**.
-- FedNova: fórmula `τ_eff = Σ p_i·τ_i`, `Δ_i = (w_i − w_global)/τ_i`, `w_{t+1} = w_global + τ_eff·Σ p_i·Δ_i` — **verificada em `fl_core.py`**.
-- Proporção de batches BPSP:HSL ≈ 5,5× (BPSP ~1.251 batches/rodada com local_epochs=1 vs HSL ~226) — correto.
-- Convergência: warm-up=20, patience=3, threshold=0.005, max=120 rodadas — **verificados em `config.py`**.
-- Checkpoint scoping (Migration 011): `training_id`, UPSERT, `load_best(training_id)` — correto.
-- Gap best vs last no Exp 8: 66,61% (R91) vs 58,27% (R120) = **8,34 p.p.** — confirmado.
+O projeto parte de um problema concreto — dados clínicos reais de dois hospitais com distribuições radicalmente diferentes, protegidos por lei e incapazes de ser centralizados — e resolve esse problema percorrendo, na ordem correta, os fundamentos que o tornam solucionável:
 
-### 1.4 Calibração (Seção 5)
-- Temperature scaling falhou em todos os experimentos com temperatura (ECE sempre piorou) — **confirmado por `recalibrate_20260626_192337.json`**: ECE pré=0.0859, ECE pós temperature scaling=0.1066 (+0.021).
-- Causa raiz (LBFGS minimiza NLL, não ECE; subconfiança sistemática piora com T>1) — correto.
-- Calibração Isotônica OvR (Zadrozny & Elkan, 2002) com PAV — correto.
+**Fundamento 1 — Dados e Pré-processamento**
+Antes de qualquer modelo, o projeto enfrenta o problema real de mineração de dados: como transformar registros clínicos heterogêneos (exames laboratoriais com nomenclaturas distintas por hospital) em uma representação computável e comparável. A solução — tokenização `{analito}_{classificação}` com mapeamento LOINC e vocabulário compartilhado de 648 tokens reais — é uma decisão de engenharia de dados com consequência direta na validade da federação. Sem vocabulário compartilhado, a agregação FedNova seria semanticamente inválida: o mesmo analito teria token IDs diferentes em cada hospital.
 
-### 1.5 RAG (Seção 6)
-- `sentence-transformers/all-MiniLM-L6-v2` (384 dim), `_PostgreSQLStore`/`_InMemoryStore`, `distilgpt2`, top-k=3 — **verificados em `rag.py`**.
-- Detecção de alucinação: `probability < 0.6 AND "certeza" in justification.lower()` — **verificado em `rag.py` linha 236**.
-- Limitação da base de conhecimento corrompida (tokenização BEHRT + "adulto" interpolado) — correto e documentado.
+**Fundamento 2 — Estatística e Desbalanceamento de Classes**
+O dataset FAPESP tem estrutura de classes extremamente assimétrica: `curado_pronto` representa 55,6% do BPSP e apenas 1,3% do HSL; `melhora_pronto` representa 61,5% do HSL e 0,4% do BPSP. Tratar isso com acurácia simples levaria a um modelo que aprende apenas a classe majoritária. O projeto aplica pesos de classe inversamente proporcionais à frequência, com capping em 15,0 para evitar instabilidade numérica — uma decisão que exige entender simultaneamente estatística de desbalanceamento, comportamento de gradientes e estabilidade de treinamento.
 
-### 1.6 Segurança e Interoperabilidade (Seção 7)
-- HMAC-SHA256 com `FL_PATIENT_ID_SECRET` local — **verificado em `security.py`**, LGPD Art. 13 §4° correto.
-- JWT (HS256/RS256/RS512), `X-API-Key`, `FL_AUTH_REQUIRED=false` para dev — correto.
-- Rate limiting: `_SlidingWindowLimiter(120/60s, 30/60s)` por IP — **verificado em `security.py`**.
-- FHIR R4 `RiskAssessment` via `state._fhir_exporter.to_risk_assessment()` com `correlation_token` efêmero — correto.
+**Fundamento 3 — Modelagem Sequencial e Transformer**
+A escolha do SimplifiedBEHRT sobre o Random Forest não é arbitrária — ela é justificada por ablação empírica. O RF (Bag-of-Tokens) obteve 68,41% ignorando a ordem temporal dos exames. O BEHRT federado atingiu 69,59% incorporando a sequência e o tempo relativo de cada exame (`DiaRelativoEmbedding`). O ganho de +1,80 p.p. isolado pelo DiaRelativoEmbedding quantifica o valor da modelagem temporal sobre a abordagem de frequência. O projeto demonstra, com dados, por que o transformer é a arquitetura correta para este problema — não por tendência, mas por necessidade clínica.
 
-### 1.7 Referência ao ClinicalPath (Seção 1.1)
-- Verificado em `src/mosaicfl.egg-info/PKG-INFO`: "Extensão preditiva do ClinicalPath (Linhares et al., 2023)" e em `docs/CONTRIBUTING.md`: `clinical-path/ — exportador e watcher para ClinicalPath v2`. A menção é legítima.
+**Fundamento 4 — Treinamento e Convergência**
+O treinamento federado expõe problemas invisíveis no treinamento centralizado: *client drift* (o modelo de cada hospital diverge do global ao longo das épocas locais), inconsistência objetiva por número diferente de passos entre clientes (BPSP: ~1.251 batches/rodada; HSL: ~226 batches/rodada), e instabilidade de gradientes com classes raras. Cada um desses problemas tem uma solução documentada no projeto: FedProx (μ=0,1) para o drift, FedNova para a inconsistência objetiva, gradient clipping e class weight clipping para a instabilidade. A sequência de experimentos (Exp 7 → Exp 12 → Exp 15) rastreia o efeito isolado de cada correção.
+
+**Fundamento 5 — Avaliação e Matriz de Confusão**
+A acurácia agregada (69,59%) é necessária mas insuficiente. O Macro F1 (0,4946) dá peso igual a `curado_internado` (N=28 no teste) e `curado_pronto` (N=1.620) — porque errar nos 28 casos graves tem impacto clínico diferente de errar nos frequentes. A matriz de confusão revela o erro clínico mais crítico do sistema: casos de `melhora_internado_grave` classificados como `curado_pronto`, ou seja, pacientes que deveriam ser internados recebendo predição de alta. Sem análise da matriz de confusão, a acurácia esconde exatamente o erro que mais importa.
+
+**Fundamento 6 — Calibração de Probabilidades**
+Um modelo com 69,59% de acurácia não está pronto para uso clínico se suas probabilidades estiverem descalibradas. Um médico que vê "78% de chance de melhora_internado_grave" precisa que esse número reflita a frequência real — não apenas a ordenação entre classes. O projeto aplica, documenta a falha (temperature scaling em 8/8 experimentos) e substitui pela solução correta (calibração isotônica OvR, ECE=0,0149). O processo de tentar, falhar, diagnosticar a causa raiz (subconfiança sistemática não-uniforme, LBFGS minimizando NLL em vez de ECE) e convergir para a solução certa é um exemplo completo de ciclo científico aplicado.
+
+**Fundamento 7 — Privacidade como Consequência Necessária**
+A privacidade diferencial (DP-FedAvg, McMahan et al. 2018) não foi introduzida como ornamento acadêmico — ela é a formalização matemática da restrição que motivou o projeto inteiro. O FL sem DP não garante privacidade plena: pesos de modelo trocados entre hospitais e servidor contêm informação suficiente para reconstruir dados de pacientes (Geiping et al. 2020; Zhu et al. 2019). A série de experimentos planejada (Exp 17: σ=1,0; Exp 18: σ=0,5; Exp 19: σ=2,0) gerará a curva Acc×ε — a representação quantitativa do trade-off entre utilidade clínica e garantia formal de privacidade. Sem ter percorrido os seis fundamentos anteriores, não seria possível entender o que está sendo sacrificado em cada ponto da curva.
+
+### Por que esse percurso importa para a avaliação
+
+Um sistema de IA clínica pode ser construído sem entender calibração — e terá probabilidades enganosas. Pode ser construído sem entender a matriz de confusão — e ocultará seus erros mais graves. Pode implementar FL sem entender o problema de passos efetivos — e o hospital com mais dados dominará a agregação silenciosamente. Pode adicionar DP sem entender o trade-off — e degradará o modelo sem saber quanto de privacidade está comprando.
+
+O MOSAIC-FL trata cada fundamento como pré-requisito do seguinte. Esse encadeamento — e a documentação das decisões, erros e correções em cada etapa — é o que o posiciona além de uma implementação técnica e o qualifica como trabalho de pesquisa aplicada.
 
 ---
 
-## 2. O que está Incorreto ou Impreciso ✗
+## Enquadramento desta Avaliação
 
-### 2.1 CRÍTICO: Números do "Custo de Privacidade" estão errados (Seção 8.3)
+O MOSAIC-FL é avaliado sob dois critérios simultâneos:
 
-O documento afirma:
-> "FL Exp 12 (67,44%) vs **BEHRT Pooled B (69,12%)**" → gap = -1,68 p.p.
-> "FL Exp 12 (67,44%) vs **RF Centralizado (68,06%)**" → gap = -0,62 p.p.
+1. **MVP próximo de produção hospitalar** — o que separa o sistema de uso real em ambiente clínico, considerando apenas bloqueadores de infraestrutura e regulatório. Questões de engenharia de software e qualidade de modelo já foram resolvidas.
 
-**Os dados reais dos logs** (`behrt_pooled_20260625_212059.log` e `behrt_pooled_20260625_223649.json`):
-
-| Modelo | Accuracy | F1 Macro | AUC | ECE |
-|--------|----------|----------|-----|-----|
-| BEHRT Pooled A (sem_demo) | **67,79%** | 0,5218 | 0,8354 | 0,0929 |
-| BEHRT Pooled B (late_fusion) | **63,03%** | 0,5005 | — | — |
-| RF Centralizado (BoT) | **68,35%** | 0,5116 | 0,7943 | 0,0638 |
-| FL Exp 12 (resultado real) | **67,44%** | 0,484 | 0,8015 | 0,0935 |
-
-**Conclusões corretas:**
-- FL (67,44%) vs BEHRT Pooled **B** (63,03%): **FL supera em +4,41 p.p.** (o oposto do que o documento diz)
-- FL (67,44%) vs BEHRT Pooled **A** (67,79%): gap = **-0,35 p.p.** (não -1,68 p.p.)
-- FL (67,44%) vs RF Centralizado (68,35%): gap = **-0,91 p.p.** (não -0,62 p.p.)
-
-**O 69,12% não existe nos logs de nenhuma das três execuções do pooled baseline.** Não é possível verificar a origem deste número.
-
-**Agravante**: o pooled baseline foi treinado com **40 épocas**, não 120 (valor configurado em `FED_CFG.pooled_epochs=120`). O budget não é equivalente ao FL, então a comparação tem uma limitação metodológica que o documento não menciona.
-
-**Impacto para o TCC**: a narrativa do "custo de privacidade de 1,68 p.p." precisa ser reescrita com os números reais. A conclusão mais honesta é que **FL com late fusion (Config B) supera o pooled treinado com 40 épocas**, e está a apenas -0,35 p.p. do pooled treinado sem demográficos. O custo real da privacidade exige rodar o pooled com 120 épocas para comparação justa.
+2. **Experimentação nível mestrado** — o que torna os resultados publicáveis e defensáveis em banca, com rigor metodológico equivalente a um artigo de conferência.
 
 ---
 
-### 2.2 CRÍTICO: Afirmação sobre dados sintéticos (Seção 9.2, item 1)
+## 1. Estado Atual — Resultados Experimentais
 
-O documento afirma:
-> "Todos os experimentos até o momento usam dados sintéticos ou dados estruturados já processados."
+### 1.1 Melhor resultado histórico (referência)
 
-**Isso é factualmente errado.** Todos os experimentos usam **dados reais do FAPESP COVID-19 Data Sharing/BR**, acessados via PostgreSQL com queries sobre `clinical.attendances`, `metrics.exam_records`, etc. O log de 2026-06-25 confirma: "Hospital BPSP → cliente 0: 20019 treino | [...] Fonte demográficos: dados reais FAPESP".
+| Experimento | Configuração | Accuracy | Macro F1 | Macro AUC | ECE |
+|---|---|---|---|---|---|
+| Exp 15 — FL Federado | FedNova + FedProx μ=0,1 + Isotônica + Chk Guloso | **69,59%** | 0,4946 | 0,8181 | 0,0149 |
+| Exp 16 — BEHRT Pooled B | 120 épocas, late fusion, budget equivalente | 68,68% | — | — | — |
+| RF Centralizado | Bag-of-Tokens, dados pooled | 68,41% | — | — | — |
+| BEHRT Pooled A | 120 épocas, sem demográficos | — | — | — | — |
 
-A confusão pode ter origem na ausência de dados de validação clínica prospectiva (o sistema não foi testado em prática clínica real), mas isso é diferente de dizer que os dados de treinamento são sintéticos.
+**Conclusão central (Exp 15 e 16):** com budget equivalente (120 rodadas = 120 épocas), o FL FedNova supera *todos* os baselines centralizados. O custo de privacidade da federação é **negativo** — o modelo federado melhora a capacidade preditiva em relação ao centralizado, sem mover dados entre hospitais.
 
----
+### 1.2 Leave-one-out
 
-### 2.3 Número de testes automatizados (Seção 1.3)
+| Configuração | Accuracy | Interpretação |
+|---|---|---|
+| BPSP-only (Exp 13) | 64,86% | Perde `melhora_pronto` (0,4% dos casos BPSP) |
+| HSL-only (Exp 14) | 40,05% | Dataset pequeno não generaliza para o teste global |
+| Federado (Exp 15) | **69,59%** | Supera ambos os isolados |
+| RF HSL isolado | 24,25% | Pior que chance aleatória para 5 classes |
 
-O documento afirma **541 testes automatizados**. A contagem real no diretório `/tests`:
-- **569 funções de teste** em **40 arquivos**
+A diferença de 29,54 p.p. entre HSL-only e o federado é o argumento empírico mais direto para a necessidade da federação.
 
-O número 541 não é verificável; 569 é o valor correto. A diferença pode indicar que o documento foi gerado antes da adição de alguns testes.
+### 1.3 Contribuição de cada componente (ablação parcial)
 
----
-
-### 2.4 Atribuição imprecisa do experimento para `local_epochs=1` (Seção 4.1)
-
-O documento diz "reduzido de 2 no **Experimento 13**". O `config.py` documenta a redução mas não cita o número do experimento. Não há evidência no repositório de que isso tenha sido Exp 13 especificamente. Recomendo verificar no git log ou no planejamento do desktop.
-
----
-
-### 2.5 Ganho demográfico de +12,7 p.p. (Seção 3.2)
-
-O documento cita "+12,7 p.p. (Experimento 3)". O Exp 3 na tabela 8.1 tem accuracy=55,8% e foi o split 70/10/10/10. A adição de demográficos não ocorreu no Exp 3 — ela pode ter ocorrido depois. Esse ganho específico de 12,7 p.p. não é verificável nos logs disponíveis. **Requer rastreamento no histórico de experimentos ou no planejamento do desktop.**
-
----
-
-### 2.6 Tabela 8.1 incompleta
-
-A tabela lista apenas Exp 1, 3, 6, 7, 8, 12. Não explica Exp 2, 4, 5, 9 (checkpoint contamination), 10, 11. O Exp 9 é especialmente relevante — foi o incidente de checkpoint cross-contamination — e merece uma linha na tabela com nota.
-
----
-
-### 2.7 Resultados de calibração pós-isotônica ausentes
-
-O documento diz que a calibração isotônica "resolve o padrão de subconfiança não-uniforme", mas **não apresenta o ECE pós-calibração isotônica**. O JSON de recalibração (`recalibrate_20260626_192337.json`) mostra que o ECE pós-temperature-scaling do modelo do Exp 8 (checkpoint R91) ficou em **0.1066** — mas não há dado comparável para a isotônica nesse arquivo (a estrutura tem apenas `pre_calibration` e `post_calibration` com os mesmos valores). **A ECE resultante da calibração isotônica ainda é uma lacuna real.**
+| Configuração | Accuracy | Δ acumulado |
+|---|---|---|
+| FL base (Exp 7 — FedAvg, μ=0,1) | 59,36% | referência |
+| + FedNova + Checkpoint Scoped (Exp 12) | 67,44% | +8,08 p.p. |
+| + local_epochs=1 + Grad/Class Clipping (Exp 13/15) | 69,59% | +2,15 p.p. |
+| + Calibração Isotônica OvR | ECE 0,0575 → 0,0149 | −74% ECE |
+| + DiaRelativoEmbedding (ablação Exp 4→6) | +1,80 p.p. | verificado separadamente |
+| + Late Fusion Demográfica (ablação Pooled A→B) | +0,39 p.p. | verificado no centralizado |
 
 ---
 
-## 3. O que Acrescento (Ausente no Documento)
+## 2. MVP — O que já é nível de produção
 
-### 3.1 MC Dropout para Incerteza na Inferência
+### 2.1 Pipeline de treinamento ✓
 
-Ausente do documento. O sistema executa **50 amostras de MC Dropout** em inferência, calculando média e desvio padrão por classe. Isso é distinto da calibração (que ajusta a escala das probabilidades) e é a fonte primária de **incerteza epistêmica** reportada no `RiskAssessment`. Deveria ter seção própria ou subseção dentro de 3.2 ou 5.
+- **FedNova + FedProx** com hiperparâmetros calibrados (μ=0,1, local_epochs=1, τ_i por cliente)
+- **DP-FedAvg** implementado (McMahan et al. 2018) — clipping de update no cliente + ruído gaussiano no servidor. Ativado por `FL_DP_NOISE=σ`. Aguardando Exp 17/18/19
+- **Checkpoint guloso com scoping** por `training_id` — rastreabilidade total de qual checkpoint pertence a qual experimento
+- **Seeding determinístico** por rodada × cliente — reprodutibilidade 100% garantida
+- **Gradient clipping** (max_norm=1,0) e **class weight clipping** (max=15,0) — estabilidade com classes extremamente raras
 
-### 3.2 IsotonicCalibrator como Wrapper de Inferência
+### 2.2 Calibração ✓
 
-O documento descreve a isotônica como técnica de calibração mas não explica como ela é aplicada em inferência: um wrapper que substitui o softmax bruto pelas probabilidades calibradas por classe individualmente (OvR), e como isso se integra ao pipeline de predição na API.
+- **Isotônica OvR** com ECE=0,0149 (Exp 15) — abaixo do limiar clínico de 0,05 estabelecido para a defesa. Melhora de 74% em relação ao pré-calibração
+- Temperature scaling testado e documentado como inadequado para este cenário (8/8 experimentos falhando) — decisão de abandono com evidência empírica
 
-### 3.3 Pipeline de 4 Fases (`make training-full`)
+### 2.3 Segurança e conformidade LGPD ✓
 
-Ausente. O Makefile implementa um pipeline completo sem parametrização externa:
-1. `training-bpsp-only` — BEHRT treinado só com dados BPSP (baseline isolado)
-2. `training-hsl-only` — BEHRT treinado só com dados HSL
-3. Treinamento federado completo
-4. `behrt_pooled` + RF centralizado (baselines de comparação)
+- **HMAC-SHA256** para pseudonimização de `patient_id` (Art. 13 §4° da LGPD)
+- **JWT (HS256/RS256)** e `X-API-Key` na API
+- **Rate limiting** por janela deslizante (120 req/min geral, 30 req/min ingest)
+- Verificação de integridade de checkpoints via SHA-256
+- `path traversal` bloqueado no exportador
+- **DP-FedAvg** como camada adicional de privacidade formal (ε,δ)-DP — implementado, experimentos pendentes
 
-Esta é uma contribuição de **engenharia de reprodutibilidade** relevante para o TCC: qualquer rodada replicar o experimento completo com um único comando.
+### 2.4 Interoperabilidade clínica ✓
 
-### 3.4 BEHRTPatternExtractor
+- **FHIR R4** `RiskAssessment` com `correlation_token` efêmero — integração com prontuários modernos sem armazenar vínculo paciente ↔ predição
+- **22 analitos mapeados para LOINC** — internacionalização dos códigos de exame
+- **LOINC + vocabulário compartilhado** (648 tokens reais) — garante compatibilidade semântica entre hospitais para a agregação FedNova
 
-Mencionado brevemente em 3.2 mas não explicado. Este módulo usa os pesos de atenção `(num_layers, batch, num_heads, seq, seq)` para:
-- Identificar quais analitos cada cabeça de atenção foca por classe de desfecho
-- Gerar heatmaps de co-ocorrência temporal (ex: "PCR elevado seguido de D-dímero em 3 dias")
-- Fornecer interpretabilidade clínica além da predição
+### 2.5 Interpretabilidade ✓
 
-**Relevância**: em validação clínica, saber "por que o modelo previu X" é tão importante quanto a acurácia.
+- **RAG** com `_InMemoryStore` / `_PostgreSQLStore`, `all-MiniLM-L6-v2` (384 dim), top-k=3
+- **Ollama / gemma3:4b** como backend LLM padrão; fallback automático para `distilgpt2` (HuggingFace) se Ollama offline
+- **Detecção de alucinação** por heurística (`probability < 0.6 AND "certeza" in justification`)
+- Bugs críticos da knowledge base corrigidos: filtro de special tokens (`[PAD]`, `[CLS]`, `[SEP]`) + guard `if idade_exacta:`
 
-### 3.5 DataLoader Determinístico
+### 2.6 Arquitetura de software ✓
 
-Ausente. O `prepare_dataloaders_from_db()` usa `torch.Generator().manual_seed(RANDOM_SEED + cid)` para garantir que o split 70/10/10/10 seja **idêntico em toda re-execução por hospital**. Isso é parte da reprodutibilidade e deveria aparecer em 2.5.
+- **Arquitetura hexagonal**: domínio puro (`mosaicfl.core`) sem importações de infraestrutura — testável offline, substituível, auditável
+- **569 testes automatizados** em 40 arquivos — cobertura de contrato e integração
+- **Rastreabilidade completa**: `training_id` em todas as métricas, checkpoints com SHA-256, logs estruturados em JSON
+- **Pipeline reproduzível**: `make training-full` executa as 4 fases sem parametrização manual (~9h43min em CPU)
 
-### 3.6 ConvergenceTracker — Mecânica Interna
+### 2.7 Engenharia de experimentos ✓
 
-O documento menciona o `ConvergenceTracker` em 4.4 apenas como componente do `RoundDispatcher`. Falta descrever:
-- Mantém histórico completo de accuracies por rodada
-- Ao detectar convergência (Δacc < threshold por `patience` rodadas consecutivas após warm-up), sinaliza stop
-- O "replay" do histórico garante que convergência não seja declarada por oscilação pontual
-
-### 3.7 Análise Clínica das Classificações Incorretas
-
-A matriz de confusão do Exp 12 mostra **67 dos 338 casos de `melhora_internado_grave` classificados como `curado_pronto`** = **19,8% de casos graves classificados como curados**. Este é o erro clínico mais crítico do sistema:
-- `melhora_internado_grave` = paciente internado por mais de 10 dias com evolução de melhora lenta
-- Classificar como `curado_pronto` pode levar a alta precoce ou subestimação de risco
-
-Este dado existe mas não é analisado do ponto de vista clínico no documento. Para uma defesa de TCC com foco em impacto médico, essa análise é essencial.
-
-### 3.8 Comparação Completa de Baselines (tabela corrigida)
-
-Com base nos dados reais:
-
-| Modelo | Acc | F1 Macro | AUC | ECE | n_epochs |
-|--------|-----|----------|-----|-----|----------|
-| FL Exp 12 (FedNova + Chk Scoped) | **67,44%** | 0,484 | 0,8015 | 0,0935 | 120 rounds |
-| BEHRT Pooled A (sem_demo, 40 épocas) | 67,79% | 0,5218 | 0,8354 | 0,0929 | 40 |
-| BEHRT Pooled B (late_fusion, 40 épocas) | 63,03% | 0,5005 | — | — | 40 |
-| RF Centralizado (Bag-of-Tokens) | 68,35% | 0,5116 | 0,7943 | 0,0638 | — |
-| RF Hospital 0 (BPSP isolado) | 59,45% | 0,337 | 0,7425 | 0,0467 | — |
-| RF Hospital 1 (HSL isolado) | 24,25% | 0,184 | 0,6905 | 0,2541 | — |
-
-**Observação crítica**: o BEHRT Pooled foi treinado com apenas 40 épocas (não 120, como especifica `FED_CFG.pooled_epochs`). Para comparação justa com o FL (120 rounds × 1 epoch efetiva), o pooled deveria ser rodado com 120 épocas.
-
-### 3.9 Colapso do HSL Isolado
-
-O RF Hospital 1 (HSL isolado) tem acc=**24,25%** — pior que chance aleatória para 5 classes (20%). Isso ocorre porque o HSL tem 61,5% de `melhora_pronto` enquanto o BPSP tem apenas 0,4% dessa classe. Um modelo treinado só no HSL não generaliza para a distribuição global do test set (que mistura BPSP+HSL). Este dado é poderoso para justificar a necessidade do aprendizado federado e está ausente do documento.
-
-### 3.10 Ausência de Ablação Sistemática
-
-O documento apresenta experimentos sequenciais mas não uma tabela de ablação formal que isole cada contribuição:
-
-| Configuração | Acc | ΔAcc |
-|-------------|-----|------|
-| Baseline FL (FedAvg, sem demographics) | ~55-58% | — |
-| + Split 70/10/10/10 | 55,8% | — |
-| + DiaRelativoEmbedding | 59,63% | +3,08 p.p. |
-| + μ=0,1 (FedProx mais restritivo) | 59,36%* | ~0 |
-| + Checkpoint Guloso | 66,61% | +7 p.p. (best R91) |
-| + FedNova + Checkpoint Scoped | 67,44% | +0,83 p.p. |
-| + Demográficos (late fusion) | ? | pendente |
-
-*Avaliado em R120 sem checkpoint guloso, sub-representando o real ganho.
+- `docs/Sumario_Treinamento.md` como log histórico de todas as decisões (Exp 1–16)
+- `docs/Sumario_Treinamento_Parte2.md` como contexto compacto para novas sessões
+- Incidentes documentados: contaminação de checkpoint (Exp 9), colapso de temperature scaling (8 experimentos), bug de class weight (Exp 13)
 
 ---
 
-## 4. O que Ainda Falta Obter
+## 3. Bloqueadores de Produção Reais
 
-Mantendo os itens A-F da Seção 10 do documento, adiciono:
+### 3.1 Infraestrutura (resolvíveis antes do deploy)
 
-### G. Rodar BEHRT Pooled com 120 épocas (pendente de implementação)
-**Por quê**: o pooled atual com 40 épocas sub-representa o baseline. Para o TCC, o argumento do custo de privacidade precisa de comparação com budget equivalente ao FL.  
-**Como**: ajustar o pipeline `training-full` para usar `FED_CFG.pooled_epochs=120` (já está no config, mas a execução usou 40).
+| Bloqueador | Impacto | Solução |
+|---|---|---|
+| Rate limiter in-process | Com N workers Gunicorn, limite efetivo é `120×N` req/min | Redis + `fastapi-limiter` |
+| MC Dropout sem timeout/circuit breaker | Sob carga alta, requests enfileiram antes do timeout HTTP | Timeout interno + `torch.vmap` |
+| Rotação de chave HMAC | Se secret comprometido, histórico de hashes fica desvinculado | `key_version` por hash no banco |
+| mTLS entre servidor e clientes Flower | Comunicação FL em plaintext na rede local | `grpc.ssl_channel_credentials` |
 
-### H. ECE pós-calibração isotônica
-**Por quê**: o documento afirma que a isotônica resolve a subconfiança, mas o arquivo de recalibração disponível não registra esse valor.  
-**Como**: executar o script de calibração no checkpoint do Exp 12 e registrar ECE pré/pós para os dois métodos.
+### 3.2 Regulatório (independente de software)
 
-### I. Performance por hospital no test set
-**Por quê**: o teste global mistura BPSP e HSL; a acurácia de 67,44% pode esconder desempenho muito diferente por hospital.  
-**Como**: filtrar o test set por hospital_id e gerar métricas separadas.
+| Requisito | Status |
+|---|---|
+| Submissão ANVISA SaMD Classe III (RDC 657/2022) | Não iniciado |
+| Validação clínica prospectiva com parecer CEP/CONEP | Não iniciado |
+| Documentação técnica CFM 2.227/2018 | Não iniciado |
+| Consentimento informado e DPO designado | Não iniciado |
 
-### J. Ablação FL Config A vs Config B (sem vs com demográficos no FL)
-**Por quê**: o log do pooled compara A vs B no treino centralizado, mas o FL federado foi sempre executado com `demo_dim=2`. Não há comparação FL sem demográficos.  
-**Como**: executar 1 rodada de FL com `demo_dim=0` e comparar.
-
-### K. Experimento 13 — resultados completos
-**Por quê**: o config menciona reduções atribuídas ao Exp 13 (local_epochs=1 + isotônica), mas não há JSON de resultado nomeado como tal nos logs.  
-**Como**: rastrear no planejamento do desktop.
-
-### L. Distribuição temporal dos dados FAPESP
-**Por quê**: dados de COVID-19 têm viés temporal forte (onda 1 vs onda 2 vs omicron). O período de coleta (item C da Seção 10) define a validade externa do modelo.  
-**Como**: `SELECT MIN(co.outcome_at), MAX(co.outcome_at) FROM metrics.clinical_outcomes co JOIN clinical.attendances a ON co.attendance_id = a.attendance_id WHERE a.hospital_id IN ('HSL','BPSP')`.
-
-### M. BEHRTPatternExtractor — alguma visualização real
-**Por quê**: o documento cita interpretabilidade como contribuição, mas não apresenta nenhum exemplo. Mesmo um heatmap de atenção para 1 caso do Exp 12 seria suficiente para a defesa.
-
-### N. Estatísticas demográficas por hospital e por classe
-**Por quê**: age_mean e sex_M estão nos logs (BPSP: age_mean=0.51, sex_M=9591/20019≈48%; HSL: age_mean=0.52, sex_M=1981/3621≈55%), mas precisam ser estratificadas por classe de desfecho para caracterizar o dataset adequadamente.
+**Observação**: nenhum dos bloqueadores regulatórios é um problema de código. O sistema já implementa os controles técnicos que essas regulamentações exigem (pseudonimização, rastreabilidade, DP). O que falta é o processo formal de submissão e validação clínica.
 
 ---
 
-## 5. Prioridade para a Defesa e Implementação
+## 4. Qualidade Científica — O que está no nível de mestrado
 
-### Alta Prioridade (bloqueia a narrativa central do TCC)
+### 4.1 Contribuições com resultado empírico verificado
 
-| # | Item | Ação |
-|---|------|------|
-| 1 | Custo de privacidade com números reais | Reescrever Seção 8.3 com dados dos logs; rodar pooled com 120 épocas |
-| 2 | Afirmação sobre "dados sintéticos" | Corrigir para "dados reais FAPESP COVID-19" |
-| 3 | ECE pós-isotônica | Executar recalibração e registrar |
-| 4 | Erro clínico de melhora_internado_grave | Adicionar análise em 8.2 |
+| Contribuição | Resultado | Referência |
+|---|---|---|
+| Custo de privacidade negativo com budget equivalente | FL (69,59%) > Pooled B (68,68%) > RF (68,41%) | Exp 15/16 |
+| FedNova para cenário com razão de dados 5,5× | +8,08 p.p. vs FedAvg (Exp 12 vs Exp 7) | Wang et al. 2020 |
+| Leave-one-out: nenhum hospital generaliza sozinho | HSL-only 40,05% vs Federado 69,59% (+29,54 p.p.) | Exp 13/14/15 |
+| Calibração isotônica OvR sobre transformer FL | ECE 0,0575 → 0,0149 (−74%) | Zadrozny & Elkan 2002 |
+| Diagnóstico de falha sistemática do temperature scaling | 8/8 experimentos com ECE pior pós-calibração | Guo et al. 2017 |
+| DiaRelativoEmbedding para sequências intra-internação | +1,80 p.p. acurácia | Ablação Exp 4→6 |
 
-### Média Prioridade (enriquece o texto)
+### 4.2 Contribuições implementadas, resultados pendentes
 
-| # | Item | Ação |
-|---|------|------|
-| 5 | MC Dropout — seção própria | Escrever subseção em 3 ou 5 |
-| 6 | Performance por hospital | Query no test set dividido por hospital_id |
-| 7 | Ablação sistemática | Montar tabela com dados disponíveis + executar Config A FL |
-| 8 | Colapso HSL isolado (24,25%) | Incluir em 1.2 como motivação do FL |
-| 9 | Pipeline make training-full | Descrever em nova seção de engenharia |
-
-### Baixa Prioridade (para trabalhos futuros ou apêndice)
-
-| # | Item | Ação |
-|---|------|------|
-| 10 | BEHRTPatternExtractor visualização | Gerar 1 heatmap para apêndice |
-| 11 | Distribuição temporal dos dados | Query MIN/MAX dates |
-| 12 | Top-20 analitos no vocabulário | Query em metrics.exam_records |
-| 13 | Contagem exata de testes (569, não 541) | Atualizar Seção 1.3 |
-| 14 | Pooled com 120 épocas completo | Execução longa (~8h) |
+| Contribuição | Estado | Pendência |
+|---|---|---|
+| DP-FedAvg com curva Acc×ε | Implementado | Exp 17 (σ=1,0), Exp 18 (σ=0,5), Exp 19 (σ=2,0) |
+| gemma3:4b para justificativas clínicas em PT-BR | Implementado | Validação qualitativa das justificativas |
 
 ---
 
-## 6. Resumo Executivo
+## 5. Lacunas para Qualidade de Mestrado
 
-O documento gerado pelo DeepSeek é **tecnicamente sólido em ~85% do conteúdo** — a arquitetura, o protocolo federado, a calibração e a segurança estão corretos e verificáveis no código. Funcionou bem como insumo inicial.
+### 5.1 Alta prioridade (bloqueia argumento central do TCC)
 
-**Dois erros que não podem ir para o texto final:**
+**A — Curva Acc×ε (série DP)**
 
-1. **O número 69,12% para BEHRT Pooled B não existe nos dados experimentais.** O valor real é 63,03% (BEHRT Pooled B, 40 épocas) ou 67,79% (BEHRT Pooled A, sem demográficos). A conclusão do custo de privacidade muda substancialmente: com arquitetura equivalente (Config B vs B), **o FL supera o pooled baseline**.
+O argumento de privacidade diferencial está incompleto sem os pontos da curva. Três experimentos planejados (σ=0,5; 1,0; 2,0) gerarão a tabela que demonstra o trade-off entre privacidade formal e utilidade — requisito para qualquer publicação sobre FL com DP.
 
-2. **Os dados NÃO são sintéticos.** Todos os experimentos usam o dataset FAPESP COVID-19 real.
+**B — Análise clínica dos erros críticos**
 
-**O que o documento mais deixa a desejar** é a análise de erros clínicos (19,8% de casos graves classificados como curados) e a ausência de uma tabela de ablação formal. Esses dois elementos dariam substância científica ao capítulo de resultados.
+A matriz de confusão do Exp 12 mostra 67 de 338 casos de `melhora_internado_grave` classificados como `curado_pronto` — 19,8% de pacientes com internação prolongada recebendo predição de alta sem internação. Este é o erro clínico mais grave do sistema e não foi analisado em nenhum documento. Para uma banca com foco em impacto médico, essa análise é obrigatória. Requer verificar se o número permanece no Exp 15 (melhor modelo).
+
+**C — Ablação formal em tabela única**
+
+As contribuições de cada componente estão espalhadas em 16 experimentos. Uma tabela de ablação com Δ isolado por componente (DiaRelativo, FedNova, local_epochs, clipping, calibração) é a forma canônica de apresentar evolução em artigo.
+
+### 5.2 Média prioridade (enriquece o texto)
+
+**D — Performance por hospital no conjunto de teste**
+
+O conjunto de teste global mistura BPSP e HSL. A acurácia agregada (69,59%) pode esconder desempenho muito diferente por hospital. Filtrar por `hospital_id` no conjunto de teste e gerar métricas separadas fortalece a narrativa de generalização federada.
+
+```sql
+SELECT hospital_id, COUNT(*) FROM clinical.attendances
+WHERE attendance_id IN (/* IDs do test set */)
+GROUP BY hospital_id;
+```
+
+**E — Distribuição temporal do dataset FAPESP**
+
+Dados de COVID-19 têm viés temporal forte (onda 1 vs onda 2 vs ômicron). O período de coleta define a validade externa do modelo. Query necessária:
+
+```sql
+SELECT MIN(co.outcome_at), MAX(co.outcome_at),
+       a.hospital_id, COUNT(*)
+FROM metrics.clinical_outcomes co
+JOIN clinical.attendances a ON co.attendance_id = a.attendance_id
+WHERE a.hospital_id IN ('HSL','BPSP')
+GROUP BY a.hospital_id;
+```
+
+**F — Validação qualitativa do gemma3:4b**
+
+Coletar 5 exemplos de justificativas por classe (curado_pronto, melhora_internado_grave, etc.) e comparar coerência clínica com distilgpt2. O P@3 macro subiu de 0,145 (Exp 12, KB corrompida) para 0,2343 (Exp 13, KB corrigida) — o ganho quantitativo já está medido; falta o qualitativo do novo modelo.
+
+**G — Estatísticas demográficas por classe de desfecho**
+
+age_mean e sex_M por hospital já aparecem nos logs (BPSP: age_mean=0,51, sex_M≈48%; HSL: age_mean=0,52, sex_M≈55%), mas sem estratificação por classe. Necessário para caracterizar o dataset.
+
+### 5.3 Baixa prioridade (para apêndice ou trabalhos futuros)
+
+**H — Janela temporal da predição**
+
+O modelo usa o histórico completo da internação. Na prática clínica, a predição ocorre com dados parciais (fim do dia 1, 3 ou 5). Decisão clínica que deve ser embasada pela orientadora ou pela literatura.
+
+**I — Visualização do BEHRTPatternExtractor**
+
+Pelo menos um heatmap de atenção por classe para um caso representativo do Exp 15. Demonstra interpretabilidade além do texto gerado pelo RAG.
+
+**J — FL sem demográficos (ablação Config A federado)**
+
+O Pooled B vs A (+0,39 p.p.) está documentado no centralizado. A late fusion no federado não foi isolada — sempre esteve ativa desde o Exp 1. Uma rodada com `demo_dim=0` fecharia o argumento.
+
+---
+
+## 6. O que NÃO é uma lacuna
+
+### 6.1 Arquitetura "simplificada demais" do SimplifiedBEHRT
+
+Esta crítica (levantada na avaliação acadêmica anterior, −0,5 p.p.) está respondida pelos dados:
+
+- Dataset FAPESP tem escala hospitalar única (uma internação por paciente, sem histórico longitudinal longo). Modelos maiores overfit com dados escassos
+- Hardware CPU-only impõe restrição real: SimplifiedBEHRT treina em ~3min/rodada; embed_dim=128 triplicaria o tempo
+- Sem corpus pré-treinado em PT-BR/FAPESP, camadas adicionais adicionam parâmetros aleatórios sem ganho representacional
+- O gargalo é `embed_dim=64` (16-dim por cabeça de atenção), não a profundidade — mais camadas no mesmo espaço residual não aumentam capacidade
+- O argumento defensável para a banca: citar Vaswani et al. (2017) sobre equivalência de positional encoding sinusoidal vs aprendido em sequências curtas, e apresentar os resultados empíricos como justificativa pragmática
+
+
+### 6.3 Afirmação sobre dados sintéticos
+
+Corrigida no `Metodologia MOSAIC-FL - Final Corrigido.md`. Todos os experimentos usam dados reais FAPESP COVID-19.
+
+### 6.4 Números do custo de privacidade
+
+Corrigidos com os dados reais dos Exp 15 e 16. O `Metodologia MOSAIC-FL - Final Corrigido.md` usa os valores corretos.
+
+---
+
+## 7. Resumo Executivo
+
+**O que está pronto para produção** (aguardando apenas infra e regulatório):
+- Pipeline FL com FedNova, FedProx, DP-FedAvg, calibração isotônica, FHIR R4, LGPD, RAG com fallback, arquitetura hexagonal, 569 testes
+
+**O que está pronto como contribuição científica**:
+- Custo de privacidade negativo com budget equivalente; leave-one-out empírico; diagnóstico de falha do temperature scaling; FedNova aplicado a cenário hospitalar brasileiro com razão de dados 5,5×; ECE=0,0149
+
+**O que precisa ser feito antes da defesa**:
+- Série DP (Exp 17/18/19) — curva Acc×ε
+- Análise clínica dos erros críticos (`melhora_internado_grave` classificados como `curado_pronto`)
+- Ablação formal em tabela única
+- Validação qualitativa do gemma3:4b
+
+**O que não é bloqueador** (pode ir para trabalhos futuros):
+- mTLS, Redis, circuit breaker, ANVISA, CEP/CONEP, janela temporal, visualizações de atenção

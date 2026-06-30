@@ -75,8 +75,8 @@ estável no notebook (hardware mais restrito dos dois):
 | `MKL_NUM_THREADS`     | 4     | Idem                                          |
 | `TOKENIZERS_PARALLELISM` | false | Elimina conflito de threads do HuggingFace |
 | `BATCH_SIZE`          | 16    | Reduz uso de RAM por round                    |
-| `LOCAL_EPOCHS`        | 2     | Menos iterações por rodada federada           |
-| `NUM_ROUNDS`          | 20    | Balanceia qualidade × tempo de execução       |
+| `LOCAL_EPOCHS`        | 1     | Reduzido de 2 para minimizar client drift em non-IID severo |
+| `NUM_ROUNDS`          | 120   | Estabelecido como budget equivalente ao treinamento centralizado |
 | `MAX_NEW_TOKENS`      | 64    | Geração de texto mais rápida no RAG           |
 | `max_seq_len`         | 128   | Sequência máxima do BEHRT                     |
 | `vocab_size`          | 10.000| Tamanho do vocabulário de tokens clínicos     |
@@ -96,8 +96,8 @@ ambiente sem alterar o código (ex.: `FL_BATCH_SIZE=32`, `FL_NUM_ROUNDS=50`).
 
 Fonte: repositório USP-FAPESP Data Sharing COVID-19
 ([uspdigital.usp.br](https://repositoriodatasharingfapesp.uspdigital.usp.br/handle/item/1)).
-Ambos os hospitais possuem tabela `Desfechos`, requisito para geração do label de prognóstico
-clínico (5 classes: curado_pronto, curado_internado, melhora_pronto, melhora_internado_breve, melhora_internado_grave).
+Ambos os hospitais possuem tabela `Desfechos`, requisito para geração dos labels de prognóstico clínico
+(5 classes: `curado_pronto`, `curado_internado`, `melhora_pronto`, `melhora_internado_breve`, `melhora_internado_grave`).
 
 ---
 
@@ -171,7 +171,8 @@ desfechos, requisito obrigatório para geração dos labels de prognóstico no `
 > **Por que não Einstein?**
 > O Einstein possui 3,4M de exames (mais que o BPSP antes do corte), mas **não tem arquivo
 > de desfechos**. Sem desfechos não é possível gerar os labels de prognóstico clínico
-> (alta / internação prolongada / UTI / óbito). O BPSP tem 6,3M de exames e 218K desfechos.
+> (5 classes: `curado_pronto`, `curado_internado`, `melhora_pronto`, `melhora_internado_breve`, `melhora_internado_grave`).
+> O BPSP tem 6,3M de exames e 218K desfechos.
 
 | Hospital | Exames  | Desfechos | Viável para treino FL? |
 |----------|---------|-----------|------------------------|
@@ -245,5 +246,5 @@ Esta configuração de dois nós físicos demonstra os seguintes aspectos do apr
 3. **Heterogeneidade de dados (não-IID)** — HSL e BPSP possuem populações distintas
    (8.971 vs. 39.000 pacientes) e distribuições de desfecho diferentes, cenário
    realista de fragmentação hospitalar.
-4. **Overhead de comunicação mensurável** — ~2,8 MB por round × 2 direções × 20 rounds
-   ≈ 112 MB de tráfego total, verificável com `benchmark.py`.
+4. **Overhead de comunicação mensurável** — ~2,8 MB por round × 2 direções × 120 rounds
+   ≈ 672 MB de tráfego total, verificável com `benchmark.py`. Valor a confirmar na execução real da Fase 3.

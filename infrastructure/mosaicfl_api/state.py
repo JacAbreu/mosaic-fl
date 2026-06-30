@@ -71,10 +71,29 @@ def _verify_checkpoint_integrity(path: Path) -> bool:
 def _get_engine() -> InferenceEngine:
     global _engine
     if _engine is None:
-        _engine = InferenceEngine(
-            checkpoint_path=_latest_checkpoint(),
-            db_url=os.getenv("FL_DB_URL"),
-        )
+        db_url    = os.getenv("FL_DB_URL")
+        ckpt_path = _latest_checkpoint()
+
+        _engine = InferenceEngine(checkpoint_path=ckpt_path, db_url=db_url)
+
+        # Fallback: carrega do CheckpointStore quando não há arquivo .pt disponível.
+        # O pipeline de treinamento persiste checkpoints no banco (SQLite/PostgreSQL);
+        # a API usa esse caminho se FL_CHECKPOINT_DIR não tiver arquivos round_*.pt.
+        if not _engine._vocab and db_url:
+            try:
+                from infrastructure.shared.checkpoint_store import get_checkpoint_store
+                store     = get_checkpoint_store(db_url)
+                ckpt_data = store.load_best()
+                if ckpt_data:
+                    _engine.load_from_store(ckpt_data)
+                    logger.info("startup_checkpoint_loaded_from_store")
+                else:
+                    logger.warning(
+                        "startup_no_checkpoint — execute 'make training-full' antes de iniciar a API"
+                    )
+            except Exception as exc:
+                logger.warning("startup_checkpoint_store_unavailable: %s", exc)
+
     return _engine
 
 

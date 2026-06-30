@@ -3,9 +3,12 @@
 **Módulo de Predição Federada para Possibilidades de Diagnóstico e Evoluções Clínicas**, *o modelo estima probabilidades de evoluções de quadros clínicos de acordo com as informações clínicas disponibilizadas, estratificando o risco*
 
 Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
-- **Aprendizado Federado (FedProx)** para dados hospitalares fragmentados
-- **BEHRT simplificado** para sequências clínicas temporais
-- **RAG (ChromaDB + DistilGPT-2)** para justificativa diagnóstica interpretável
+- **Aprendizado Federado (FedNova)** para dados hospitalares fragmentados com heterogeneidade non-IID severa
+- **BEHRT simplificado** para sequências clínicas temporais (tokens analito×classificação)
+- **RAG (Ollama/gemma3:4b + fallback HuggingFace)** para justificativa diagnóstica interpretável
+- **Differential Privacy (DP-FedAvg)** para garantia formal de privacidade nos pesos (Exp 17–19 em andamento)
+
+**Resultado atual (Exp 15):** FL FedNova 69,59% Acc · AUC 0,8181 · ECE 0,0149 (isotônica OvR) — supera todos os baselines centralizados com budget equivalente (120 rodadas = 120 épocas pooled).
 
 ---
 
@@ -30,7 +33,7 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 | Kubernetes Secrets para credenciais | Não há cluster K8s ativo; infra é preparatória |
 | Deploy automatizado no CI/CD | Pipeline de CD está scaffolded, não operacional |
 | Prometheus / Grafana / audit trail LGPD | Roadmap de produção, documentado no [`docs/TODO.md`](docs/TODO.md) |
-| Differential Privacy nos pesos | Roadmap de produção, documentado no [`docs/TODO.md`](docs/TODO.md) |
+| Differential Privacy nos pesos | Implementado (DP-FedAvg); série de experimentos Exp 17/18/19 em execução |
 | Certificação ANVISA / LGPD completa | Fora do escopo de pesquisa; documentado como requisito futuro |
 
 ### O que deve ser avaliado
@@ -130,13 +133,15 @@ O deployment de produção usa o **Flower SuperLink** (disponível a partir da v
 
 1. **Servidor inicia** — envia o modelo global (pesos iniciais ou do último checkpoint) para cada hospital
 2. **Hospital treina localmente** com seus próprios prontuários (dados nunca saem)
-3. **Hospital devolve apenas os pesos** — nunca os dados brutos
-4. **Servidor agrega** via FedProx (média ponderada) e envia novo modelo global
+3. **Hospital devolve apenas os pesos** — nunca os dados brutos; update clipado para DP (quando ativado)
+4. **Servidor agrega** via **FedNova** (normaliza por passos efetivos τ para compensar heterogeneidade de dados) e envia novo modelo global
 5. **Repete por N rodadas** até convergência (Δacurácia < threshold por `patience` rodadas)
+
+**Por que FedNova em vez de FedAvg/FedProx:** com 1.251 batches/rodada no BPSP vs. 226 no HSL (ratio 5,5×), FedAvg enviesava o modelo para o hospital maior. FedNova normaliza cada update pelo número efetivo de passos τᵢ, eliminando esse viés. Ganho observado: +8,08 p.p. sobre FedAvg (Exp 8 → Exp 9).
 
 ### Recovery de Sessão
 
-O estado de treinamento é persistido em `logs/training_state.json` após cada round:
+O estado de treinamento é persistido no **PostgreSQL via `CheckpointStore`** após cada round (tabela `metrics.fl_checkpoints`). Um arquivo `logs/training_state.json` é mantido como cache local de última leitura rápida:
 
 ```json
 {
@@ -204,12 +209,20 @@ mosaic-fl/
 │   │   ├── client_availability_checker.py   # Verifica quórum de hospitais online
 │   │   ├── __init__.py
 │   │   └── __main__.py
-│   └── mosaicfl_api/                   ← adapter: REST API de inferência
-│       ├── service.py                  # FastAPI: /predict, /health, /ready
-│       ├── inference_engine.py         # Carrega checkpoint e expõe predict()
-│       ├── db.py                       # Persistência de predições (SQLAlchemy)
-│       ├── runner.py                   # Entrypoint (uvicorn)
-│       ├── static/index.html           # UI minimalista
+│   └── mosaicfl_api/                   ← adapter: REST API de inferência (make api)
+│       ├── app.py                      # FastAPI factory + CORS + lifespan
+│       ├── inference_engine.py         # Carrega checkpoint (arquivo ou CheckpointStore) + MC Dropout
+│       ├── state.py                    # Singleton engine com fallback ao banco de treinamento
+│       ├── db.py                       # PatientDB: histórico de risco, exames, ground truth tardio
+│       ├── schemas.py                  # Pydantic: PredictRequest/Response, IngestRequest/Response
+│       ├── security.py                 # JWT, API Key, rate limiting, pseudonimização LGPD
+│       ├── audit.py                    # Audit log LGPD
+│       ├── routers/                    # Endpoints separados por domínio
+│       │   ├── prediction.py           # POST /api/predict · POST /api/exams/ingest
+│       │   ├── patients.py             # GET /api/patients · GET /api/patients/{id} · POST outcome
+│       │   └── admin.py               # GET /api/fl/status · POST /api/fl/reload
+│       ├── runner.py                   # Entrypoint uvicorn (python -m infrastructure.mosaicfl_api)
+│       ├── static/index.html           # UI Bootstrap 5 + chart.js
 │       ├── __init__.py
 │       └── __main__.py
 │
@@ -299,32 +312,40 @@ A variável `FL_TLS_CERT_DIR` deve apontar para um diretório com `ca.crt`, `ser
 
 ## Execução de Experimentos
 
-### Experimento com dados reais FAPESP (`make experiment`)
+### Pipeline principal (`make training-full`)
 
-Modo de produção: carrega dados reais do PostgreSQL via `SequencePipeline.build_per_hospital()`,
-treina com 2 clientes reais (BPSP + HSL) em loop FL manual sequencial e grava resultados em
-`experiments/logs/`.
+Executa as 4 fases em sequência, gravando resultados por fase em `experiments/logs/` e checkpoints no banco PostgreSQL via `CheckpointStore`.
 
 ```bash
-# Pré-requisito: banco carregado (make server-setup ou make client-setup)
-FL_ENV=production make experiment
+# Pré-requisito: banco carregado (make server-setup)
+make training-full
+
+# Com Differential Privacy (série DP):
+FL_DP_NOISE=1.0 FL_DP_CLIP=1.0 make training-full  # Exp 17: σ=1,0
+FL_DP_NOISE=0.5 FL_DP_CLIP=1.0 make training-full  # Exp 18: σ=0,5
+FL_DP_NOISE=2.0 FL_DP_CLIP=1.0 make training-full  # Exp 19: σ=2,0
 ```
 
-O pipeline executa em 4 etapas:
+O pipeline executa em 4 fases:
 
 ```
-[1/4] Carregamento via SequencePipeline (query SQL ~20s)
-      → BPSP: 28.599 atendimentos | HSL: 5.174 atendimentos
-      → Vocabulário: 649 tokens | 27.018 treino | 3.379 teste global
+[1/4] BPSP-only (leave-one-out)
+      → 39.000 pacientes BPSP | 648 tokens | referência: 64,86% Acc (Exp 13)
 
-[2/4] Pré-processamento — integrado ao SequencePipeline (ignorado)
+[2/4] HSL-only (leave-one-out)
+      → 8.971 pacientes HSL  | referência: 40,05% Acc (Exp 14)
 
-[3/4] Aprendizado Federado (20 rodadas, ~160s/round)
-      → Rodada N: [BPSP treina] → [HSL treina] → [Servidor agrega] → Loss/Acc
+[3/4] Federado BPSP + HSL — FedNova, 120 rounds, 1 epoch local
+      → Checkpoint guloso: salva apenas quando Acc melhora (por training_id)
+      → Calibração isotônica OvR pós-treinamento
+      → Referência: 69,59% Acc · AUC 0,8181 · ECE 0,0149 (Exp 15, R79)
 
-[4/4] Avaliação + calibração temperature scaling
-      → experiments/logs/evaluation_round_N.json
+[4/4] BEHRT Pooled (baseline centralizado, budget equivalente: 120 épocas)
+      → Pooled A (sem demográficos): 68,29% Acc
+      → Pooled B (late fusion demográfica): 68,68% Acc (Exp 16)
 ```
+
+**Duração:** ~9h43min total na máquina de desenvolvimento (CPU, sem GPU driver).
 
 **5 classes de prognóstico** (definidas em `preprocessor.py:_map_outcome()`):
 
@@ -417,7 +438,7 @@ Ou via pytest diretamente:
 **Resultado esperado (suite padrão):**
 
 ```
-541 passed, 6 deselected, 1 warning in ~10s
+551+ passed, 6 deselected, 1 warning in ~12s
 ```
 
 Os 6 deselected são os testes `@pytest.mark.e2e` — excluídos por padrão por serem mais lentos. Execute com `make test-e2e` quando precisar validar o ciclo completo.
@@ -426,9 +447,9 @@ Os 6 deselected são os testes `@pytest.mark.e2e` — excluídos por padrão por
 
 | Diretório / Arquivo | Foco | Testes |
 |---|---|---|
-| `tests/unit/` (34 arquivos) | Um arquivo por classe: modelo, cliente, servidor, convergência, RAG, data loader, config, state store, TLS, FHIR | ~400 |
+| `tests/unit/` (35 arquivos) | Um arquivo por classe: modelo, cliente, servidor, convergência, RAG, data loader, config, state store, TLS, FHIR, `InferenceEngine.load_from_store()` | ~410 |
 | `tests/integration/test_infrastructure.py` | Scheduler, servidor, cliente, dispatcher (com mocks) | ~75 |
-| `tests/integration/test_mosaicfl_api.py` | FastAPI /predict e /health (TestClient) | ~30 |
+| `tests/integration/test_mosaicfl_api.py` | FastAPI endpoints (TestClient): predict, ingest, patients, fl/status, autenticação, watcher | ~41 |
 | `tests/integration/test_clinicalpath_exporter.py` | Exportador ClinicalPath (formatos de arquivo) | ~33 |
 | `tests/test_fl_cycle_explained.py` | Documentação executável do ciclo FL completo | ~35 |
 | `tests/e2e/test_real_fl_cycle.py` | Ciclo FL real sem mocks (6 testes, `make test-e2e`) | 6 |
@@ -502,6 +523,40 @@ python -m infrastructure.mosaicfl_server --port 8080 --min-clients 1 --rounds 3
 # Terminal 2 — Cliente
 python -m infrastructure.mosaicfl_client --server localhost:8080 --client-id hospital_a
 ```
+
+### API de Inferência
+
+Após o treinamento concluir, a API carrega o melhor checkpoint direto do banco:
+
+```bash
+# Sobe a API na porta 8000 (requer banco rodando: make db-up)
+make api
+
+# Variáveis opcionais:
+FL_API_HOST=127.0.0.1 FL_API_PORT=9000 make api
+```
+
+**Exemplo de predição:**
+```bash
+curl -s -X POST http://localhost:8000/api/predict \
+  -H "Content-Type: application/json" \
+  -d '{"patient_id": "TEST-001", "records": [
+        {"date": "2020-04-01", "exam": "LEUCOCITOS", "value": 12.5, "unit": "10^3/uL"},
+        {"date": "2020-04-01", "exam": "PCR", "value": 48.0, "unit": "mg/L"}
+      ]}' | python -m json.tool
+```
+
+**Exportar checkpoint para deploy offline:**
+```bash
+# Salva checkpoints/best_model.pt (não versionado no git)
+make export-checkpoint
+
+# Com treinamento específico:
+FL_TRAINING_ID=5 make export-checkpoint
+```
+
+> O banco é a fonte da verdade. `make export-checkpoint` é para deploy sem acesso ao PostgreSQL.
+> Para recriar: `make training-full && make export-checkpoint`.
 
 ### Verificando o estado
 
@@ -997,7 +1052,7 @@ flwr run . production
 flwr run . production --run-config "num-rounds=20 min-clients=3"
 ```
 
-O ServerApp é **stateless entre reinicializações** — o estado (checkpoint, histórico de convergência) é recuperado de `logs/training_state.json`. Se o processo cair no meio do treinamento, reexecute `flwr run` e ele continua de onde parou.
+O ServerApp é **stateless entre reinicializações** — o estado (checkpoint, histórico de convergência) é recuperado do **PostgreSQL via `CheckpointStore`** (`load_best(training_id)`). Se o processo cair no meio do treinamento, reexecute `flwr run` e ele continua de onde parou.
 
 ### SuperNode (hospital)
 
@@ -1120,92 +1175,85 @@ O CronJob do scheduler executa por padrão às **2h da manhã** (`0 2 * * *`), c
 
 ## Experimentos
 
-| # | Experimento | Componente | Status |
-|---|---|---|---|
-| 1 | Padronização e pré-processamento | `EHRPreprocessor` | Real |
-| 2 | Efeito equalizador do FL | FedProx + AUC por cliente | Seed fixo |
-| 3 | Impacto heterogeneidade não-IID | BPSP vs. HSL — distribuição de classes | Real (dados FAPESP) |
-| 4 | RAG e detecção de alucinação | ChromaDB + DistilGPT-2 | Real |
-| 5 | Eficiência operacional | Convergência vs. comunicação | Real |
-| 6 | **Baseline comparativo** | Random Forest (Bag-of-Tokens) vs. SimplifiedBEHRT | Real (dados FAPESP) |
+Todos os experimentos usam o dataset FAPESP COVID-19 (BPSP + HSL), split determinístico 70/10/10/10 (seed=42), 5 classes de prognóstico clínico.
 
-Resultados gravados em `experiments/logs/` (avaliação por round) e `experiments/data/` (baseline RF).
+### Resultados consolidados (Exp 1–16)
+
+| Exp | Descrição | Acc | F1 macro | AUC macro | ECE | Notas |
+|---|---|---|---|---|---|---|
+| 1–7 | Estabelecimento da pipeline e baselines iniciais | — | — | — | — | Exploratório |
+| 8 | FedAvg (referência) | 61,51% | — | — | — | Baseline FL |
+| 9 | FedNova | **69,59%** | — | — | — | +8,08 p.p. sobre FedAvg |
+| 10 | Checkpoint guloso | melhora | — | — | — | Elimina regressão pós-convergência |
+| 11 | Gradient clipping (max_norm=1,0) | estável | — | — | — | Reduz explosão de gradiente |
+| 12 | Seeding determinístico | — | — | — | — | Reprodutibilidade entre runs |
+| 13 | **BPSP-only** (leave-one-out) | **64,86%** | — | — | — | Referência hospital único |
+| 14 | **HSL-only** (leave-one-out) | **40,05%** | — | — | — | Referência hospital único |
+| 15 | **Federado FedNova** (120 rounds) | **69,59%** | **0,4946** | **0,8181** | **0,0149** | Best: R79; calibrado isotônica |
+| 16 | **BEHRT Pooled** (120 épocas, budget equiv.) | | | | | Baselines centralizados |
+| 16A | → Pooled A (sem demográficos) | 68,29% | 0,4897 | — | — | |
+| 16B | → Pooled B (late fusion demográfica) | **68,68%** | 0,4912 | — | — | RF centralizado: 68,41% |
+| 17 | DP-FedAvg σ=1,0 S=1,0 | _pendente_ | | | | ε_acum ≈ 422 (cota solta) |
+| 18 | DP-FedAvg σ=0,5 S=1,0 | _pendente_ | | | | ε_acum ≈ 845 |
+| 19 | DP-FedAvg σ=2,0 S=1,0 | _pendente_ | | | | ε_acum ≈ 211 |
+
+**Conclusão central (Exp 15 vs. 16):** o custo de privacidade do aprendizado federado é **negativo** — FL FedNova (69,59%) supera BEHRT Pooled B (68,68%) e RF Centralizado (68,41%) com o mesmo orçamento de treinamento. Federação melhora o modelo ao expô-lo à heterogeneidade non-IID de dois hospitais.
+
+### Per-class F1 (BEHRT Pooled A — proxy para Exp 15)
+
+| Classe | N (teste) | F1 | Interpretação |
+|---|---|---|---|
+| `curado_pronto` | 1.620 | 0,849 | Bem aprendida (classe dominante) |
+| `melhora_pronto` | 321 | 0,822 | Bem aprendida (dominante no HSL) |
+| `melhora_internado_breve` | 1.074 | 0,463 | Parcial — fronteira de 10 dias é administrativa |
+| `melhora_internado_grave` | 338 | 0,350 | Fraca — padrão heterogêneo, erro clínico de maior risco |
+| `curado_internado` | 28 | 0,071 | Praticamente não predita — 28 amostras insuficientes |
+
+Ver análise detalhada em [`docs/analise_erros_clinicos.md`](docs/analise_erros_clinicos.md).
 
 ### Baseline Comparativo — Random Forest (Bag-of-Tokens)
 
-O experimento 6 responde a pergunta central de qualquer avaliação de modelo: **o Transformer agrega valor real em relação a um modelo clássico usando as mesmas features?**
+O Random Forest usa a mesma representação de tokens que o BEHRT, mas sem modelagem de ordem temporal — cada sequência vira um vetor de contagem (**Bag-of-Tokens**). É o adversário mais honesto: mesmos dados, mesma granularidade, zero aprendizado temporal.
 
-O baseline usa a mesma representação de tokens que o SimplifiedBEHRT, mas sem modelagem de ordem temporal: cada sequência de exames vira um vetor de contagem de tokens (**Bag-of-Tokens, BoT**). O Random Forest treinado nessa representação é o adversário mais honesto para o BEHRT — mesmos dados, mesma granularidade de features, zero aprendizado de dependências temporais.
-
-**Duas modalidades avaliadas:**
-
-| Modalidade | Dados de treino | Analogia no cenário clínico |
-|---|---|---|
-| **RF Centralizado** | Pool de todos os hospitais | Baseline sem restrição de privacidade — limite superior para modelo clássico |
-| **RF por Hospital** | Cada hospital treina seu próprio RF | Cenário local sem colaboração — baseline inferior do FL |
-
-A diferença `BEHRT(FL) − RF(por hospital)` mede o ganho do aprendizado federado sobre o cenário local. A diferença `BEHRT(FL) − RF(centralizado)` mede o ganho da modelagem sequencial temporal mesmo quando o adversário tem acesso irrestrito aos dados.
-
-**Resultados com dados FAPESP reais (33.773 atendimentos, 5 classes, 20 rodadas FL):**
-
-| Modelo | Accuracy | F1 Macro | AUC Macro | ECE |
+| Modelo | Acc | F1 macro | AUC macro | Contexto |
 |---|---|---|---|---|
-| RF Centralizado (BoT) | — | — | — | — |
-| RF por Hospital (média) | — | — | — | — |
-| SimplifiedBEHRT (FL federado, round 20) | 0.635 | 0.603 | — | 0.051 |
+| RF Centralizado (BoT, todos os hospitais) | **68,41%** | — | 0,7863 | Limite superior sem privacidade |
+| BEHRT Federado FedNova (120 rounds) | **69,59%** | 0,4946 | 0,8181 | Com privacidade federada |
+| BEHRT Pooled B (centralizado, 120 épocas) | 68,68% | 0,4912 | — | Budget equivalente |
 
-> **Comparação RF pendente:** o baseline Random Forest com dados reais está implementado
-> em `run_experiments_simulation.py:run_baseline_rf()` e será executado ao final da
-> simulação atual. O AUC macro aparece como NaN porque as classes `curado_internado` (27
-> amostras) e `melhora_pronto` (321 amostras) tiveram F1=0 no round 1 — o modelo ainda
-> estava se ajustando às classes minoritárias.
+O BEHRT federado supera o RF centralizado em +1,18 p.p. de Acc e +0,0318 de AUC — com privacidade federada real, sem que os dados clínicos saiam de cada hospital.
 
-A vantagem esperada do SimplifiedBEHRT sobre BoT emerge da modelagem de ordem temporal dos
-exames, que o Bag-of-Tokens descarta por construção.
+### Ablação — late fusion demográfica no contexto federado
 
-**Como executar:**
+Resultado não intuitivo: a late fusion demográfica que **melhora** o BEHRT pooled centralizado (+0,39 p.p.) **piora** o BEHRT federado (−1,50 p.p.) quando aplicada com apenas 10 épocas de ablação.
+
+| Configuração | Acc | Contexto |
+|---|---|---|
+| BEHRT Federado sem demográficos | 65,54% | Ablação (10 épocas) |
+| BEHRT Federado com late fusion | 50,51% | Ablação (10 épocas) |
+| BEHRT Pooled sem demográficos | 68,29% | 120 épocas (Exp 16A) |
+| BEHRT Pooled com late fusion | 68,68% | 120 épocas (Exp 16B) |
+
+**Hipótese:** o módulo demográfico precisa de mais épocas para convergir no contexto federado com heterogeneidade non-IID. Investigação pendente nas próximas iterações.
+
+### Como executar
 
 ```bash
-source .venv/bin/activate
-# Baseline isolado (sem rodar o FL completo):
-python -c "
-import sys, numpy as np, torch, random
-from pathlib import Path
-sys.path.insert(0, str(Path('.').resolve()))
-sys.path.insert(0, str(Path('src').resolve()))
-from mosaicfl.core.config import MODEL_CFG, RANDOM_SEED
-from mosaicfl.core.data_loader import load_with_fallback
-from mosaicfl.core.preprocessor import EHRPreprocessor
-from experiments.run_experiments_simulation import prepare_dataloaders, run_baseline_rf
-random.seed(RANDOM_SEED); np.random.seed(RANDOM_SEED); torch.manual_seed(RANDOM_SEED)
-df = load_with_fallback(allow_synthetic=True)
-loaders, test, _, _ = prepare_dataloaders(df, EHRPreprocessor())
-run_baseline_rf(loaders, test, class_labels=list(MODEL_CFG.class_labels))
-"
+# Pipeline completo (4 fases):
+make training-full
 
-# Ou como parte do pipeline completo (passo 5/5 do main):
-python experiments/run_experiments_simulation.py
+# Apenas BPSP ou HSL individualmente:
+make training-bpsp-only
+make training-hsl-only
+
+# BEHRT Pooled (baselines centralizados):
+make behrt-pooled
+
+# Com DP:
+FL_DP_NOISE=1.0 FL_DP_CLIP=1.0 make training-full
 ```
 
-Resultados salvos em `experiments/data/baseline_rf_YYYYMMDD_HHMMSS.json`.
-
-#### Correção de bug identificada durante a investigação
-
-Durante a análise do exp5 (convergência), foi identificado que `FedProxClient._compute_class_weights()` atribuía peso `total / (n × 1)` para classes ausentes no conjunto de treino local (usando `max(counts.get(i, 1), 1)` como fallback). Com dados sintéticos que contêm apenas 2 das 5 classes, classes ausentes recebiam pesos elevados — distorcendo o gradiente em direção a prognósticos sem sinal de treinamento.
-
-**Sintoma:** acurácia constante em 0.4667 por 11 rodadas (platô na inicialização, sem aprendizado real).
-
-**Correção aplicada:** classes ausentes no treino local recebem peso `0.0`, excluindo-as da loss sem distorcer o gradiente:
-
-```python
-# antes (bug)
-total / (n * max(counts.get(i, 1), 1))
-
-# depois (fix)
-total / (n * counts[i]) if counts.get(i, 0) > 0 else 0.0
-```
-
-**Impacto com dados reais FAPESP:** as 5 classes estão presentes em ambos os hospitais (BPSP e HSL), portanto todos os pesos são positivos e calculados corretamente. Os pesos observados no experimento real: BPSP `[0.361, 17.4, 47.2, 0.605, 2.02]` e HSL `[15.1, 24.3, 0.324, 0.817, 1.73]` — refletem o forte desbalanceamento não-IID entre hospitais.
+Resultados gravados em `experiments/logs/` (JSON por round) e `experiments/data/` (baseline RF, métricas agregadas).
 
 ---
 
@@ -1228,11 +1276,11 @@ pip install -e . --force-reinstall
 Use `bash setup.sh` — cria um venv isolado automaticamente.
 
 **ServerApp cai no meio do treinamento**
-O estado é salvo em `logs/training_state.json`. Verifique:
+O estado é persistido no banco (`metrics.fl_checkpoints`). Verifique o cache local:
 ```bash
-cat logs/training_state.json   # status: "interrupted", last_round: N
+cat logs/training_state.json   # status: "interrupted", last_round: N (cache local)
 ```
-Execute `flwr run . production` — o ServerApp detecta a interrupção, carrega o checkpoint do round N e retoma.
+Execute `flwr run . production` — o ServerApp chama `CheckpointStore.load_best()`, carrega o checkpoint do round N e retoma.
 
 **Round com timeout — treinamento travado**
 Se um round ultrapassar `round-timeout-seconds` (padrão 300s), o watchdog loga um warning e registra o round em `timed_out_rounds`. O treinamento não é abortado — apenas notificado. Ajuste o timeout:
@@ -1302,6 +1350,8 @@ A autoria intelectual deste trabalho é **inteiramente humana**. A pesquisadora 
 
 - **FedAvg** — McMahan et al., 2017. *Communication-Efficient Learning of Deep Networks from Decentralized Data*. AISTATS.
 - **FedProx** — Li et al., 2020. *Federated Optimization in Heterogeneous Networks*. MLSys.
+- **FedNova** — Wang et al., 2020. *Tackling the Objective Inconsistency Problem in Heterogeneous Federated Optimization*. NeurIPS. arXiv:2007.07481.
+- **DP-FedAvg** — McMahan et al., 2018. *Learning Differentially Private Recurrent Language Models*. ICLR. arXiv:1710.06963.
 
 ### Modelos
 

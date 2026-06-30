@@ -12,6 +12,7 @@ Algoritmo de agregação selecionado por FED_CFG.use_fednova (config.py).
 """
 import json
 import logging
+import math
 import random
 import time
 from collections import OrderedDict
@@ -29,6 +30,7 @@ from mosaicfl.core.client import FedProxClient
 from mosaicfl.core.config import (
     BATCH_SIZE, CONVERGENCE_PATIENCE, CONVERGENCE_THRESHOLD,
     DEVICE, FED_CFG, FL_DB_URL, LOCAL_EPOCHS, MIN_ROUNDS, MODEL_CFG, NUM_ROUNDS, USE_RAY,
+    DP_NOISE_MULTIPLIER, DP_MAX_GRAD_NORM,
 )
 from mosaicfl.core.model import SimplifiedBEHRT
 
@@ -87,6 +89,39 @@ def aggregate_fednova(
         new_state[key] = (w_t + tau_eff * normalized_delta).to(global_state[key].dtype)
 
     return new_state, tau_eff
+
+
+def apply_dp_noise(
+    global_state: OrderedDict,
+    round_num: int,
+    n_clients: int,
+    noise_multiplier: float,
+    max_grad_norm: float,
+    delta: float = 1e-5,
+) -> float:
+    """Adiciona ruído gaussiano ao estado global agregado (DP-FedAvg, McMahan et al. 2018).
+
+    noise_std = σ × S / n_clients
+    ε por rodada ≈ √(2 ln(1.25/δ)) / σ   (mecanismo Gaussiano — cota superior)
+    Para cotas mais apertadas, usar RDP/moments accountant (ex: Opacus).
+
+    Retorna ε acumulado (composição simples × rodadas).
+    """
+    noise_std = noise_multiplier * max_grad_norm / max(n_clients, 1)
+    with torch.no_grad():
+        for key in global_state:
+            noise = torch.normal(0.0, noise_std, size=global_state[key].shape)
+            global_state[key] = (global_state[key].float() + noise).to(global_state[key].dtype)
+
+    eps_per_round = math.sqrt(2 * math.log(1.25 / delta)) / noise_multiplier
+    eps_accumulated = eps_per_round * round_num
+    logger.info(
+        "dp_noise σ=%.2f S=%.2f noise_std=%.6f n=%d | "
+        "ε_rodada≈%.3f ε_acum≈%.3f δ=%.0e (cota superior — composição simples)",
+        noise_multiplier, max_grad_norm, noise_std, n_clients,
+        eps_per_round, eps_accumulated, delta,
+    )
+    return eps_accumulated
 
 
 def evaluate_global_model(model: SimplifiedBEHRT, test_loader: DataLoader) -> Tuple[float, float]:
@@ -212,6 +247,10 @@ def run_federated_learning_manual(
             logger.info(f"  [FedNova] τ={tau_values} | τ_eff={tau_eff:.1f}")
         else:
             global_state = aggregate_fedavg(client_states, client_weights)
+
+        if DP_NOISE_MULTIPLIER > 0:
+            apply_dp_noise(global_state, round_num, len(client_loaders), DP_NOISE_MULTIPLIER, DP_MAX_GRAD_NORM)
+
         global_model.load_state_dict(global_state)
 
         loss_global, acc_global = evaluate_global_model(global_model, test_loader)

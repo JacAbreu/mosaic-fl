@@ -18,6 +18,8 @@ FL_SERVER        ?= localhost:8080
 FL_HOSPITAL_ID   ?= BPSP
 FL_MIN_CLIENTS   ?= 2
 FL_NUM_ROUNDS    ?= 20
+FL_API_HOST      ?= 0.0.0.0
+FL_API_PORT      ?= 8000
 
 # Senha do banco — obrigatória para fl-server e fl-client com dados reais.
 # Pode ser definida no .env ou passada diretamente: make fl-server FL_DB_PASSWORD=senha
@@ -31,16 +33,49 @@ FL_DATA_DIR      ?= $(HOME)/studies/usp/mba-bigdata-art-int/tcc/data/Dados/Covid
 HSL_SEED         ?= scripts/db/seeds/hsl_seed.sql.gz
 BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
 
-.PHONY: setup test test-integration test-e2e test-all test-cov experiment training training-full \
+.PHONY: setup ollama-setup ollama-check \
+        test test-integration test-e2e test-all test-cov experiment training training-full \
         training-bpsp-only training-hsl-only clean \
         superlink server-app supernode sim test-pipeline behrt-pooled recalibrate \
         bootstrap-ci seed-sensitivity \
         db-up db-down db-wait fl-server fl-client fl-check \
         client-generate-seed client-db-up client-migrate client-load-hsl client-setup \
-        server-generate-seed server-db-reset server-load-bpsp server-setup
+        server-generate-seed server-db-reset server-load-bpsp server-setup \
+        api export-checkpoint
 
 setup:
 	bash setup.sh
+
+## Instala o Ollama e faz o pull do modelo LLM configurado (FL_LLM_MODEL).
+## Requer conexão com a internet. Idempotente: seguro de reexecutar.
+##   make ollama-setup
+##   make ollama-setup FL_LLM_MODEL=llama3.2:3b
+ollama-setup:
+	@echo "=== Verificando instalação do Ollama ==="
+	@if command -v ollama > /dev/null 2>&1; then \
+		echo "  Ollama já instalado: $$(ollama --version)"; \
+	else \
+		echo "  Instalando Ollama..."; \
+		curl -fsSL https://ollama.com/install.sh | sh; \
+	fi
+	@echo "=== Iniciando ollama serve (background) ==="
+	@pgrep -x ollama > /dev/null 2>&1 || (ollama serve > /tmp/ollama.log 2>&1 &); \
+	sleep 3
+	@echo "=== Baixando modelo $(FL_LLM_MODEL) ==="
+	ollama pull $(FL_LLM_MODEL)
+	@echo "=== Ollama pronto: $(FL_LLM_MODEL) disponível ==="
+
+## Verifica se o Ollama está online e o modelo está disponível.
+## Retorna exit code 0 se OK, 1 se não disponível (útil em CI).
+ollama-check:
+	@echo "=== Verificando Ollama ==="
+	@curl -sf http://localhost:11434/api/tags > /dev/null 2>&1 && \
+		echo "  Ollama: online" || \
+		(echo "  Ollama: OFFLINE — execute 'ollama serve' ou 'make ollama-setup'"; exit 1)
+	@ollama list 2>/dev/null | grep -q "$(FL_LLM_MODEL)" && \
+		echo "  Modelo $(FL_LLM_MODEL): disponível" || \
+		(echo "  Modelo $(FL_LLM_MODEL): NÃO encontrado — execute 'ollama pull $(FL_LLM_MODEL)'"; exit 1)
+	@echo "=== OK ==="
 
 # Unit tests -- no external deps, safe for CI/CD deploy pipeline
 test:
@@ -116,15 +151,21 @@ training-hsl-only:
 
 ## Pipeline completo: BPSP-only → HSL-only → federado (BPSP+HSL) → pooled baseline.
 ## Sem parametrização externa — env vars definidas internamente.
-## Requer FL_DB_URL e dados de ambos os hospitais no banco.
+## Requer FL_DB_URL, dados de ambos os hospitais no banco e Ollama rodando com gemma3:4b.
+## Para trocar o modelo LLM: FL_LLM_MODEL=outro-modelo make training-full
+FL_LLM_BACKEND ?= ollama
+FL_LLM_MODEL   ?= gemma3:4b
+FL_DP_NOISE    ?= 0.0   # σ do ruído DP (0.0 = DP desabilitado)
+FL_DP_CLIP     ?= 1.0   # S = norma máxima do update do cliente
+
 training-full:
 	@LOG="experiments/logs/run_complete_$$(date +%Y%m%d_%H%M%S).log"; \
 	echo "=== 1/4 training-bpsp-only ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
 	echo "=== 2/4 training-hsl-only ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
 	echo "=== 3/4 training-federated (BPSP+HSL) ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	FL_ENV=production FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
 	echo "=== 4/4 behrt-pooled baseline ===" | tee -a "$$LOG"; \
 	FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_behrt_pooled.py
 
@@ -320,6 +361,33 @@ server-load-bpsp:
 ##   make server-setup FL_DB_PASSWORD=outrasenha
 server-setup: db-up client-migrate server-db-reset server-load-bpsp
 	@echo "Servidor BPSP pronto. Execute 'make fl-server' para iniciar o treinamento federado."
+
+## Inicia a API de inferência REST.
+## O modelo é carregado automaticamente do banco (FL_DB_URL) se não houver checkpoint em arquivo.
+##   make api
+##   make api FL_API_PORT=9000 FL_AUTH_REQUIRED=false
+##   make api FL_AUTH_REQUIRED=false FL_ENV=development
+api: db-up
+	$(PYTHON) -m infrastructure.mosaicfl_api \
+	    --host $(FL_API_HOST) \
+	    --port $(FL_API_PORT)
+
+## Exporta o melhor checkpoint do banco (PostgreSQL/SQLite) para checkpoints/best_model.pt
+##
+## QUANDO USAR: a API carrega o modelo diretamente do banco via CheckpointStore na maioria
+## dos casos (make api já faz isso automaticamente). Use export-checkpoint apenas quando:
+##   - Quiser implantar a API em outro servidor sem acesso ao banco de treinamento
+##   - Quiser inspecionar ou arquivar os pesos manualmente (ex: antes da defesa)
+##   - A API estiver configurada com FL_CHECKPOINT_DIR apontando para um diretório local
+##
+## O arquivo gerado NÃO é versionado no git (.gitignore). O banco é a fonte da verdade.
+## Para recriar o checkpoint a qualquer momento: make training-full && make export-checkpoint
+##
+##   make export-checkpoint
+##   make export-checkpoint FL_TRAINING_ID=5   # exporta treinamento específico
+export-checkpoint:
+	@mkdir -p checkpoints
+	$(PYTHON) scripts/export_checkpoint.py
 
 clean:
 	rm -rf .venv __pycache__ .pytest_cache .coverage htmlcov

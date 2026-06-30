@@ -100,8 +100,12 @@ class FedProxClient(fl.client.NumPyClient):
         return loss + (proximal_mu / 2) * proximal_term
 
     def fit(self, parameters: List[np.ndarray], config: Dict) -> Tuple[List[np.ndarray], int, Dict]:
-        local_epochs = int(config.get("local_epochs", FED_CFG.local_epochs))
-        proximal_mu  = float(config.get("proximal_mu",  FED_CFG.proximal_mu))
+        local_epochs  = int(config.get("local_epochs",   FED_CFG.local_epochs))
+        proximal_mu   = float(config.get("proximal_mu",  FED_CFG.proximal_mu))
+        current_round = int(config.get("current_round",  0))
+
+        # Seed por rodada × cliente — garante reprodutibilidade entre runs independentes
+        torch.manual_seed(FED_CFG.random_seed + current_round * FED_CFG.num_clients + self.client_id)
 
         self.set_parameters(parameters)
         self.model.train()
@@ -138,14 +142,30 @@ class FedProxClient(fl.client.NumPyClient):
             epoch_loss = running_loss / total_samples if total_samples > 0 else 0.0
             epoch_losses.append(epoch_loss)
 
+        # DP: clipa update do cliente Δ = w_final − w_inicial à norma S (DP-FedAvg, McMahan et al. 2018)
+        dp_update_norm = 0.0
+        if FED_CFG.dp_noise_multiplier > 0 and self.global_params is not None:
+            with torch.no_grad():
+                updates = [p.detach() - g for p, g in zip(self.model.parameters(), self.global_params)]
+                update_norm = torch.sqrt(sum(u.norm() ** 2 for u in updates))
+                dp_update_norm = update_norm.item()
+                scale = min(1.0, FED_CFG.dp_max_grad_norm / (dp_update_norm + 1e-8))
+                if scale < 1.0:
+                    for param, g in zip(self.model.parameters(), self.global_params):
+                        param.data = g + scale * (param.data - g)
+            logger.info(
+                "dp_update_clip client_id=%s round=%d update_norm=%.4f scale=%.4f",
+                self.client_id, current_round, dp_update_norm, min(1.0, FED_CFG.dp_max_grad_norm / (dp_update_norm + 1e-8)),
+            )
+
         avg_loss      = sum(epoch_losses) / len(epoch_losses)
         avg_grad_norm = total_grad_norm / total_batches if total_batches > 0 else 0.0
         logger.info(
-            "client_fit client_id=%s loss=%.4f grad_norm=%.4f tau=%d",
-            self.client_id, avg_loss, avg_grad_norm, tau,
+            "client_fit client_id=%s loss=%.4f grad_norm=%.4f tau=%d dp_update_norm=%.4f",
+            self.client_id, avg_loss, avg_grad_norm, tau, dp_update_norm,
         )
         return self.get_parameters(config), total_samples, {
-            "loss": avg_loss, "tau": tau, "grad_norm": avg_grad_norm,
+            "loss": avg_loss, "tau": tau, "grad_norm": avg_grad_norm, "dp_update_norm": dp_update_norm,
         }
 
     def evaluate(self, parameters: List[np.ndarray], config: Dict) -> Tuple[float, int, Dict]:

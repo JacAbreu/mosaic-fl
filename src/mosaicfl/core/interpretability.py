@@ -17,6 +17,12 @@ from typing import Dict, List
 
 from .config import MODEL_CFG
 
+_SPECIAL_TOKENS = frozenset({"[PAD]", "[UNK]", "[CLS]", "[SEP]", "<PAD>", "<UNK>", "<CLS>"})
+
+
+def _is_clinical_token(token: str) -> bool:
+    return token not in _SPECIAL_TOKENS and not token.startswith("[") and not token.startswith("<")
+
 
 class BEHRTPatternExtractor:
     """
@@ -72,16 +78,34 @@ class BEHRTPatternExtractor:
 
                 for i in range(mean_attn.size(0)):
                     token_importance = mean_attn[i].sum(dim=0)
-                    top_indices = torch.topk(token_importance, k=5).indices
-                    tokens = [self.vocab_inverse.get(idx.item(), "<UNK>") for idx in top_indices]
                     labels = MODEL_CFG.class_labels
                     label_name = (
                         labels[desfecho_alvo]
                         if desfecho_alvo < len(labels)
                         else f"classe_{desfecho_alvo}"
                     )
+
+                    # Seleciona top tokens clínicos — descarta tokens especiais ([PAD], [CLS], etc.)
+                    sorted_indices = torch.argsort(token_importance, descending=True)
+                    tokens = []
+                    for idx in sorted_indices:
+                        tok = self.vocab_inverse.get(idx.item(), "<UNK>")
+                        if _is_clinical_token(tok):
+                            tokens.append(tok)
+                        if len(tokens) == 5:
+                            break
+
+                    if not tokens:
+                        continue
+
+                    # Texto clínico legível: "analito_nivel" → "analito nível"
+                    tokens_readable = [t.replace("_", " ") for t in tokens]
+                    texto = (
+                        f"Desfecho: {label_name}. "
+                        f"Marcadores de maior atenção: {', '.join(tokens_readable)}."
+                    )
                     pattern_scores.append({
-                        "texto": f"Paciente com {', '.join(tokens)}",
+                        "texto": texto,
                         "desfecho": label_name,
                         "score_atencao": token_importance.sum().item(),
                         "tokens": tokens,

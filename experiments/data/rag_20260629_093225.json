@@ -1,0 +1,50 @@
+{
+  "predicao": {
+    "diagnostico": "curado_internado",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "são seguinte a más de cemas.\nP.S. This study was sponsored by the National Science Foundation (NSSF).\nThis study was funded by the National Science Foundation (NSSF).\nReferences:\nBrigardi, A. T., Stelter,",
+  "fontes": [
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoTadultoTadultoPadultoAadulto-adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto/adultoNadultooadultoradultomadultoaadultoladulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoTadultoPadulto/adultoIadultoNadultoRadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoGadultoladultoiadultocadultooadultosadultoeadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoLadultoaadultocadultotadultoaadultotadultooadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoCadultoaadultoladultocadultoiadultooadulto adultoIadultooadultonadultoiadultozadultoaadultodadultooadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoLadultoOadultoWadulto",
+      "metadata": {
+        "desfecho": "melhora_internado_grave",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6135878657839531
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoGadultoladultoiadultocadultooadultosadultoeadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoGadultoladultoiadultocadultooadultosadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoLadultoaadultocadultotadultoaadultotadultooadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoLadultoOadultoWadulto,adulto adultoGadultoladultoiadultocadultooadultosadultoeadulto_adultoHadultoIadultoGadultoHadulto,adulto adultoGadultoladultoiadultocadultooadultosadultoeadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6136682995360014
+    },
+    {
+      "texto": "adultoPadultoaadultocadultoiadultoeadultonadultotadultoeadulto adultocadultooadultomadulto adultoRadultoDadultoWadulto_adultoLadultoOadultoWadulto,adulto adulto<adultoPadultoAadultoDadulto>adulto,adulto adultoGadultoladultoiadultocadultooadultosadultoeadulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto,adulto adultoGadultoladultoiadultocadultooadultosadultoeadulto,adulto adultosadultoaadultonadultogadultouadultoeadulto_adultoHadultoIadultoGadultoHadulto,adulto adulto1adulto8adulto3adulto_adultoNadultoOadultoRadultoMadultoAadultoLadulto",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.6196527409760504
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "precision_metrics": {
+    "precision_at_3": 0.2343,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0,
+      "curado_internado": 0.0119,
+      "melhora_pronto": 0.2565,
+      "melhora_internado_breve": 0.6282,
+      "melhora_internado_grave": 0.1036
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}
