@@ -21,8 +21,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import psutil
 import torch
 import torch.nn as nn
+from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader
 
 from infrastructure.shared.checkpoint_store import CheckpointStore, get_checkpoint_store
@@ -124,27 +126,40 @@ def apply_dp_noise(
     return eps_accumulated
 
 
-def evaluate_global_model(model: SimplifiedBEHRT, test_loader: DataLoader) -> Tuple[float, float]:
-    """Avalia modelo global no conjunto de teste."""
+def evaluate_global_model(
+    model: SimplifiedBEHRT, test_loader: DataLoader
+) -> Tuple[float, float, float, List[float]]:
+    """Avalia modelo global no conjunto de teste.
+
+    Retorna (loss, accuracy, f1_macro, per_class_f1).
+    f1_macro é o critério primário de seleção do checkpoint — mais robusto que
+    accuracy em datasets desbalanceados (zero_division=0 penaliza classes não previstas).
+    """
     model.eval()
     criterion = nn.CrossEntropyLoss()
     correct, total, loss_sum = 0, 0, 0.0
+    all_preds: List[int] = []
+    all_labels: List[int] = []
 
     with torch.no_grad():
         for batch_x, batch_y, batch_dia in test_loader:
-            batch_x = batch_x.to(DEVICE)
-            batch_y = batch_y.to(DEVICE)
+            batch_x   = batch_x.to(DEVICE)
+            batch_y   = batch_y.to(DEVICE)
             batch_dia = batch_dia.to(DEVICE)
-            logits = model(batch_x, dia_relativo=batch_dia)
-            loss = criterion(logits, batch_y)
+            logits    = model(batch_x, dia_relativo=batch_dia)
+            loss      = criterion(logits, batch_y)
             loss_sum += loss.item() * batch_y.size(0)
             _, predicted = torch.max(logits, dim=1)
-            total += batch_y.size(0)
+            total   += batch_y.size(0)
             correct += (predicted == batch_y).sum().item()
+            all_preds.extend(predicted.cpu().tolist())
+            all_labels.extend(batch_y.cpu().tolist())
 
-    avg_loss = loss_sum / total if total > 0 else 0.0
-    accuracy = correct / total if total > 0 else 0.0
-    return avg_loss, accuracy
+    avg_loss     = loss_sum / total if total > 0 else 0.0
+    accuracy     = correct  / total if total > 0 else 0.0
+    f1_macro     = float(f1_score(all_labels, all_preds, average="macro",  zero_division=0))
+    per_class_f1 = f1_score(all_labels, all_preds, average=None, zero_division=0).tolist()
+    return avg_loss, accuracy, f1_macro, per_class_f1
 
 
 def run_federated_learning_manual(
@@ -188,14 +203,24 @@ def run_federated_learning_manual(
     history = {
         "rounds": [], "accuracy": [], "loss": [],
         "communication_mb": [], "client_losses": [],
+        "tau_eff": [], "f1_macro": [], "per_class_f1": [],
+        "round_duration_s": [],
     }
 
-    stable_count = 0
-    prev_accuracy = 0.0
-    converged_round = None
-    best_accuracy = 0.0
-    best_round = 0
+    stable_count       = 0
+    prev_criterion_val = 0.0
+    converged_round    = None
+    best_criterion_val = 0.0  # melhor valor do critério selecionado (f1_macro ou accuracy)
+    best_f1            = 0.0  # f1_macro na rodada do melhor checkpoint (sempre rastreado)
+    best_accuracy      = 0.0  # accuracy na rodada do melhor checkpoint (sempre rastreado)
+    best_round         = 0
     checkpoint_store = override_checkpoint_store if override_checkpoint_store is not None else get_checkpoint_store(FL_DB_URL)
+
+    # Monitoramento de recursos computacionais (psutil)
+    _proc = psutil.Process()
+    _proc.cpu_percent(interval=None)  # primeira chamada calibra — descartada; próximas retornam % real
+    _peak_ram_mb  = 0.0
+    _cpu_samples: List[float] = []
 
     # Registra o treinamento antes do loop — garante 1 checkpoint por treinamento
     training_id: Optional[int] = None
@@ -206,8 +231,10 @@ def run_federated_learning_manual(
             algorithm=agregador,
             log_file=log_file,
             n_rounds_max=n_rounds,
+            checkpoint_criterion=FED_CFG.checkpoint_criterion,
         )
-        logger.info("training_registered id=%d algorithm=%s n_rounds_max=%d", training_id, agregador, n_rounds)
+        logger.info("training_registered id=%d algorithm=%s criterion=%s n_rounds_max=%d",
+                    training_id, agregador, FED_CFG.checkpoint_criterion, n_rounds)
 
     overall_start = time.time()
 
@@ -247,20 +274,30 @@ def run_federated_learning_manual(
             logger.info(f"  [FedNova] τ={tau_values} | τ_eff={tau_eff:.1f}")
         else:
             global_state = aggregate_fedavg(client_states, client_weights)
+            tau_eff = None
 
         if DP_NOISE_MULTIPLIER > 0:
             apply_dp_noise(global_state, round_num, len(client_loaders), DP_NOISE_MULTIPLIER, DP_MAX_GRAD_NORM)
 
         global_model.load_state_dict(global_state)
 
-        loss_global, acc_global = evaluate_global_model(global_model, test_loader)
+        loss_global, acc_global, f1_global, per_class_f1 = evaluate_global_model(global_model, test_loader)
         round_duration = time.time() - round_start
         model_size_mb = sum(p.numel() * 4 for p in global_model.parameters()) / (1024 ** 2)
         comm_mb = model_size_mb * len(client_states) * 2
 
+        _ram_mb  = _proc.memory_info().rss / (1024 ** 2)
+        _cpu_pct = _proc.cpu_percent(interval=None)
+        _peak_ram_mb = max(_peak_ram_mb, _ram_mb)
+        _cpu_samples.append(_cpu_pct)
+
         logger.info(
             f"  [Servidor] Rodada {round_num} em {round_duration:.2f}s | "
-            f"Loss: {loss_global:.4f} | Acc: {acc_global:.4f}"
+            f"Loss: {loss_global:.4f} | Acc: {acc_global:.4f} | F1-macro: {f1_global:.4f}"
+        )
+        logger.info(
+            "  [Recursos] RAM=%.0fMB (pico=%.0fMB) CPU=%.1f%% Rodada=%.2fs",
+            _ram_mb, _peak_ram_mb, _cpu_pct, round_duration,
         )
 
         history["rounds"].append(round_num)
@@ -268,10 +305,17 @@ def run_federated_learning_manual(
         history["loss"].append(loss_global)
         history["communication_mb"].append(comm_mb)
         history["client_losses"].append([m["loss"] for m in client_metrics])
+        history["tau_eff"].append(tau_eff)
+        history["f1_macro"].append(f1_global)
+        history["per_class_f1"].append(per_class_f1)
+        history["round_duration_s"].append(round_duration)
 
-        if acc_global > best_accuracy:
-            best_accuracy = acc_global
-            best_round = round_num
+        criterion_value = f1_global if FED_CFG.checkpoint_criterion == "f1_macro" else acc_global
+        if criterion_value > best_criterion_val:
+            best_criterion_val = criterion_value
+            best_f1            = f1_global
+            best_accuracy      = acc_global
+            best_round         = round_num
             checkpoint_store.save(
                 round_num=round_num,
                 state_dict=global_model.state_dict(),
@@ -280,15 +324,19 @@ def run_federated_learning_manual(
                 loss=loss_global,
                 training_id=training_id,
             )
-            logger.info(f"  [Best] Novo melhor checkpoint — rodada {round_num} Acc={acc_global:.4f} salvo no banco (training_id={training_id})")
+            logger.info(
+                f"  [Best] Novo melhor checkpoint — rodada {round_num} "
+                f"F1-macro={f1_global:.4f} Acc={acc_global:.4f} (training_id={training_id})"
+            )
 
         if round_num > 1:
-            delta = abs(acc_global - prev_accuracy)
+            delta = abs(criterion_value - prev_criterion_val)
+            crit_label = "F1" if FED_CFG.checkpoint_criterion == "f1_macro" else "Acc"
             if round_num <= MIN_ROUNDS:
-                logger.info(f"  [Warm-up {round_num}/{MIN_ROUNDS}] Δ={delta:.5f} — convergência suspensa até rodada {MIN_ROUNDS}")
+                logger.info(f"  [Warm-up {round_num}/{MIN_ROUNDS}] Δ {crit_label}={delta:.5f} — convergência suspensa até rodada {MIN_ROUNDS}")
             elif delta < CONVERGENCE_THRESHOLD:
                 stable_count += 1
-                logger.info(f"  [Convergência] Δ={delta:.5f} < {CONVERGENCE_THRESHOLD} ({stable_count}/{CONVERGENCE_PATIENCE})")
+                logger.info(f"  [Convergência] Δ {crit_label}={delta:.5f} < {CONVERGENCE_THRESHOLD} ({stable_count}/{CONVERGENCE_PATIENCE})")
             else:
                 stable_count = 0
 
@@ -297,9 +345,22 @@ def run_federated_learning_manual(
                 logger.info(f"\nCONVERGENCIA ATINGIDA na rodada {round_num}!")
                 break
 
-        prev_accuracy = acc_global
+        prev_criterion_val = criterion_value
 
     overall_duration = time.time() - overall_start
+    _avg_cpu = sum(_cpu_samples) / len(_cpu_samples) if _cpu_samples else 0.0
+
+    logger.info(
+        "resource_summary duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%% rounds=%d",
+        overall_duration, _peak_ram_mb, _avg_cpu, round_num,
+    )
+
+    if best_round == 0:
+        # Nenhuma rodada superou best_criterion_val=0.0 — usa a última rodada como referência.
+        best_round         = round_num
+        best_f1            = history["f1_macro"][-1]
+        best_accuracy      = history["accuracy"][-1]
+        best_criterion_val = history["f1_macro"][-1] if FED_CFG.checkpoint_criterion == "f1_macro" else history["accuracy"][-1]
 
     if training_id is not None:
         checkpoint_store.complete_training(
@@ -308,34 +369,42 @@ def run_federated_learning_manual(
             best_round=best_round,
             best_accuracy=best_accuracy,
             converged=bool(converged_round),
+            total_duration_s=overall_duration,
+            peak_ram_mb=_peak_ram_mb,
+            avg_cpu_pct=_avg_cpu,
         )
 
     best_ckpt = checkpoint_store.load_best(training_id=training_id)
     if best_ckpt is not None:
         global_model.load_state_dict(best_ckpt["model_state"])
         loaded_round = best_ckpt.get("checkpoint_round", best_round)
-        logger.info(f"  [Best] Modelo restaurado da rodada {loaded_round} (Acc={best_accuracy:.4f}) training_id={training_id}")
+        logger.info(
+            f"  [Best] Modelo restaurado da rodada {loaded_round} "
+            f"F1-macro={best_f1:.4f} Acc={best_accuracy:.4f} training_id={training_id}"
+        )
     else:
         logger.warning("  [Best] load_best retornou None — usando modelo da última rodada")
 
     logger.info(f"\n{'='*60}")
     logger.info("SIMULAÇÃO CONCLUÍDA")
     logger.info(f"{'='*60}")
-    logger.info(f"  Rodadas:      {round_num}")
-    logger.info(f"  Convergência: {'Sim (rodada ' + str(converged_round) + ')' if converged_round else 'Não'}")
-    logger.info(f"  Melhor rodada: {best_round} (Acc={best_accuracy:.4f})")
+    logger.info(f"  Rodadas:       {round_num}")
+    logger.info(f"  Convergência:  {'Sim (rodada ' + str(converged_round) + ')' if converged_round else 'Não'}")
+    logger.info(f"  Melhor rodada: {best_round} (F1-macro={best_f1:.4f} | Acc={best_accuracy:.4f})")
+    logger.info(f"  F1-macro final (última rodada): {history['f1_macro'][-1]:.4f}")
     logger.info(f"  Acurácia final (última rodada): {history['accuracy'][-1]:.4f}")
-    logger.info(f"  Loss:         {history['loss'][-1]:.4f}")
-    logger.info(f"  Tráfego:      {sum(history['communication_mb']):.2f} MB")
-    logger.info(f"  Tempo total:  {overall_duration:.2f}s ({overall_duration/60:.2f} min)")
+    logger.info(f"  Loss:          {history['loss'][-1]:.4f}")
+    logger.info(f"  Tráfego:       {sum(history['communication_mb']):.2f} MB")
+    logger.info(f"  Tempo total:   {overall_duration:.2f}s ({overall_duration/60:.2f} min)")
     logger.info(f"{'='*60}")
 
     logger.info(
-        "FL_TRAINING_COMPLETE rounds=%d converged=%s best_round=%d best_accuracy=%.4f "
-        "last_accuracy=%.4f loss=%.4f duration_s=%.1f traffic_mb=%.2f",
+        "FL_TRAINING_COMPLETE rounds=%d converged=%s best_round=%d "
+        "best_f1_macro=%.4f best_accuracy=%.4f "
+        "last_f1_macro=%.4f last_accuracy=%.4f loss=%.4f duration_s=%.1f traffic_mb=%.2f",
         round_num, bool(converged_round),
-        best_round, best_accuracy,
-        history["accuracy"][-1], history["loss"][-1],
+        best_round, best_f1, best_accuracy,
+        history["f1_macro"][-1], history["accuracy"][-1], history["loss"][-1],
         overall_duration, sum(history["communication_mb"]),
     )
 
@@ -411,34 +480,59 @@ def run_federated_learning_manual(
     except Exception as exc:
         logger.warning(f"isotonic_calibration_failed: {exc}")
 
-    eval_path = Path("experiments/logs") / f"evaluation_round_{round_num}.json"
-    try:
-        import dataclasses
-        eval_path.parent.mkdir(parents=True, exist_ok=True)
-        eval_path.write_text(json.dumps({
-            "round":             round_num,
-            "temperature":       round(scaler.T, 4),
-            "ece_isotonic":      ece_iso,
-            "pre_calibration":   dataclasses.asdict(report_raw) if report_raw  else None,
-            "post_calibration":  dataclasses.asdict(report_cal) if report_cal  else None,
-        }, indent=2, ensure_ascii=False), encoding="utf-8")
-        logger.info(f"Relatório de avaliação salvo: {eval_path}")
-    except Exception as exc:
-        logger.warning(f"Falha ao salvar relatório de avaliação: {exc}")
+    import dataclasses
+    evaluation_payload = {
+        "best_round":       best_round,
+        "total_rounds":     round_num,
+        "best_f1_macro":    best_f1,
+        "best_accuracy":    best_accuracy,
+        "temperature":      round(scaler.T, 4),
+        "ece_isotonic":     ece_iso,
+        "pre_calibration":  dataclasses.asdict(report_raw) if report_raw  else None,
+        "post_calibration": dataclasses.asdict(report_cal) if report_cal  else None,
+    }
 
+    # Banco é a fonte da verdade — persiste junto com o checkpoint.
+    # O arquivo é mantido como cache de leitura rápida (sobrescrito a cada run).
     checkpoint_store.save(
         round_num=best_round,
         state_dict=global_model.state_dict(),
         vocab=vocab or {},
         accuracy=best_accuracy,
-        loss=history["loss"][best_round - 1] if best_round > 0 else 0.0,
+        loss=history["loss"][best_round - 1],
         temperature=scaler.T,
+        training_id=training_id,
+        evaluation_json=evaluation_payload,
     )
     logger.info(
         f"checkpoint_saved_postgres round={best_round} accuracy={best_accuracy:.4f} "
-        f"T={scaler.T:.4f} vocab_size={len(vocab or {})}"
+        f"T={scaler.T:.4f} vocab_size={len(vocab or {})} evaluation_json=saved"
     )
 
+    eval_path = Path("experiments/logs") / f"evaluation_best_r{best_round}_of_{round_num}.json"
+    try:
+        eval_path.parent.mkdir(parents=True, exist_ok=True)
+        eval_path.write_text(json.dumps(evaluation_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        logger.info(f"Relatório de avaliação (cache local): {eval_path}")
+    except Exception as exc:
+        logger.warning(f"Falha ao salvar cache local de avaliação: {exc}")
+
+    if training_id is not None:
+        try:
+            checkpoint_store.save_round_history(
+                training_id=training_id,
+                rounds=history.get("rounds", []),
+                accuracies=history.get("accuracy", []),
+                losses=history.get("loss", []),
+                tau_effs=history.get("tau_eff"),
+                f1_macros=history.get("f1_macro"),
+                per_class_f1s=history.get("per_class_f1"),
+                round_durations=history.get("round_duration_s"),
+            )
+        except Exception as exc:
+            logger.warning("Falha ao salvar histórico por rodada: %s", exc)
+
+    history["training_id"] = training_id
     return history, global_model
 
 

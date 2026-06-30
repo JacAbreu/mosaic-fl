@@ -189,11 +189,19 @@ class FedProxClient(fl.client.NumPyClient):
         return float(avg_loss), total, {"accuracy": accuracy, "client_id": self.client_id}
 
 
-def create_client_fn(client_id: int, train_data: torch.Tensor, train_labels: torch.Tensor,
-                     val_data: torch.Tensor, val_labels: torch.Tensor) -> FedProxClient:
-    """Factory para criar clientes com seus respectivos DataLoaders."""
-    train_dataset = TensorDataset(train_data, train_labels)
-    val_dataset = TensorDataset(val_data, val_labels)
-    train_loader = DataLoader(train_dataset, batch_size=FED_CFG.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=FED_CFG.batch_size)
-    return FedProxClient(client_id, train_loader, val_loader)
+def create_client_fn(
+    client_id: int,
+    train_data: torch.Tensor,
+    train_labels: torch.Tensor,
+    val_data: torch.Tensor,
+    val_labels: torch.Tensor,
+) -> FedProxClient:
+    """Stub de compatibilidade — delega para experiments.training.dataloaders.create_synthetic_client.
+
+    Exclusivo para simulações com dados sintéticos e testes unitários.
+    No pipeline com dados reais (data_source != 'synthetic'), os loaders vêm de
+    prepare_dataloaders_from_db() e são passados diretamente ao FedProxClient — esta
+    função não participa desse fluxo.
+    """
+    from experiments.training.dataloaders import create_synthetic_client
+    return create_synthetic_client(client_id, train_data, train_labels, val_data, val_labels)

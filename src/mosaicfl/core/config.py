@@ -97,6 +97,10 @@ class FedConfig:
     max_new_tokens:        int   = 64
     pooled_epochs:         int   = 120  # épocas do BEHRT centralizado — equivalente ao budget de rodadas do FL (num_rounds)
     use_fednova:           bool  = True  # Exp 9: substitui FedAvg por normalização por passos efetivos τ_i (Wang et al. 2020)
+    # Critério de seleção do melhor checkpoint por rodada.
+    # Valores válidos: "f1_macro" (padrão, Bloco 2+), "accuracy" (Bloco 1 — legado).
+    # Futuro: migra para fl_config no banco com audit trail (justificativa + efeitos esperados).
+    checkpoint_criterion:  str   = field(default_factory=lambda: os.getenv("FL_CHECKPOINT_CRITERION", "f1_macro"))
     # Privacidade Diferencial (DP-FedAvg, McMahan et al. 2018)
     # dp_noise_multiplier=0.0 desabilita DP completamente (sem overhead).
     # dp_noise_multiplier=σ > 0: cada rodada adiciona N(0, (σ·S/n)²) ao modelo agregado,

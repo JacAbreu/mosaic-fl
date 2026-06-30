@@ -13,7 +13,7 @@ Importar deste módulo continua funcionando — nenhum script externo precisa mu
 """
 from experiments.training.ablation import run_ablation_demographics, run_pooled_behrt
 from experiments.training.baselines import run_baseline_rf
-from experiments.training.dataloaders import prepare_dataloaders, prepare_dataloaders_from_db
+from experiments.training.dataloaders import prepare_dataloaders, prepare_dataloaders_from_db, create_synthetic_client
 from experiments.training.fl_core import (
     aggregate_fedavg,
     evaluate_global_model,
@@ -27,6 +27,7 @@ from experiments.training.rag import run_rag_pipeline
 __all__ = [
     "prepare_dataloaders",
     "prepare_dataloaders_from_db",
+    "create_synthetic_client",
     "aggregate_fedavg",
     "evaluate_global_model",
     "run_federated_learning_manual",

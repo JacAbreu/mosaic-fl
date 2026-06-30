@@ -60,7 +60,12 @@ def prepare_dataloaders(
         val_x, val_y = make_sequences(subset.iloc[n_train:])
 
         client_loaders[cid] = (
-            DataLoader(TensorDataset(train_x, train_y), batch_size=batch_size, shuffle=True),
+            DataLoader(
+                TensorDataset(train_x, train_y),
+                batch_size=batch_size,
+                shuffle=True,
+                generator=torch.Generator().manual_seed(RANDOM_SEED + cid),
+            ),
             DataLoader(TensorDataset(val_x, val_y), batch_size=batch_size),
         )
         total_train_samples += len(train_x)
@@ -117,9 +122,6 @@ def prepare_dataloaders_from_db(
 
     vocab = next(iter(hospital_data.values()))[2]
 
-    rng = torch.Generator()
-    rng.manual_seed(RANDOM_SEED)
-
     client_loaders: Dict = {}
     demographics_by_client: Dict = {}
     test_seqs_list, test_lbls_list, test_demo_list, test_dia_list = [], [], [], []
@@ -132,7 +134,10 @@ def prepare_dataloaders_from_db(
             logger.warning(f"[db] Hospital {hospital_id}: apenas {n} amostras — pulando.")
             continue
 
-        perm = torch.randperm(n, generator=rng)
+        # Gerador independente por hospital — adicionar um novo hospital não altera
+        # o split dos demais (ao contrário de um único rng compartilhado sequencialmente).
+        _split_rng = torch.Generator().manual_seed(RANDOM_SEED + 1000 + cid)
+        perm = torch.randperm(n, generator=_split_rng)
         n_train = int(0.7 * n)
         n_val   = int(0.1 * n)
         n_cal   = int(0.1 * n)
@@ -204,3 +209,31 @@ def prepare_dataloaders_from_db(
     )
 
     return client_loaders, test_loader, vocab, total_train_samples, demographics_by_client, test_loader_demo, cal_loader
+
+
+def create_synthetic_client(
+    client_id: int,
+    train_data: torch.Tensor,
+    train_labels: torch.Tensor,
+    val_data: torch.Tensor,
+    val_labels: torch.Tensor,
+):
+    """Cria FedProxClient com DataLoaders sintéticos — exclusivo para simulações e testes.
+
+    No pipeline com dados reais, os loaders vêm de prepare_dataloaders_from_db() e são
+    passados diretamente ao FedProxClient. Esta função NÃO deve ser usada com dados FAPESP.
+
+    O generator é seeded por client_id para reprodutibilidade entre runs de simulação.
+    """
+    from mosaicfl.core.client import FedProxClient
+    train_loader = DataLoader(
+        torch.utils.data.TensorDataset(train_data, train_labels),
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        generator=torch.Generator().manual_seed(RANDOM_SEED + client_id),
+    )
+    val_loader = DataLoader(
+        torch.utils.data.TensorDataset(val_data, val_labels),
+        batch_size=BATCH_SIZE,
+    )
+    return FedProxClient(client_id, train_loader, val_loader)

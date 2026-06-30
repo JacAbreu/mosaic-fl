@@ -199,11 +199,10 @@ class TestGetEngineFallback:
         assert engine._vocab == {"TOKEN_A": 2, "TOKEN_B": 3}
         assert engine._checkpoint_round == 55
 
-    def test_skips_store_when_pt_file_exists(self, tmp_path, monkeypatch):
-        """Se há arquivo round_*.pt, não tenta o CheckpointStore."""
+    def test_skips_store_when_pt_file_exists_and_source_is_file(self, tmp_path, monkeypatch):
+        """FL_CHECKPOINT_SOURCE=file: arquivo encontrado → store não é tentado."""
         import infrastructure.mosaicfl_api.state as state_mod
 
-        # Cria um .pt válido
         ckpt_file = tmp_path / "round_010.pt"
         model = SimplifiedBEHRT()
         buf = io.BytesIO()
@@ -220,6 +219,7 @@ class TestGetEngineFallback:
         mock_store = MagicMock()
 
         monkeypatch.setattr(state_mod, "_CHECKPOINT_DIR", tmp_path)
+        monkeypatch.setattr(state_mod, "_CHECKPOINT_SOURCE", "file")
         monkeypatch.setattr(state_mod, "_engine", None)
         monkeypatch.setenv("FL_DB_URL", "postgresql://fake/test")
 
@@ -232,6 +232,66 @@ class TestGetEngineFallback:
 
         mock_store.load_best.assert_not_called()
         assert engine._vocab == {"FILE_TOKEN": 5}
+
+    def test_store_tried_first_when_source_is_db(self, tmp_path, monkeypatch):
+        """FL_CHECKPOINT_SOURCE=db (padrão): store é tentado primeiro, mesmo com arquivo disponível."""
+        import infrastructure.mosaicfl_api.state as state_mod
+
+        ckpt_file = tmp_path / "round_010.pt"
+        model = SimplifiedBEHRT()
+        buf = io.BytesIO()
+        torch.save({
+            "model_state":      model.state_dict(),
+            "vocab":            {"FILE_TOKEN": 5},
+            "temperature":      1.0,
+            "checkpoint_round": 10,
+            "checkpoint_at":    "2026-01-01T00:00:00+00:00",
+            "model_version":    "fileversion",
+        }, buf)
+        ckpt_file.write_bytes(buf.getvalue())
+
+        mock_store = MagicMock()
+        mock_store.load_best.return_value = None  # store vazio → cai para arquivo
+
+        monkeypatch.setattr(state_mod, "_CHECKPOINT_DIR", tmp_path)
+        monkeypatch.setattr(state_mod, "_CHECKPOINT_SOURCE", "db")
+        monkeypatch.setattr(state_mod, "_engine", None)
+        monkeypatch.setenv("FL_DB_URL", "postgresql://fake/test")
+
+        with patch(
+            "infrastructure.shared.checkpoint_store.get_checkpoint_store",
+            return_value=mock_store,
+        ):
+            with patch.object(InferenceEngine, "_load_references"):
+                engine = state_mod._get_engine()
+
+        mock_store.load_best.assert_called_once()
+        assert engine._vocab == {"FILE_TOKEN": 5}  # carregou do arquivo como fallback
+
+    def test_load_best_called_with_training_id_when_env_set(self, tmp_path, monkeypatch):
+        """FL_TRAINING_ID=5 → load_best(training_id=5): garante que a API não serve BPSP-only por engano."""
+        import infrastructure.mosaicfl_api.state as state_mod
+
+        ckpt = _make_checkpoint(round_num=79)
+
+        mock_store = MagicMock()
+        mock_store.load_best.return_value = ckpt
+
+        monkeypatch.setattr(state_mod, "_CHECKPOINT_DIR", tmp_path)
+        monkeypatch.setattr(state_mod, "_CHECKPOINT_SOURCE", "db")
+        monkeypatch.setattr(state_mod, "_INFERENCE_TRAINING_ID", 5)
+        monkeypatch.setattr(state_mod, "_engine", None)
+        monkeypatch.setenv("FL_DB_URL", "postgresql://fake/test")
+
+        with patch(
+            "infrastructure.shared.checkpoint_store.get_checkpoint_store",
+            return_value=mock_store,
+        ):
+            with patch.object(InferenceEngine, "_load_references"):
+                engine = state_mod._get_engine()
+
+        mock_store.load_best.assert_called_once_with(training_id=5)
+        assert engine._checkpoint_round == 79
 
     def test_handles_empty_store_gracefully(self, tmp_path, monkeypatch):
         """Se o store não tem checkpoint (load_best retorna None), engine sobe sem travar."""

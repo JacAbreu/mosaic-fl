@@ -1,0 +1,50 @@
+{
+  "predicao": {
+    "diagnostico": "curado_internado",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"curado_internado\" (probabilidade 0.81) é razoável devido à presença de concentrações normais da Hemoglobina Corpuscular, um achado que se alinha com o caso similar 'curado_internado' onde a Hemoglobina Corpuscular estava",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_pronto. Marcadores de maior atenção: Calcio NORMAL, DHL - IFCC NORMAL, Hemoglobina Corpuscular Media LOW, Basófilos NORMAL, Linfocitos LOW.",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.4484562442166711
+    },
+    {
+      "texto": "Desfecho: melhora_pronto. Marcadores de maior atenção: Concentracao de Hemoglobina Corpuscular NORMAL, Magnésio NORMAL, Albumina NORMAL, DHL - IFCC NORMAL, Creatinina NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.4503293365043788
+    },
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: Plaquetas HIGH, Bilirrubina Total NORMAL, Eosinofilos HIGH, Concentracao de Hemoglobina Corpuscular HIGH, Calcio Ionizado, sangue NORMAL.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.46680399973368547
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "precision_metrics": {
+    "precision_at_3": 0.2218,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.1132,
+      "curado_internado": 0.131,
+      "melhora_pronto": 0.0052,
+      "melhora_internado_breve": 0.5177,
+      "melhora_internado_grave": 0.0158
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

@@ -323,5 +323,20 @@
       "melhora_internado_breve",
       "melhora_internado_grave"
     ]
+  },
+  "_meta": {
+    "training_id": 8,
+    "best_round": 105,
+    "total_rounds": 120,
+    "algorithm": "FedNova",
+    "clients": [
+      "BPSP",
+      "HSL"
+    ],
+    "run_date": "2026-06-29",
+    "run_log": "experiments/logs/run_complete_20260629_185640.log",
+    "description": "Melhor checkpoint run seeding-fix (sem DP). Novo melhor resultado histórico.",
+    "accuracy_best": 0.7019,
+    "accuracy_r120": 0.6581
   }
 }

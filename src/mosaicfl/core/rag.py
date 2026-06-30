@@ -19,7 +19,7 @@ from sentence_transformers import SentenceTransformer
 from sqlalchemy import text
 from typing import List, Dict, Tuple
 
-from .config import FED_CFG, LLM_BACKEND, MAX_SEQ_LEN, RUNTIME_CFG
+from .config import FED_CFG, LLM_BACKEND, MAX_SEQ_LEN, RUNTIME_CFG, FL_ENV
 
 logger = logging.getLogger(__name__)
 
@@ -207,17 +207,23 @@ class ClinicalRAG:
 
         self.embedder = SentenceTransformer(RUNTIME_CFG.embedding_model)
 
-        self._llm_model = RUNTIME_CFG.llm_model
+        self._llm_model       = RUNTIME_CFG.llm_model
+        self._llm_was_fallback = False
 
         requested_backend = LLM_BACKEND
         if requested_backend == "ollama" and not _check_ollama_available():
             hf_fallback = RUNTIME_CFG.llm_hf_model
-            logger.warning(
+            self._llm_was_fallback = True
+            _msg = (
                 "RAG: Ollama solicitado (modelo: %s) mas não está acessível em "
                 "localhost:11434. Usando HuggingFace (%s) como fallback. "
-                "Para usar Ollama: 'ollama serve' e 'ollama pull %s'.",
-                self._llm_model, hf_fallback, self._llm_model,
+                "Resultados desta run NÃO são comparáveis com runs usando Ollama. "
+                "Para usar Ollama: 'ollama serve' e 'ollama pull %s'."
             )
+            if FL_ENV == "test":
+                logger.warning(_msg, self._llm_model, hf_fallback, self._llm_model)
+            else:
+                logger.error(_msg, self._llm_model, hf_fallback, self._llm_model)
             requested_backend = "huggingface"
             self._llm_model = hf_fallback
 
@@ -351,9 +357,12 @@ class ClinicalRAG:
             cases,
         )
         return {
-            "predicao":            model_prediction,
-            "justificativa":       justification,
-            "fontes":              sources,
+            "predicao":             model_prediction,
+            "justificativa":        justification,
+            "fontes":               sources,
             "alucinacao_detectada": hallucinated,
-            "confiavel":           not hallucinated and len(sources) > 0,
+            "confiavel":            not hallucinated and len(sources) > 0,
+            "llm_backend":          self._llm_backend,
+            "llm_model_used":       self._llm_model,
+            "llm_was_fallback":     self._llm_was_fallback,
         }

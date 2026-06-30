@@ -494,3 +494,5 @@ claude, quando for avaliar o sistema, nao foque em um trabalho simples para TCC,
   talvez nao fique tao boas assim, mas o modelo precisa estar em nivel profissional.
 
   deletar -> docs/avaliacao_metodologia_mosaicfl.md desatualizado
+
+  make db-up && alembic upgrade head && make training-full -> subir banco, rodar migrations, iniciar treinamento

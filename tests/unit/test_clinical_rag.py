@@ -29,14 +29,14 @@ class TestClinicalRAG:
         mock_tokenizer.encode.return_value = [1, 2, 3, 4, 5]
         mock_tokenizer.decode.return_value = "prompt truncado"
 
-        mock_llm = MagicMock()
         mock_generator = MagicMock(return_value=[{"generated_text": "Diagnóstico provável: covid19."}])
 
+        # AutoTokenizer/AutoModelForCausalLM são importados DENTRO de _load_huggingface_backend,
+        # não no módulo — patching correto é na função, não nos atributos do módulo.
         with patch("mosaicfl.core.rag.sa.create_engine", return_value=mock_engine), \
              patch("mosaicfl.core.rag.SentenceTransformer", return_value=mock_embedder), \
-             patch("mosaicfl.core.rag.AutoTokenizer.from_pretrained", return_value=mock_tokenizer), \
-             patch("mosaicfl.core.rag.AutoModelForCausalLM.from_pretrained", return_value=mock_llm), \
-             patch("mosaicfl.core.rag.pipeline", return_value=mock_generator):
+             patch("mosaicfl.core.rag._check_ollama_available", return_value=False), \
+             patch("mosaicfl.core.rag._load_huggingface_backend", return_value=(mock_tokenizer, mock_generator)):
             rag = ClinicalRAG("postgresql://test/test")
 
         rag.embedder = mock_embedder
@@ -84,9 +84,11 @@ class TestClinicalRAG:
         pred = {"diagnostico": "covid19", "probabilidade": 0.82}
         result = rag.explain(patient, pred)
 
-        for key in ["predicao", "justificativa", "fontes", "alucinacao_detectada", "confiavel"]:
+        for key in ["predicao", "justificativa", "fontes", "alucinacao_detectada", "confiavel",
+                    "llm_backend", "llm_model_used", "llm_was_fallback"]:
             assert key in result, f"Chave '{key}' ausente no resultado de explain()"
         assert isinstance(result["confiavel"], bool)
+        assert isinstance(result["llm_was_fallback"], bool)
 
     def test_explain_confiavel_false_when_hallucination_detected(self):
         rag, mock_collection, mock_embedder = self._make_rag()
