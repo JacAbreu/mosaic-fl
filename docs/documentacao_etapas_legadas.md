@@ -155,7 +155,7 @@ duration_days implementado em `preprocessor.py:_map_outcome()`.
 | 6.2 | Sequências longas (> 128 exames) — janela? | ROW_NUMBER() OVER capping em max_seq_len |
 | 6.3 | Token por analito ou por grupo de exame? | Por analito — 649 tokens no vocab final |
 | 6.4 | Label de treino dado ausência de UTI/óbito? | 5 classes cruzando outcome × tipo × duração |
-| 6.5 | Vocabulário do zero ou pré-treinado? | Do zero com dados FAPESP (build_standard_vocab.py) |
+| 6.5 | Vocabulário do zero ou pré-treinado? | Do zero com dados FAPESP (scripts/build_standard_vocab.py) |
 
 ---
 
@@ -327,7 +327,7 @@ Authorization: Bearer {token}
 O `InferenceEngine` usava MD5 do nome do analito. O modelo era treinado com tokens
 `{analito}_{classificação}` (HIGH/NORMAL/LOW/NO_REF). Os vocabulários eram incompatíveis.
 
-**Resolução:** vocabulário canônico via `build_standard_vocab.py` carregado no checkpoint.
+**Resolução:** vocabulário canônico via `scripts/build_standard_vocab.py` carregado no checkpoint.
 `InferenceEngine` carrega o vocab do checkpoint e reutiliza o mesmo `SequencePipeline._make_token()`.
 
 **Problema 2 — `risk_score` retornava probabilidade da classe errada (RESOLVIDO)**

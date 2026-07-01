@@ -176,7 +176,7 @@ Isso é acima da média de TCCs na área: a maioria usa apenas FedAvg com modelo
 - Exportar **distribuição completa de probabilidade por desfecho com incerteza MC-Dropout** como exames sintéticos no ClinicalPath (`FL_PROB_*` + `FL_PROB_*_INCERTEZA`) não aparece em trabalhos similares de integração FL + visualização clínica.
 - Separação `PatientExport` (ClinicalPath) vs. `InferenceOutput` (FHIR) como contratos arquiteturalmente independentes — o módulo FHIR é estruturalmente incapaz de vazar dados clínicos.
 - `correlation_token` efêmero para resolver o `subject` obrigatório do FHIR R4 sem vazar identidade — design elegante e correto.
-- Vocabulário canônico único distribuído antes do treinamento (`build_standard_vocab.py`) — sem esse mecanismo a agregação FedAvg seria semanticamente inválida entre hospitais com nomes de analitos diferentes.
+- Vocabulário canônico único distribuído antes do treinamento (`scripts/build_standard_vocab.py`) — sem esse mecanismo a agregação FedAvg seria semanticamente inválida entre hospitais com nomes de analitos diferentes.
 
 **Engenharia de software consistentemente boa**
 - Arquitetura hexagonal: `mosaicfl.core` (domínio puro) isolado de `infrastructure/` e `experiments/`
@@ -430,7 +430,7 @@ do repositório. Critérios idênticos às avaliações anteriores (seção "Cri
 | `infrastructure/mosaicfl_api/audit.py` | log_access JSON + SHA-256 + RotatingFileHandler (não-WORM) |
 | `infrastructure/mosaicfl_api/service.py` | TLS obrigatório, JWT, rate limiter in-process, CORS bloqueado em produção |
 | `infrastructure/shared/tls.py` | EnvironmentError se FL_TLS_CERT_DIR ausente — TLS obrigatório por construção |
-| `experiments/run_experiments_simulation.py` | 5 experimentos + baseline RF (exp6) adicionado nesta sessão |
+| `experiments/training_runner/run_experiments_simulation.py` | 5 experimentos + baseline RF (exp6) adicionado nesta sessão |
 | `experiment_results.json` | exp1-5 com dados sintéticos; exp5 acurácia corrigida após bug class_weights |
 | `docs/TODO.md` | 11 bloqueadores de produção abertos; DP no roadmap |
 | `tests/unit/` (34 arquivos) | Cobertura unit em quase todos os módulos; sem e2e real |
@@ -473,7 +473,7 @@ Isso é acima da média de TCCs: a maioria implementa FedAvg + MLP sem calibraç
 
 **2. Contribuições originais verificáveis no repositório**
 
-- **Vocabulário canônico distribuído** (`build_standard_vocab.py`): sem esse artefato, FedAvg entre hospitais com nomes de analitos divergentes seria semanticamente inválido. Nenhum trabalho de FL clínico revisado menciona esse passo como artefato explícito.
+- **Vocabulário canônico distribuído** (`scripts/build_standard_vocab.py`): sem esse artefato, FedAvg entre hospitais com nomes de analitos divergentes seria semanticamente inválido. Nenhum trabalho de FL clínico revisado menciona esse passo como artefato explícito.
 - **Exportação de distribuição completa de probabilidade com incerteza** para ClinicalPath (`FL_PROB_*` + `FL_PROB_*_INCERTEZA` como exames sintéticos): injeta a epistemologia bayesiana na linha do tempo visual. Fonte: `integration/clinical-path/exporter.py`, `models.py:RiskPrediction`.
 - **`correlation_token` efêmero para FHIR**: resolve o campo obrigatório `subject` do R4 sem armazenar mapeamento identidade → token. Isolamento arquitetural verificado por teste: `test_no_infrastructure_import`, `test_no_patient_export_import`. Fonte: `integration/fhir/models.py`.
 
@@ -512,7 +512,7 @@ Late fusion de demográficos (proposta documentada no TODO) não implementada.
 
 Random Forest com Bag-of-Tokens implementado em dois modos (centralizado + por hospital)
 com `n_estimators=200, class_weight="balanced"`, reordenamento de colunas por classe,
-métricas completas (accuracy, macro_F1, macro_AUC, ECE). Fonte: `experiments/run_experiments_simulation.py:run_baseline_rf()`.
+métricas completas (accuracy, macro_F1, macro_AUC, ECE). Fonte: `experiments/training_runner/run_experiments_simulation.py:run_baseline_rf()`.
 
 Gap residual: comparação executada exclusivamente com dados sintéticos (2 classes
 de 4 presentes, AUC retorna NaN para classes ausentes). Sem validação com dados FAPESP reais,
@@ -728,7 +728,7 @@ Mesmo das avaliações anteriores (2026-06-24). Reavaliação motivada pelo rede
 | `src/mosaicfl/core/model.py` | `demo_dim` parâmetro para late fusion; classifier head condicional |
 | `experiments/logs/dryrun.log` | Distribuição não-IID: BPSP 55,6% curado_pronto; HSL 61,5% melhora_pronto |
 | `experiments/logs/evaluation_round_1.json` | Round 1 da simulação em andamento: acc=0.513, macro_AUC=0.755, ECE=0.079 |
-| `experiments/run_experiments_simulation.py` | Baseline RF real implementado; ablation demográfica documentada |
+| `experiments/training_runner/run_experiments_simulation.py` | Baseline RF real implementado; ablation demográfica documentada |
 | `AVALIACAO_PROJETO.md` (Avaliação 3) | Penalidades da avaliação holística anterior como baseline de comparação |
 
 ---

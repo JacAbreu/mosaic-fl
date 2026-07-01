@@ -35,7 +35,7 @@ BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
 
 .PHONY: setup ollama-setup ollama-check \
         test test-integration test-e2e test-all test-cov experiment training training-full \
-        training-bpsp-only training-hsl-only clean \
+        training-full-cuda training-bpsp-only training-hsl-only clean \
         superlink server-app supernode sim test-pipeline behrt-pooled recalibrate \
         bootstrap-ci seed-sensitivity \
         db-up db-down db-wait fl-server fl-client fl-check \
@@ -102,28 +102,28 @@ FL_LOG_SIMULATION ?= experiments/logs/simulation_$(shell date +%Y%m%d_%H%M%S).lo
 
 ## Treinamento federado com dados reais FAPESP (requer FL_DB_URL)
 training:
-	FL_ENV=production FL_LOG_FILE="$(FL_LOG_TRAINING)" $(PYTHON) experiments/run_training.py
+	FL_ENV=production FL_LOG_FILE="$(FL_LOG_TRAINING)" $(PYTHON) experiments/training_runner/run_training.py
 
 ## Simulação demonstrativa com dados sintéticos (não requer banco)
 experiment:
-	FL_LOG_FILE="$(FL_LOG_SIMULATION)" $(PYTHON) experiments/run_experiments_simulation.py
+	FL_LOG_FILE="$(FL_LOG_SIMULATION)" $(PYTHON) experiments/training_runner/run_experiments_simulation.py
 
 ## Pooled baseline — BEHRT com pool BPSP+HSL (artefato de pesquisa, nunca em produção)
 ## Quantifica o custo de privacidade da federação com a mesma arquitetura do modelo FL.
 ## Requer FL_DB_URL. Saída: experiments/data/behrt_pooled_<timestamp>.json
 behrt-pooled:
-	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_behrt_pooled.py
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/training_runner/run_behrt_pooled.py
 
 ## Re-calibração de temperatura sobre o melhor checkpoint salvo no banco.
 ## Útil quando a calibração falhou (ex: T negativo) sem re-executar o treinamento.
 ## Requer FL_DB_URL. Saída: experiments/logs/recalibrate_<timestamp>.json
 recalibrate:
-	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_recalibrate.py
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/training_runner/run_recalibrate.py
 
 ## IC 95% via bootstrap sobre o melhor checkpoint (sem re-treino). Requer FL_DB_URL.
 ## Persiste em metrics.bootstrap_ci. Saída: experiments/logs/bootstrap_ci_<timestamp>.json
 bootstrap-ci:
-	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_bootstrap_ci.py
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/training_runner/run_bootstrap_ci.py
 
 ## Sensibilidade a seed: FedAvg vs FedNova, 3 seeds × 30 rounds. Requer FL_DB_URL.
 ## Checkpoints isolados em SQLite. Resultados em metrics.sensitivity_runs.
@@ -132,7 +132,7 @@ bootstrap-ci:
 ROUNDS ?= 30
 SEEDS  ?= 42 7 123
 seed-sensitivity:
-	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/run_seed_sensitivity.py \
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/training_runner/run_seed_sensitivity.py \
 		--rounds $(ROUNDS) --seeds $(SEEDS)
 
 ## Treinamento federado com apenas clientes BPSP (leave-one-client-out).
@@ -140,14 +140,14 @@ seed-sensitivity:
 training-bpsp-only:
 	@LOG="experiments/logs/training_bpsp_only_$$(date +%Y%m%d_%H%M%S).log"; \
 	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LOG_FILE="$$LOG" \
-	$(PYTHON) experiments/run_training.py
+	$(PYTHON) experiments/training_runner/run_training.py
 
 ## Treinamento federado com apenas clientes HSL (leave-one-client-out).
 ## Test/cal sempre no set global (BPSP+HSL) para comparação justa. Requer FL_DB_URL.
 training-hsl-only:
 	@LOG="experiments/logs/training_hsl_only_$$(date +%Y%m%d_%H%M%S).log"; \
 	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LOG_FILE="$$LOG" \
-	$(PYTHON) experiments/run_training.py
+	$(PYTHON) experiments/training_runner/run_training.py
 
 ## Pipeline completo: BPSP-only → HSL-only → federado (BPSP+HSL) → pooled baseline.
 ## Sem parametrização externa — env vars definidas internamente.
@@ -161,13 +161,27 @@ FL_DP_CLIP     ?= 1.0   # S = norma máxima do update do cliente
 training-full:
 	@LOG="experiments/logs/run_complete_$$(date +%Y%m%d_%H%M%S).log"; \
 	echo "=== 1/4 training-bpsp-only ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
 	echo "=== 2/4 training-hsl-only ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
 	echo "=== 3/4 training-federated (BPSP+HSL) ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_training.py; \
+	FL_ENV=production FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
 	echo "=== 4/4 behrt-pooled baseline ===" | tee -a "$$LOG"; \
-	FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/run_behrt_pooled.py
+	FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_behrt_pooled.py
+
+## Pipeline completo (mesmas 4 fases de training-full), forçando execução na GPU via FL_DEVICE=cuda.
+## Requer FL_DB_URL, dados de ambos os hospitais no banco, Ollama rodando com gemma3:4b e CUDA disponível
+## (validar antes com: .venv/bin/python -c "import torch; print(torch.cuda.is_available())").
+training-full-cuda:
+	@LOG="experiments/logs/run_complete_cuda_$$(date +%Y%m%d_%H%M%S).log"; \
+	echo "=== 1/4 training-bpsp-only (cuda) ===" | tee -a "$$LOG"; \
+	FL_ENV=production FL_DEVICE=cuda FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	echo "=== 2/4 training-hsl-only (cuda) ===" | tee -a "$$LOG"; \
+	FL_ENV=production FL_DEVICE=cuda FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	echo "=== 3/4 training-federated (BPSP+HSL, cuda) ===" | tee -a "$$LOG"; \
+	FL_ENV=production FL_DEVICE=cuda FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	echo "=== 4/4 behrt-pooled baseline (cuda) ===" | tee -a "$$LOG"; \
+	FL_DEVICE=cuda FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_behrt_pooled.py
 
 # ── Banco de dados (PostgreSQL via Docker) ────────────────────────────────────
 
@@ -208,7 +222,7 @@ fl-server: db-up
 	FL_HOSPITAL_ID="$(FL_HOSPITAL_ID)" \
 	FL_NUM_ROUNDS="$(FL_NUM_ROUNDS)" \
 	FL_MIN_CLIENTS="$(FL_MIN_CLIENTS)" \
-	$(PYTHON) experiments/run_federated_real.py --mode server --port 8080
+	$(PYTHON) experiments/training_runner/run_federated_real.py --mode server --port 8080
 
 ## Notebook: sobe o banco local e conecta ao servidor do desktop.
 ## Substitua FL_SERVER pelo IP impresso pelo fl-server.
@@ -216,12 +230,12 @@ fl-server: db-up
 fl-client: db-up
 	FL_DB_URL="$(FL_DB_URL)" \
 	FL_HOSPITAL_ID="$(FL_HOSPITAL_ID)" \
-	$(PYTHON) experiments/run_federated_real.py --mode client --server "$(FL_SERVER)"
+	$(PYTHON) experiments/training_runner/run_federated_real.py --mode client --server "$(FL_SERVER)"
 
 ## Verifica conectividade com o servidor (não sobe banco, não inicia cliente).
 ##   make fl-check FL_SERVER=192.168.1.100:8080
 fl-check:
-	$(PYTHON) experiments/run_federated_real.py --check --server "$(FL_SERVER)"
+	$(PYTHON) experiments/training_runner/run_federated_real.py --check --server "$(FL_SERVER)"
 
 # Diagnóstico do SequencePipeline (série temporal de internados HSL+BPSP).
 # Sobrescreva variáveis conforme necessário:

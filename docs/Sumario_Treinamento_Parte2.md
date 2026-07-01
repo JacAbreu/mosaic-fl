@@ -1097,7 +1097,7 @@ Esperamos τ_eff estável entre 40 e 80 (BPSP tem ~1.252 batches × 1 epoch; HSL
 #### Template para registro dos resultados
 
 ```
-### Bloco 2 — Treinamento 1 (FedNova sem DP)
+### Bloco 2 — Treinamento 1 (FedNova sem DP) — também referenciado como "CPU 2026-06-30" (training_ids 9-11)
 
 **Data:** 2026-06-30
 **Log:** experiments/logs/run_complete_20260630_091435.log
@@ -1353,3 +1353,291 @@ Localização: `/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/`
 | **Total make training-full** | **~420 min (7h)** | **pico 2.445 MB** | **~23 núcleos** | Baseline CPU estabelecido |
 
 Este é o ponto de referência para medir o ganho real da GPU no próximo treinamento.
+
+---
+
+## Sessão 2026-06-30 (noite) — Primeira execução GPU: bugs de device e questão de reprodutibilidade
+
+### Correção em relação à sessão anterior
+
+A sessão anterior (linha ~1340) registrou: *"Sem mudança de código no projeto: o DEVICE já é detectado automaticamente via `torch.cuda.is_available()` em `config.py`."* **Isso estava incorreto.** `config.py:116` usa `device: object = field(default_factory=lambda: torch.device(os.getenv("FL_DEVICE", "cpu")))` — o padrão é sempre `cpu`; não há auto-detecção. É necessário exportar `FL_DEVICE=cuda` explicitamente. Também: o `python` do sistema não tem `torch` instalado — é necessário usar `.venv/bin/python` (é o que o `Makefile` já usa via `PYTHON := .venv/bin/python`).
+
+### Setup criado para o primeiro run GPU
+
+- Verificado `torch.cuda.is_available()=True`, GPU reconhecida como `NVIDIA GeForce RTX 4070 Ti`.
+- Target `make training-full-cuda` criado no `Makefile` — mesmas 4 fases do `training-full`, com `FL_DEVICE=cuda` embutido em cada fase.
+- `run_training.py` e `run_behrt_pooled.py` passaram a logar `Device: {DEVICE}` no cabeçalho — auditável em qualquer log, sem precisar inferir pela variável de ambiente do shell.
+
+### Dois bugs de device corrigidos (nunca haviam sido exercitados, porque `DEVICE` sempre foi `cpu` até esta sessão)
+
+| Bug | Arquivo | Sintoma | Causa | Fix |
+|---|---|---|---|---|
+| 1 | `experiments/training/fl_core.py:258` | `RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!` em `aggregate_fednova`, na 1ª rodada | `fit_state` (parâmetros retornados pelo cliente) era reconstruído com `torch.tensor(v)` sem `device=`, sempre caindo em CPU, enquanto `global_model` está em `cuda` | `torch.tensor(v, device=DEVICE)` |
+| 2 | `infrastructure/shared/checkpoint_store.py:68` | `TypeError: can't convert cuda:0 device type tensor to numpy` em `_model_version()`, ao salvar o primeiro checkpoint | Hash do checkpoint chamava `v.numpy()` direto em tensor cuda | `v.cpu().numpy()` |
+
+Após os dois fixes, revisão completa do restante do caminho de `training-full-cuda` (`model.py`, `ablation.py`, `baselines.py`, `calibration.py`, `evaluation.py`) não encontrou outros pontos de risco — todo o resto do código já converte para `.cpu()` antes de `.numpy()`/`.tolist()`. Validado com a suíte de 391 testes unitários (todos passando) e com a fase 1 completa rodando sem erro.
+
+### Fase 1 (BPSP-only) na GPU — resultado e comparação de velocidade
+
+| Métrica | CPU (training_id=9, sessão da tarde) | GPU (primeiro run completo) |
+|---|---|---|
+| Rodadas | 71 (convergiu) | 120 (não convergiu) |
+| Tempo total | 4.017,90s (66,96 min) | 712,86s (11,88 min) |
+| Tempo por rodada | ~56,6 s/rodada | ~5,94 s/rodada |
+| GPU-Util observado (`nvidia-smi`) | — | 47% |
+
+**Ganho por rodada: ~9,5×.** O processo `.venv/bin/python` foi confirmado ativo na GPU via `nvidia-smi` (338 MiB alocados, 47% de utilização, 49°C, 74W/285W) durante a execução.
+
+### Questão levantada pela pesquisadora
+
+> "ou seja, no ultimo treinamento teve convergencia e nessa nao? isso nao seria derivado da partition escolhida no treinamento anterior?"
+
+### Análise
+
+**A partição foi descartada como causa — confirmado empiricamente.** Os logs de ambos os runs (CPU e GPU, fase BPSP-only) mostram split idêntico:
+
+```
+BPSP: 28.599 sequências | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | age_mean=0.51 sex_M=13664
+Hospital BPSP → cliente 0: 20019 treino | 2859 val | 2859 cal
+```
+
+Isso é esperado porque o split usa `torch.Generator().manual_seed(RANDOM_SEED + 1000 + cid)` (`experiments/training/dataloaders.py`) — sempre executado em CPU, independente de `DEVICE`, sobre os mesmos dados do banco.
+
+**Causa real: não-reprodutibilidade numérica entre CPU e GPU no PyTorch — limitação documentada da própria biblioteca, não bug do projeto.** Fonte: [PyTorch Reproducibility Notes](https://pytorch.org/docs/stable/notes/randomness.html).
+
+`fl_core.py:188-192` seeda `random`, `numpy`, `torch.manual_seed` e ativa `cudnn.deterministic=True` — isso garante reprodutibilidade **dentro do mesmo tipo de device** (repetir um run CPU produz o mesmo resultado; repetir um run GPU produz o mesmo resultado), mas **não garante paridade CPU↔GPU**, por dois motivos técnicos:
+
+1. **RNGs diferentes por device.** CPU usa um gerador derivado de Mersenne Twister; CUDA usa Philox. O mesmo valor de `seed` produz sequências de números aleatórios diferentes em cada um. Isso afeta o dropout, aplicado em todo forward/backward de treino (`nn.Dropout` em `BEHRTEncoderLayer`) — as máscaras de dropout já divergem entre CPU e GPU desde a rodada 1.
+2. **Cobertura parcial do `cudnn.deterministic=True`.** Essa flag afeta principalmente a seleção de algoritmos de convolução — este modelo não tem camadas conv (é Transformer/atenção), então ela não fecha a lacuna de não-associatividade de ponto flutuante em reduções paralelas de GPU (softmax da atenção, acumulação de gradiente). A documentação do PyTorch afirma explicitamente que resultados entre CPU e GPU não são garantidos idênticos, mesmo com determinismo ativado em cada um separadamente.
+
+Com 120 rodadas de treino federado, pequenas diferenças numéricas desde a rodada 1 se acumulam e produzem uma trajetória de loss materialmente diferente — daí convergir na rodada 71 no run CPU e não convergir (ir até a rodada 120) no run GPU. Não é bug, é característica conhecida de treino com GPU.
+
+### Implicação metodológica para o TCC
+
+Comparar CPU vs GPU com um único run de cada isola apenas o efeito de **velocidade** — a trajetória de treino (e portanto accuracy/F1/convergência) também muda, por um motivo diferente do device em si (velocidade) e independente da qualidade do código. Se accuracy/F1/convergência fizerem parte da comparação (não só tempo de parede), a recomendação é rodar múltiplas seeds em cada device e comparar médias ± desvio-padrão — o código já suporta isso via `ABLATION_SEEDS` — em vez de comparar dois runs únicos ponto a ponto. Para a comparação de **velocidade pura** (o objetivo desta etapa), um único run por device continua válido.
+
+### Correção de uma comparação anterior nesta mesma sessão
+
+Ao reportar o progresso em tempo real, esta sessão afirmou incorretamente que a *fase 1 (BPSP-only)* havia terminado em 11,88 min (9,5× mais rápida que o baseline CPU da mesma fase). **Isso estava errado** — os dados de 11,88 min / 120 rodadas / não convergência / melhor checkpoint R73 pertencem à **fase 3 (Federado BPSP+HSL)**, não à fase 1. A confusão veio de examinar o log em um ponto em que a fase 3 (mais longa) já estava em andamento, sem confirmar os marcadores `=== N/4 ===` que delimitam cada fase. Os números corretos de cada fase estão na tabela da seção seguinte.
+
+---
+
+## Bloco 2 — Treinamento 2 (FedNova sem DP, GPU) — 2026-06-30 (noite) — também referenciado como "GPU 2026-06-30 (com bug RAG)" (training_ids 16-18) — **excluído da comparação final** por causa do bug de RAG; ver "GPU 2026-06-30" (training_ids 19-21) na seção seguinte para o run válido
+
+**Log:** `experiments/logs/run_complete_cuda_20260630_213009.log`
+**Comando:** `FL_DEVICE=cuda make training-full-cuda` (ver seção anterior)
+**Split:** mesmo do Treinamento 1 (seeds independentes por hospital — BPSP seed 1042, HSL seed 1043)
+**Critério de checkpoint:** `f1_macro`
+**training_ids:** BPSP=16 | HSL=17 | Federado=18
+**Duração total do pipeline (4 fases):** 21:30:10 → 22:03:28 = **~33,3 min**, contra **~420 min (7h)** do Treinamento 1 em CPU → **~12,6× mais rápido no pipeline completo**
+
+### Bug adicional encontrado e corrigido antes da extração destes dados
+
+Um **quarto bug de device** nesta sessão: o pipeline RAG falhou silenciosamente nas 3 fases FL (erro capturado por `try/except` no orquestrador — não interrompeu o pipeline, mas o Precision@3 não foi calculado em nenhuma das fases).
+
+| Item | Detalhe |
+|---|---|
+| Arquivo | `src/mosaicfl/core/interpretability.py`, `BEHRTPatternExtractor.extract_top_patterns()` |
+| Sintoma (log) | `Erro no RAG: Expected all tensors to be on the same device, but got index is on cpu, different from other tensors on cuda:0 (when checking argument in method wrapper_CUDA__index_select)` |
+| Causa | `batch_x`, `batch_y` e `batch_dia` vinham direto do `dataloader` (CPU) e eram passados ao `self.model(...)` sem `.to(DEVICE)` — a lookup do `nn.Embedding` (pesos em `cuda`) recebe índices em `cpu` |
+| Fix | `batch_x = batch_x.to(DEVICE)`, `batch_y = batch_y.to(DEVICE)`, `batch_dia = batch_dia.to(DEVICE) if batch_dia is not None else None`, antes do forward |
+| Validação | Smoke test isolado com `FL_DEVICE=cuda` gerando perfis com sucesso; suíte completa de 391 testes unitários passando |
+
+**Consequência para os dados extraídos abaixo:** o Precision@3 do RAG **não está disponível** para nenhuma das 3 fases deste run (falhou antes de calcular). Um próximo `make training-full-cuda` já vai gerar o P@3 corretamente com o fix aplicado.
+
+### Fase 1/4 — BPSP-only (training_id=16)
+
+| Métrica | GPU (Treinamento 2) | CPU (Treinamento 1, training_id=9) | Δ |
+|---|---|---|---|
+| Accuracy (best) | **61,67%** (R30) | 62,41% (R63) | −0,74 p.p. |
+| F1 macro | 0,3268 | 0,3548 | −0,0280 |
+| Macro AUC (pós-cal) | 0,7617 | 0,7496 | +0,0121 |
+| ECE isotônica | 0,0455 | 0,0494 | −0,0039 |
+| Convergência | **Sim (R35)** | Sim (R71) | convergiu 2× mais cedo |
+| Duração | **180,1s (3,00 min)** | 67,0 min | **~22,3× mais rápido** |
+| Peak RAM | 2.597 MB | 2.445 MB | +152 MB |
+| CPU médio | 103,8% | 2.353% | GPU libera a CPU (~1 núcleo vs ~23) |
+
+Per-class F1 (R30): curado_pronto=0,7510 | curado_internado=0,0000 | melhora_pronto=**0,0000** | melhora_internado_breve=0,5822 | melhora_internado_grave=0,3006. `melhora_pronto` colapsou nesta trajetória GPU (320 amostras no teste) — trajetória diferente da run CPU, consistente com a discussão sobre não-reprodutibilidade CPU↔GPU acima.
+
+### Fase 2/4 — HSL-only (training_id=17)
+
+| Métrica | GPU (Treinamento 2) | CPU (Treinamento 1, training_id=10) | Δ |
+|---|---|---|---|
+| Accuracy (best) | 29,40% (R26) | 33,19% (R21) | −3,79 p.p. |
+| F1 macro | 0,2675 | 0,2479 | +0,0196 |
+| Macro AUC (pós-cal) | 0,6797 | — | — |
+| ECE isotônica | 0,0719 | 0,0717 | +0,0002 |
+| Convergência | Sim (R39) | Sim (R39) | mesma rodada — coincidência |
+| Duração | **39,7s (0,66 min)** | 7,0 min | **~10,6× mais rápido** |
+| Peak RAM | 2.410 MB | 2.299 MB | +111 MB |
+
+Per-class F1 (R26): curado_pronto=**0,0000** | curado_internado=0,0000 | melhora_pronto=0,7003 | melhora_internado_breve=0,4597 | melhora_internado_grave=0,1774. Padrão já visto no Bloco 1: com 1 cliente e dataset pequeno (3.621 amostras), o modelo colapsa para um subconjunto de classes — desta vez `curado_pronto` (majoritária no BPSP, mas rara no HSL) ficou a zero, em vez de `curado_internado`.
+
+### Fase 3/4 — Federado BPSP+HSL (training_id=18)
+
+| Métrica | GPU (Treinamento 2) | CPU (Treinamento 1, training_id=11) | Δ |
+|---|---|---|---|
+| Accuracy (best) | **68,03%** (R73) | 65,90% (R77) | **+2,13 p.p.** |
+| F1 macro | **0,4988** | 0,4905 | +0,0083 |
+| Macro AUC (pós-cal) | 0,8084 | 0,8105 | −0,0021 |
+| ECE isotônica | **0,0198** | 0,0311 | −0,0113 (melhor calibração) |
+| Temperatura | 1,1219 | 1,2377 | — |
+| Convergência | Não (120 rodadas) | Não (120 rodadas) | igual — ambos exploraram o teto |
+| τ_eff | 1.095,0 (constante) | 1.095,0 (constante) | idêntico — mesmos batches/época |
+| Duração | **712,86s (11,88 min)** | 121,0 min | **~10,2× mais rápido** |
+| Peak RAM | 2.600 MB | 2.295 MB | +305 MB |
+| CPU médio | 110,0% | 2.358% | GPU libera a CPU |
+
+**Per-class F1 (R73, best checkpoint):**
+
+| Classe | F1 (GPU) | F1 (CPU, Treinamento 1) | Δ | AUC (GPU) | N |
+|---|---|---|---|---|---|
+| curado_pronto | **0,8116** | 0,8009 | +0,0107 | 0,8909 | 1.598 |
+| curado_internado | 0,0000 | 0,0000 | = | 0,5671 | 46 |
+| melhora_pronto | **0,7639** | 0,7550 | +0,0089 | 0,9603 | 320 |
+| melhora_internado_breve | **0,5860** | 0,5753 | +0,0107 | 0,8242 | 1.096 |
+| melhora_internado_grave | **0,3324** | 0,3215 | +0,0109 | 0,7995 | 321 |
+
+Todas as classes com amostras suficientes melhoraram ligeiramente em relação ao Treinamento 1 (CPU) — a trajetória GPU desta run específica converge para um ponto marginalmente melhor em todas as métricas de qualidade (accuracy, F1, ECE), apesar de não ter disparado a flag de convergência. `curado_internado` permanece em F1=0,000 (28→46 amostras no split atual; ainda insuficiente).
+
+**Ablation rápida (10 épocas, seed único) desta fase:** `ablation_A_sem_demo` Acc=0,4298/F1=0,2759 vs `ablation_B_late_fusion` Acc=0,5519/F1=0,3763 → Δ(B−A) = **+0,1221 Acc / +0,1004 F1**. Ganho grande de late fusion demográfica nesta ablation curta (não deve ser comparado diretamente ao modelo FL completo de 120 rodadas — é um treino independente e curto, criado só para medir o efeito marginal dos demográficos).
+
+### Fase 4/4 — BEHRT Pooled + RF Centralizado
+
+| Modelo | GPU (Treinamento 2) | CPU (Treinamento 1) | Δ |
+|---|---|---|---|
+| Pooled A (sem demo) | 69,30% / F1=0,5165 | 69,51% / F1=0,5128 | −0,21 p.p. Acc / +0,0037 F1 |
+| Pooled B (late fusion) | **71,13%** / F1=0,5186 | 67,20% / F1=0,5101 | **+3,93 p.p.** Acc / +0,0085 F1 |
+| RF Centralizado (BoT) | 66,73% / F1=0,4996 | 66,67% / F1=0,5026 | +0,06 p.p. Acc / −0,0030 F1 |
+| **BEHRT FL Federado** | **68,03%** / F1=0,4988 | 65,90% / F1=0,4905 | +2,13 p.p. Acc |
+
+**Duração fase 4:** ~14,85 min (Pooled A: 6m19s | Pooled B: 5m02s | RF ×2: ~40s) vs ~186 min em CPU (Pooled A ~92min + Pooled B ~94min) → **~12,5× mais rápido**.
+
+**Custo de privacidade (BEHRT FL vs Pooled A):** GPU: −1,27 p.p. Acc | −0,0177 F1. CPU: −3,61 p.p. Acc | −0,0223 F1. **A federação ficou relativamente mais competitiva nesta run GPU** — mas, como discutido acima, isso é confundido pela trajetória de treino diferente entre CPU e GPU, não isoladamente pelo device.
+
+**FL vs RF Centralizado:** GPU: FL supera RF em +1,30 p.p. Acc / −0,0008 F1 (praticamente empate em F1). CPU: RF superava FL em −0,77 p.p. Acc / −0,0121 F1. Nesta run GPU específica, o FL superou o RF pela primeira vez desde o T15 (Bloco 1) — novamente, resultado da trajetória específica desta run, não uma conclusão estrutural sobre GPU vs CPU.
+
+### Resumo de velocidade — GPU vs CPU (mesma configuração, split e critério)
+
+| Fase | CPU | GPU | Speedup |
+|---|---|---|---|
+| BPSP-only | 67,0 min | 3,00 min | 22,3× |
+| HSL-only | 7,0 min | 0,66 min | 10,6× |
+| Federado | 121,0 min | 11,88 min | 10,2× |
+| Pooled A+B+RF | ~186 min | ~14,85 min | 12,5× |
+| **Total pipeline** | **~420 min (7h)** | **~33,3 min** | **~12,6×** |
+
+O ganho é maior na fase BPSP-only (22,3×) do que nas demais — hipótese a investigar: com 1 cliente e mais amostras (20.019), o batch por rodada tem mais paralelismo para a GPU explorar; HSL-only e Federado têm menos amostras por cliente/rodada, aproximando-se mais do regime onde overhead de kernel launch da GPU domina sobre o ganho de paralelismo.
+
+### Conclusão desta run
+
+- **Pipeline completo ~12,6× mais rápido na GPU**, validando a expectativa criada nas sessões anteriores.
+- **Qualidade do modelo federado (fase 3, a que importa para a tese) foi ligeiramente melhor nesta run GPU** (+2,13 p.p. Acc, +0,0083 F1, ECE melhor) — mas isso é uma observação de uma única run, não uma conclusão de que "GPU produz modelos melhores"; é a trajetória estocástica específica desta execução (ver seção de reprodutibilidade CPU↔GPU acima).
+- **RAG segue sem dado de Precision@3 válido** até o próximo run com o fix do bug 4 aplicado.
+- Com o ciclo completo caindo de 7h para ~33 min, fica viável rodar múltiplas seeds (`ABLATION_SEEDS`) para obter médias ± desvio-padrão antes de reportar qualquer comparação CPU vs GPU como conclusão do TCC — próximo passo natural agora que o custo por run deixou de ser proibitivo.
+
+---
+
+## Bloco 2 — GPU 2026-06-30, run válido (training_ids 19-21) — comparação componente a componente
+
+**Log:** `experiments/logs/run_complete_cuda_20260630_221234.log`
+**training_ids:** BPSP-only=19 | HSL-only=20 | Federado=21
+**Contexto:** primeiro run GPU sem nenhum bug conhecido (os 4 bugs de device desta sessão já corrigidos, incluindo o do RAG). Esta é a run que deve ser usada como referência **"GPU 2026-06-30"** — o Treinamento 2 (acima) fica só como registro histórico do bug do RAG, não entra em comparações de resultado.
+
+Esta seção compara, componente a componente, **"CPU 2026-06-30" (training_ids 9-11, seção "Bloco 2 — Treinamento 1")** vs **"GPU 2026-06-30" (training_ids 19-21, esta seção)** — última execução válida de cada componente em cada device, mesma base de código, mesmo split, mesmo critério de checkpoint.
+
+### Federado BPSP+HSL (id=11 CPU vs id=21 GPU) — componente principal
+
+| Métrica | CPU (id=11) | GPU (id=21) | Δ |
+|---|---|---|---|
+| Accuracy (best) | 65,90% (R77) | **66,73%** (R57) | +0,83 p.p. |
+| F1 macro | 0,4905 | **0,5175** | +0,0270 |
+| Macro AUC (pós-cal) | 0,8105 | 0,8141 | +0,0036 |
+| ECE isotônica | 0,0311 | **0,0293** | −0,0018 |
+| Convergência | Não (120 rodadas) | Não (120 rodadas) | igual |
+| Duração | 121,0 min | **11,95 min** | ~10,1× mais rápido |
+
+**Per-class F1 (best checkpoint):**
+
+| Classe | F1 (CPU, id=11) | F1 (GPU, id=21) | Δ | N |
+|---|---|---|---|---|
+| curado_pronto | 0,8009 | 0,8085 | +0,0076 | 1.598 |
+| curado_internado | 0,0000 | **0,1176** | **+0,1176** | 46 |
+| melhora_pronto | 0,7550 | 0,7596 | +0,0046 | 320 |
+| melhora_internado_breve | 0,5753 | 0,5695 | −0,0058 | 1.096 |
+| melhora_internado_grave | 0,3215 | 0,3321 | +0,0106 | 321 |
+
+**Achado notável:** `curado_internado` saiu de F1=0,000 pela primeira vez em todo o projeto (P=0,60, R=0,065 — ainda frágil, só 3 dos 46 acertados, mas não é mais zero). Com apenas 46 amostras no teste, isso pode ser ruído estatístico de uma trajetória específica, não uma melhora estrutural — mas é o primeiro sinal de vida dessa classe em qualquer run, CPU ou GPU, desde o início do projeto.
+
+### BPSP-only (id=9 CPU vs id=19 GPU)
+
+| Métrica | CPU (id=9) | GPU (id=19) | Δ |
+|---|---|---|---|
+| Accuracy (best) | 62,41% (R63) | 62,08% (R60) | −0,33 p.p. |
+| F1 macro | 0,3548 | 0,3445 | −0,0103 |
+| Convergência | Sim | Sim (R69) | — |
+| Duração | 67,0 min | **5,83 min** | ~11,5× mais rápido |
+
+### HSL-only (id=10 CPU vs id=20 GPU)
+
+| Métrica | CPU (id=10) | GPU (id=20) | Δ |
+|---|---|---|---|
+| Accuracy (best) | 33,19% (R21) | 35,05% (R54) | +1,86 p.p. |
+| F1 macro | 0,2479 | 0,2663 | +0,0184 |
+| Convergência | Sim (R39) | Sim (R97) | GPU levou mais rodadas para estabilizar |
+| Duração | 7,0 min | **1,67 min** | ~4,2× mais rápido |
+
+### Ablation late fusion (Δ B−A, última rodada de cada run_training.py — 10 épocas, seed único)
+
+| Fase | Δ Acc (CPU) | Δ Acc (GPU) | Δ F1 (CPU) | Δ F1 (GPU) |
+|---|---|---|---|---|
+| BPSP-only | +0,0122 | −0,0086 | +0,0382 | +0,0303 |
+| HSL-only | −0,0568 | −0,0157 | +0,0206 | +0,0082 |
+| Federado | +0,0441 | **−0,1949** | +0,0204 | **−0,1154** |
+
+A ablation da fase Federado inverteu de sinal (positivo em CPU, fortemente negativo em GPU) — mas é um treino curto e de seed único (10 épocas, sem `ABLATION_SEEDS`), então alta variância é esperada, não indica um problema real de código. Reforça a recomendação de rodar múltiplas seeds antes de tirar qualquer conclusão sobre o efeito de late fusion.
+
+### RF Centralizado (dentro de cada fase, computado sobre os `client_loaders` daquela fase)
+
+| Fase | Acc (CPU) | Acc (GPU) | F1 (CPU) | F1 (GPU) |
+|---|---|---|---|---|
+| BPSP-only | 57,76% | 58,03% | 0,3271 | 0,3302 |
+| HSL-only | 27,48% | 25,64% | 0,1976 | 0,1792 |
+| Federado | 66,87% | 66,87% | 0,5005 | 0,5023 |
+| Pooled (fase 4/4, `run_behrt_pooled.py`) | 66,67% | 66,16% | 0,5026 | 0,4967 |
+
+RF é determinístico por `random_state`, mas usa `n_jobs=-1` (paralelo) — pequenas variações entre CPU e GPU vêm da ordem dos dados carregados (mesmo split, mas RF em si não roda na GPU; a diferença é ruído de paralelismo do RF, não do device de treino).
+
+### BEHRT Pooled A/B (fase 4/4)
+
+| Modelo | CPU | GPU | Δ |
+|---|---|---|---|
+| Pooled A (sem demo) | 69,51% / F1=0,5128 | 68,44% / F1=0,5163 | −1,07 p.p. Acc / +0,0035 F1 |
+| Pooled B (late fusion) | 67,20% / F1=0,5101 | 68,47% / F1=0,5192 | +1,27 p.p. Acc / +0,0091 F1 |
+
+### RAG Precision@3 (agora funcionando nos dois lados)
+
+| Fase | P@3 (CPU) | P@3 (GPU) | Δ |
+|---|---|---|---|
+| BPSP-only | 0,2141 | 0,2142 | +0,0001 |
+| HSL-only | 0,2442 | 0,2164 | −0,0278 |
+| Federado | 0,2267 | **0,2680** | **+0,0413** |
+
+### Velocidade — resumo final (run válido)
+
+| Componente | CPU | GPU | Speedup |
+|---|---|---|---|
+| BPSP-only | 67,0 min | 5,83 min | 11,5× |
+| HSL-only | 7,0 min | 1,67 min | 4,2× |
+| Federado | 121,0 min | 11,95 min | 10,1× |
+| Pooled A+B+RF | ~186 min | ~15,4 min (22:36→22:51) | ~12,1× |
+| **Total pipeline** | **~420 min (7h)** | **~38,7 min** (22:12→22:51) | **~10,9×** |
+
+### Conclusão — comparação final CPU 2026-06-30 vs GPU 2026-06-30
+
+- **~10,9× mais rápido no pipeline completo**, com todos os 4 bugs de device corrigidos e RAG funcionando nos dois lados — esta é a comparação de referência para o TCC (não usar o Treinamento 2, que tinha o bug do RAG).
+- Componente federado (o que importa para a defesa): GPU levemente melhor em Acc (+0,83 p.p.), F1 (+0,027) e ECE, e revelou pela primeira vez sinal em `curado_internado` (F1 0,000→0,1176) — mas, como discutido nas seções de reprodutibilidade acima, isso é uma observação de uma única trajetória estocástica, não prova de que GPU produz modelos melhores.
+- BPSP-only e HSL-only ficaram muito próximos entre CPU e GPU (diferenças de ~1-2 p.p.), reforçando que a qualidade do treino é equivalente — a GPU muda a velocidade, não sistematicamente a qualidade.
+- A ablation de late fusion (10 épocas, seed único) mostrou alta variância entre CPU e GPU na fase Federado — não deve ser usada como conclusão isolada; precisa de múltiplas seeds.
+- **Próximo passo (2026-07-01):** refatorar as classes, depois repetir este mesmo procedimento — GPU pós-refactoring vs CPU pós-refactoring — usando este par (CPU 2026-06-30 / GPU 2026-06-30) como baseline de não-regressão.

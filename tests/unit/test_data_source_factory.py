@@ -62,19 +62,19 @@ class TestDataSourceFactory:
     def test_auto_detect_uses_db_when_available(self):
         with patch("mosaicfl.core.data_loader.DatabaseDataSource.is_available",
                    return_value=True), \
-             patch("mosaicfl.core.data_loader.DEFAULT_CONNECTION_STRING", "postgresql://x"):
+             patch("mosaicfl.core.data_loader.sources.DEFAULT_CONNECTION_STRING", "postgresql://x"):
             src = DataSourceFactory.auto_detect()
         assert isinstance(src, DatabaseDataSource)
 
     def test_auto_detect_falls_back_to_file(self):
-        with patch("mosaicfl.core.data_loader.DEFAULT_CONNECTION_STRING", ""), \
+        with patch("mosaicfl.core.data_loader.sources.DEFAULT_CONNECTION_STRING", ""), \
              patch("mosaicfl.core.data_loader.FileDataSource.is_available",
                    return_value=True):
             src = DataSourceFactory.auto_detect()
         assert isinstance(src, FileDataSource)
 
     def test_auto_detect_raises_when_nothing_available(self):
-        with patch("mosaicfl.core.data_loader.DEFAULT_CONNECTION_STRING", ""), \
+        with patch("mosaicfl.core.data_loader.sources.DEFAULT_CONNECTION_STRING", ""), \
              patch("mosaicfl.core.data_loader.FileDataSource.is_available",
                    return_value=False):
             with pytest.raises(RuntimeError, match="Nenhuma fonte"):

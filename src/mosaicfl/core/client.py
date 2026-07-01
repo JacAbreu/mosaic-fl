@@ -196,12 +196,12 @@ def create_client_fn(
     val_data: torch.Tensor,
     val_labels: torch.Tensor,
 ) -> FedProxClient:
-    """Stub de compatibilidade — delega para experiments.training.dataloaders.create_synthetic_client.
+    """Stub de compatibilidade — delega para experiments.training.core.dataloaders.create_synthetic_client.
 
     Exclusivo para simulações com dados sintéticos e testes unitários.
     No pipeline com dados reais (data_source != 'synthetic'), os loaders vêm de
     prepare_dataloaders_from_db() e são passados diretamente ao FedProxClient — esta
     função não participa desse fluxo.
     """
-    from experiments.training.dataloaders import create_synthetic_client
+    from experiments.training.core.dataloaders import create_synthetic_client
     return create_synthetic_client(client_id, train_data, train_labels, val_data, val_labels)

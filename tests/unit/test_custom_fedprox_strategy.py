@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from mosaicfl.core.convergence import ConvergenceTracker
-from experiments.experiment_server import CustomFedProxStrategy
+from experiments.training.experiment_server import CustomFedProxStrategy
 from mosaicfl.core.model import SimplifiedBEHRT
 
 
@@ -16,7 +16,7 @@ class TestCustomFedProxStrategy:
         from unittest.mock import MagicMock
         tracker = ConvergenceTracker(threshold=0.01, patience=2)
         history = {"rounds": [], "accuracy": [], "communication_mb": [], "last_checkpoint": None}
-        with patch("experiments.experiment_server.FedProx.__init__", return_value=None):
+        with patch("experiments.training.experiment_server.FedProx.__init__", return_value=None):
             strategy = CustomFedProxStrategy.__new__(CustomFedProxStrategy)
             strategy.tracker = tracker
             strategy.history = history

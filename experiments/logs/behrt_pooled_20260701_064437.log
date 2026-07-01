@@ -1,0 +1,6 @@
+2026-07-01 06:44:39,239 [INFO] setup plugin alembic.autogenerate.schemas
+2026-07-01 06:44:39,239 [INFO] setup plugin alembic.autogenerate.tables
+2026-07-01 06:44:39,239 [INFO] setup plugin alembic.autogenerate.types
+2026-07-01 06:44:39,239 [INFO] setup plugin alembic.autogenerate.constraints
+2026-07-01 06:44:39,239 [INFO] setup plugin alembic.autogenerate.defaults
+2026-07-01 06:44:39,239 [INFO] setup plugin alembic.autogenerate.comments

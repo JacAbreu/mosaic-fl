@@ -73,7 +73,7 @@ wire-production/    — ambiente de simulação completo (Docker Compose)
   seed/              — gerador de exames sintéticos para teste
 
 tests/              — suite de testes (410 testes)
-benchmark.py        — benchmark de performance
+scripts/           — utilitários standalone (benchmark, build_standard_vocab, datasource legado, migrations)
 ```
 
 ### Ambiente wire-production

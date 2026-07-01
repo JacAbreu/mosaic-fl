@@ -1,0 +1,168 @@
+=== 1/4 training-bpsp-only (cuda) ===
+2026-06-30 21:23:45,539 [INFO] setup plugin alembic.autogenerate.schemas
+2026-06-30 21:23:45,539 [INFO] setup plugin alembic.autogenerate.tables
+2026-06-30 21:23:45,540 [INFO] setup plugin alembic.autogenerate.types
+2026-06-30 21:23:45,540 [INFO] setup plugin alembic.autogenerate.constraints
+2026-06-30 21:23:45,540 [INFO] setup plugin alembic.autogenerate.defaults
+2026-06-30 21:23:45,540 [INFO] setup plugin alembic.autogenerate.comments
+2026-06-30 21:23:46,745 [INFO] ============================================================
+2026-06-30 21:23:46,745 [INFO] MOSAIC-FL — Treinamento Federado com Dados Reais FAPESP
+2026-06-30 21:23:46,745 [INFO] Autora: Jacqueline Abreu | ICMC/USP
+2026-06-30 21:23:46,745 [INFO] ============================================================
+2026-06-30 21:23:46,745 [INFO] Ambiente: production | Log: experiments/logs/run_complete_cuda_20260630_212344.log
+2026-06-30 21:23:46,745 [INFO] Device: cuda
+2026-06-30 21:23:46,762 [INFO] postgres_metrics_store_ready
+2026-06-30 21:23:46,763 [INFO] [1/5] Carregando dados do banco (SequencePipeline)...
+2026-06-30 21:23:46,763 [INFO] [db] FL_INCLUDE_HOSPITALS=['BPSP'] — leave-one-client-out mode
+2026-06-30 21:23:46,763 [INFO] [db] Iniciando carregamento via SequencePipeline...
+2026-06-30 21:23:46,763 [INFO] [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+2026-06-30 21:23:46,772 [INFO] [pipeline] conexão OK
+2026-06-30 21:23:46,773 [INFO] [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+2026-06-30 21:24:06,734 [INFO] [pipeline] query concluída em 20.0s — 4,145,906 linhas
+2026-06-30 21:24:06,918 [INFO] [pipeline/per_hospital] hospitais encontrados: ['BPSP', 'HSL']
+2026-06-30 21:24:06,918 [INFO] [pipeline/per_hospital] construindo vocabulário global...
+2026-06-30 21:24:07,971 [INFO] vocab_built mode=FULL tokens=646 total=649
+2026-06-30 21:24:07,994 [INFO] [pipeline/per_hospital] vocabulário: 649 tokens em 1.1s
+2026-06-30 21:24:09,027 [INFO] [pipeline/per_hospital] BPSP: construindo tensores (28,599 atendimentos)...
+2026-06-30 21:24:10,853 [INFO] [pipeline] tensores: 2,859/28,599 (10%)
+2026-06-30 21:24:11,081 [INFO] [pipeline] tensores: 5,718/28,599 (20%)
+2026-06-30 21:24:11,312 [INFO] [pipeline] tensores: 8,577/28,599 (30%)
+2026-06-30 21:24:11,547 [INFO] [pipeline] tensores: 11,436/28,599 (40%)
+2026-06-30 21:24:11,776 [INFO] [pipeline] tensores: 14,295/28,599 (50%)
+2026-06-30 21:24:12,007 [INFO] [pipeline] tensores: 17,154/28,599 (60%)
+2026-06-30 21:24:12,238 [INFO] [pipeline] tensores: 20,013/28,599 (70%)
+2026-06-30 21:24:12,471 [INFO] [pipeline] tensores: 22,872/28,599 (80%)
+2026-06-30 21:24:12,704 [INFO] [pipeline] tensores: 25,731/28,599 (90%)
+2026-06-30 21:24:12,938 [INFO] [pipeline] tensores: 28,590/28,599 (100%)
+2026-06-30 21:24:13,240 [INFO] [pipeline/per_hospital] BPSP: 28,599 sequências em 4.2s | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | age_mean=0.51 sex_M=13664
+2026-06-30 21:24:13,751 [INFO] [pipeline/per_hospital] HSL: construindo tensores (5,174 atendimentos)...
+2026-06-30 21:24:14,089 [INFO] [pipeline] tensores: 517/5,174 (10%)
+2026-06-30 21:24:14,133 [INFO] [pipeline] tensores: 1,034/5,174 (20%)
+2026-06-30 21:24:14,177 [INFO] [pipeline] tensores: 1,551/5,174 (30%)
+2026-06-30 21:24:14,221 [INFO] [pipeline] tensores: 2,068/5,174 (40%)
+2026-06-30 21:24:14,265 [INFO] [pipeline] tensores: 2,585/5,174 (50%)
+2026-06-30 21:24:14,309 [INFO] [pipeline] tensores: 3,102/5,174 (60%)
+2026-06-30 21:24:14,353 [INFO] [pipeline] tensores: 3,619/5,174 (70%)
+2026-06-30 21:24:14,396 [INFO] [pipeline] tensores: 4,136/5,174 (80%)
+2026-06-30 21:24:14,441 [INFO] [pipeline] tensores: 4,653/5,174 (90%)
+2026-06-30 21:24:14,484 [INFO] [pipeline] tensores: 5,170/5,174 (100%)
+2026-06-30 21:24:14,537 [INFO] [pipeline/per_hospital] HSL: 5,174 sequências em 0.8s | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | age_mean=0.52 sex_M=2859
+2026-06-30 21:24:14,537 [INFO] [pipeline/per_hospital] concluído em 27.8s total
+2026-06-30 21:24:14,739 [INFO] [db] Hospital BPSP → cliente 0: 20019 treino | 2859 val | 2859 cal | age_mean=0.51 sex_M=9540
+2026-06-30 21:24:14,740 [INFO] [db] Hospital HSL → excluído do treino (FL_INCLUDE_HOSPITALS); test/cal mantidos globais
+2026-06-30 21:24:14,741 [INFO] [db] Teste global: 3381 amostras | Cal global: 3376 amostras | 1 clientes FL
+2026-06-30 21:24:14,747 [INFO] [2/5] Aprendizado Federado...
+2026-06-30 21:24:14,747 [INFO] Modo manual ativado (USE_RAY=False). Ray NÃO é necessário.
+2026-06-30 21:24:14,748 [INFO] ============================================================
+2026-06-30 21:24:14,748 [INFO] APRENDIZADO FEDERADO — SIMULAÇÃO MANUAL (SEM RAY)
+2026-06-30 21:24:14,748 [INFO] ============================================================
+2026-06-30 21:24:14,748 [INFO] Clientes: 1 | Rodadas: até 120 | Agregação: FedNova | seed=42
+2026-06-30 21:24:14,885 [INFO] postgres_checkpoint_store_ready
+2026-06-30 21:24:14,893 [INFO] training_registered_postgres id=14 algorithm=FedNova criterion=f1_macro
+2026-06-30 21:24:14,893 [INFO] training_registered id=14 algorithm=FedNova criterion=f1_macro n_rounds_max=120
+2026-06-30 21:24:14,893 [INFO] 
+============================================================
+2026-06-30 21:24:14,893 [INFO] RODADA 1/120
+2026-06-30 21:24:14,893 [INFO] ============================================================
+2026-06-30 21:24:14,893 [INFO]   [Cliente 0] Treinando...
+2026-06-30 21:24:14,963 [INFO] class_weights client_id=0 weights=[0.361, 15.0, 15.0, 0.604, 2.015] counts={0: 11098, 3: 6625, 4: 1987, 1: 219, 2: 90}
+2026-06-30 21:24:20,043 [INFO] client_fit client_id=0 loss=1.4690 grad_norm=3.8173 tau=1252 dp_update_norm=0.0000
+2026-06-30 21:24:20,045 [INFO]   [Cliente 0] Loss: 1.4690 | Amostras: 20019 | τ=1252 | grad_norm=3.8173
+2026-06-30 21:24:20,045 [INFO]   [Servidor] Agregando pesos de 1 clientes...
+2026-06-30 21:24:20,046 [INFO]   [FedNova] τ=[1252] | τ_eff=1252.0
+2026-06-30 21:24:20,174 [INFO]   [Servidor] Rodada 1 em 5.28s | Loss: 1.1332 | Acc: 0.5963 | F1-macro: 0.2665
+2026-06-30 21:24:20,174 [INFO]   [Recursos] RAM=2442MB (pico=2442MB) CPU=103.2% Rodada=5.28s
+=== 2/4 training-hsl-only (cuda) ===
+2026-06-30 21:24:22,077 [INFO] setup plugin alembic.autogenerate.schemas
+2026-06-30 21:24:22,077 [INFO] setup plugin alembic.autogenerate.tables
+2026-06-30 21:24:22,077 [INFO] setup plugin alembic.autogenerate.types
+2026-06-30 21:24:22,077 [INFO] setup plugin alembic.autogenerate.constraints
+2026-06-30 21:24:22,077 [INFO] setup plugin alembic.autogenerate.defaults
+2026-06-30 21:24:22,077 [INFO] setup plugin alembic.autogenerate.comments
+2026-06-30 21:24:23,219 [INFO] ============================================================
+2026-06-30 21:24:23,219 [INFO] MOSAIC-FL — Treinamento Federado com Dados Reais FAPESP
+2026-06-30 21:24:23,219 [INFO] Autora: Jacqueline Abreu | ICMC/USP
+2026-06-30 21:24:23,219 [INFO] ============================================================
+2026-06-30 21:24:23,219 [INFO] Ambiente: production | Log: experiments/logs/run_complete_cuda_20260630_212344.log
+2026-06-30 21:24:23,219 [INFO] Device: cuda
+2026-06-30 21:24:23,236 [INFO] postgres_metrics_store_ready
+2026-06-30 21:24:23,236 [INFO] [1/5] Carregando dados do banco (SequencePipeline)...
+2026-06-30 21:24:23,236 [INFO] [db] FL_INCLUDE_HOSPITALS=['HSL'] — leave-one-client-out mode
+2026-06-30 21:24:23,236 [INFO] [db] Iniciando carregamento via SequencePipeline...
+2026-06-30 21:24:23,236 [INFO] [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+2026-06-30 21:24:23,246 [INFO] [pipeline] conexão OK
+2026-06-30 21:24:23,246 [INFO] [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+2026-06-30 21:24:42,904 [INFO] [pipeline] query concluída em 19.7s — 4,145,906 linhas
+2026-06-30 21:24:43,064 [INFO] [pipeline/per_hospital] hospitais encontrados: ['BPSP', 'HSL']
+2026-06-30 21:24:43,064 [INFO] [pipeline/per_hospital] construindo vocabulário global...
+2026-06-30 21:24:44,106 [INFO] vocab_built mode=FULL tokens=645 total=648
+2026-06-30 21:24:44,129 [INFO] [pipeline/per_hospital] vocabulário: 648 tokens em 1.1s
+2026-06-30 21:24:45,162 [INFO] [pipeline/per_hospital] BPSP: construindo tensores (28,599 atendimentos)...
+2026-06-30 21:24:46,988 [INFO] [pipeline] tensores: 2,859/28,599 (10%)
+2026-06-30 21:24:47,211 [INFO] [pipeline] tensores: 5,718/28,599 (20%)
+2026-06-30 21:24:47,433 [INFO] [pipeline] tensores: 8,577/28,599 (30%)
+2026-06-30 21:24:47,656 [INFO] [pipeline] tensores: 11,436/28,599 (40%)
+2026-06-30 21:24:47,879 [INFO] [pipeline] tensores: 14,295/28,599 (50%)
+2026-06-30 21:24:48,101 [INFO] [pipeline] tensores: 17,154/28,599 (60%)
+2026-06-30 21:24:48,327 [INFO] [pipeline] tensores: 20,013/28,599 (70%)
+2026-06-30 21:24:48,556 [INFO] [pipeline] tensores: 22,872/28,599 (80%)
+2026-06-30 21:24:48,787 [INFO] [pipeline] tensores: 25,731/28,599 (90%)
+2026-06-30 21:24:49,018 [INFO] [pipeline] tensores: 28,590/28,599 (100%)
+2026-06-30 21:24:49,302 [INFO] [pipeline/per_hospital] BPSP: 28,599 sequências em 4.1s | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | age_mean=0.51 sex_M=13664
+2026-06-30 21:24:49,732 [INFO] [pipeline/per_hospital] HSL: construindo tensores (5,174 atendimentos)...
+2026-06-30 21:24:50,070 [INFO] [pipeline] tensores: 517/5,174 (10%)
+2026-06-30 21:24:50,113 [INFO] [pipeline] tensores: 1,034/5,174 (20%)
+2026-06-30 21:24:50,155 [INFO] [pipeline] tensores: 1,551/5,174 (30%)
+2026-06-30 21:24:50,198 [INFO] [pipeline] tensores: 2,068/5,174 (40%)
+2026-06-30 21:24:50,240 [INFO] [pipeline] tensores: 2,585/5,174 (50%)
+2026-06-30 21:24:50,282 [INFO] [pipeline] tensores: 3,102/5,174 (60%)
+2026-06-30 21:24:50,324 [INFO] [pipeline] tensores: 3,619/5,174 (70%)
+2026-06-30 21:24:50,365 [INFO] [pipeline] tensores: 4,136/5,174 (80%)
+2026-06-30 21:24:50,407 [INFO] [pipeline] tensores: 4,653/5,174 (90%)
+2026-06-30 21:24:50,448 [INFO] [pipeline] tensores: 5,170/5,174 (100%)
+2026-06-30 21:24:50,500 [INFO] [pipeline/per_hospital] HSL: 5,174 sequências em 0.8s | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | age_mean=0.52 sex_M=2859
+2026-06-30 21:24:50,500 [INFO] [pipeline/per_hospital] concluído em 27.3s total
+2026-06-30 21:24:50,698 [INFO] [db] Hospital BPSP → excluído do treino (FL_INCLUDE_HOSPITALS); test/cal mantidos globais
+2026-06-30 21:24:50,699 [INFO] [db] Hospital HSL → cliente 1: 3621 treino | 517 val | 517 cal | age_mean=0.52 sex_M=1998
+2026-06-30 21:24:50,700 [INFO] [db] Teste global: 3381 amostras | Cal global: 3376 amostras | 1 clientes FL
+2026-06-30 21:24:50,700 [INFO] [2/5] Aprendizado Federado...
+2026-06-30 21:24:50,700 [INFO] Modo manual ativado (USE_RAY=False). Ray NÃO é necessário.
+2026-06-30 21:24:50,701 [INFO] ============================================================
+2026-06-30 21:24:50,701 [INFO] APRENDIZADO FEDERADO — SIMULAÇÃO MANUAL (SEM RAY)
+2026-06-30 21:24:50,701 [INFO] ============================================================
+2026-06-30 21:24:50,701 [INFO] Clientes: 1 | Rodadas: até 120 | Agregação: FedNova | seed=42
+2026-06-30 21:24:50,839 [INFO] postgres_checkpoint_store_ready
+2026-06-30 21:24:50,848 [INFO] training_registered_postgres id=15 algorithm=FedNova criterion=f1_macro
+2026-06-30 21:24:50,848 [INFO] training_registered id=15 algorithm=FedNova criterion=f1_macro n_rounds_max=120
+2026-06-30 21:24:50,848 [INFO] 
+============================================================
+2026-06-30 21:24:50,848 [INFO] RODADA 1/120
+2026-06-30 21:24:50,848 [INFO] ============================================================
+2026-06-30 21:24:50,848 [INFO]   [Cliente 1] Treinando...
+2026-06-30 21:24:50,863 [INFO] class_weights client_id=1 weights=[15.0, 15.0, 0.325, 0.821, 1.665] counts={2: 2227, 3: 882, 4: 435, 1: 32, 0: 45}
+2026-06-30 21:24:51,852 [INFO] client_fit client_id=1 loss=1.5548 grad_norm=3.9923 tau=227 dp_update_norm=0.0000
+2026-06-30 21:24:51,853 [INFO]   [Cliente 1] Loss: 1.5548 | Amostras: 3621 | τ=227 | grad_norm=3.9923
+2026-06-30 21:24:51,854 [INFO]   [Servidor] Agregando pesos de 1 clientes...
+2026-06-30 21:24:51,854 [INFO]   [FedNova] τ=[227] | τ_eff=227.0
+2026-06-30 21:24:51,974 [INFO]   [Servidor] Rodada 1 em 1.13s | Loss: 1.8797 | Acc: 0.1884 | F1-macro: 0.1464
+2026-06-30 21:24:51,974 [INFO]   [Recursos] RAM=2600MB (pico=2600MB) CPU=129.5% Rodada=1.13s
+=== 3/4 training-federated (BPSP+HSL, cuda) ===
+2026-06-30 21:24:53,888 [INFO] setup plugin alembic.autogenerate.schemas
+2026-06-30 21:24:53,889 [INFO] setup plugin alembic.autogenerate.tables
+2026-06-30 21:24:53,889 [INFO] setup plugin alembic.autogenerate.types
+2026-06-30 21:24:53,889 [INFO] setup plugin alembic.autogenerate.constraints
+2026-06-30 21:24:53,889 [INFO] setup plugin alembic.autogenerate.defaults
+2026-06-30 21:24:53,889 [INFO] setup plugin alembic.autogenerate.comments
+2026-06-30 21:24:55,070 [INFO] ============================================================
+2026-06-30 21:24:55,070 [INFO] MOSAIC-FL — Treinamento Federado com Dados Reais FAPESP
+2026-06-30 21:24:55,070 [INFO] Autora: Jacqueline Abreu | ICMC/USP
+2026-06-30 21:24:55,070 [INFO] ============================================================
+2026-06-30 21:24:55,070 [INFO] Ambiente: production | Log: experiments/logs/run_complete_cuda_20260630_212344.log
+2026-06-30 21:24:55,070 [INFO] Device: cuda
+2026-06-30 21:24:55,087 [INFO] postgres_metrics_store_ready
+2026-06-30 21:24:55,087 [INFO] [1/5] Carregando dados do banco (SequencePipeline)...
+2026-06-30 21:24:55,087 [INFO] [db] FL_INCLUDE_HOSPITALS não definido — todos os hospitais como clientes
+2026-06-30 21:24:55,087 [INFO] [db] Iniciando carregamento via SequencePipeline...
+2026-06-30 21:24:55,087 [INFO] [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+2026-06-30 21:24:55,093 [INFO] [pipeline] conexão OK
+2026-06-30 21:24:55,093 [INFO] [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...

@@ -204,7 +204,7 @@ DP-FedAvg implementado (McMahan et al. 2018) em `client.py` + `fl_core.py`. Resu
 
 ### Modelo e Inferência
 
-- [x] ~~**Vocabulário padrão distribuído (`build_standard_vocab.py`)**~~
+- [x] ~~**Vocabulário padrão distribuído (`scripts/build_standard_vocab.py`)**~~
 
   Vocabulário canônico construído de `knowledge.term_dictionary` + `knowledge.analyte_references` sem dados de pacientes, distribuído a todos os clientes FL. Garante que token IDs sejam idênticos entre hospitais.
 

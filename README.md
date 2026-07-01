@@ -374,7 +374,7 @@ FL_NUM_CLASSES=5               # deve ser 5 para o schema atual
 
 ```bash
 source .venv/bin/activate
-python experiments/run_experiments_simulation.py
+python experiments/training_runner/run_experiments_simulation.py
 ```
 
 Tenta carregar dados nesta ordem: **SGBD → CSV → sintético**.
@@ -383,7 +383,7 @@ Se nenhuma fonte real estiver disponível, usa dados sintéticos com aviso expl�
 ```bash
 # Conectar ao PostgreSQL em modo desenvolvimento
 export FL_DB_URL="postgresql://user:pass@localhost:5432/mosaicfl"
-python experiments/run_experiments_simulation.py
+python experiments/training_runner/run_experiments_simulation.py
 ```
 
 ### Simulação FL local (sem SuperLink)

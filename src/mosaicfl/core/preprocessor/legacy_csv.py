@@ -1,0 +1,168 @@
+"""
+Pré-processamento CSV/sintético (EHRPreprocessor) e split por instituição.
+
+Usado no caminho de dados sintéticos (data_source="synthetic" em
+FederatedTraining), não no pipeline de produção via banco — ver
+sequence_pipeline.py para o pipeline real (SequencePipeline).
+
+Mudanças principais em relação à primeira versão:
+  1. clean_text preserva pontos (.) e hífens (-) essenciais para códigos ICD e valores decimais.
+  2. Validação de colunas antes de acessar (evita KeyError silencioso).
+  3. Estratégia de missing configurável por coluna (nem sempre impute é adequado).
+  4. split_by_institution agora embaralha e estratifica para balancear desfechos.
+  5. Logging de rejeição por coluna (não apenas global).
+"""
+import json
+import logging
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+
+class EHRPreprocessor:
+    def __init__(self):
+        self.vocab_map: Dict[str, int] = {}
+        self.unit_conversions = {
+            'peso': {'lb': 0.453592, 'lbs': 0.453592, 'kg': 1.0, 'g': 0.001},
+            'idade': {'meses': 1/12, 'anos': 1.0, 'dias': 1/365.25},
+            'temperatura': {'f': lambda x: (x - 32) * 5/9, 'c': lambda x: x}
+        }
+        self.transform_log: List[Dict] = []
+        self.rejected_count = 0
+        self.total_count = 0
+
+    def _log_transform(self, step: str, detail: str, count: int = 0) -> None:
+        entry = {"step": step, "detail": detail, "count": count}
+        self.transform_log.append(entry)
+        logger.info(f"[{step}] {detail} (n={count})")
+
+    def normalize_units(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        if 'idade_unidade' in df.columns and 'idade' in df.columns:
+            mask_meses = df['idade_unidade'].str.lower().isin(['meses', 'm'])
+            mask_dias = df['idade_unidade'].str.lower().isin(['dias', 'd'])
+            df['idade'] = df['idade'].astype(float)
+            df.loc[mask_meses, 'idade'] = df.loc[mask_meses, 'idade'] / 12.0
+            df.loc[mask_dias, 'idade'] = df.loc[mask_dias, 'idade'] / 365.25
+            df.loc[:, 'idade_unidade'] = 'anos'
+            self._log_transform("unidade", "Idade normalizada para anos", int(mask_meses.sum() + mask_dias.sum()))
+
+        if 'peso_unidade' in df.columns and 'peso' in df.columns:
+            # Garante dtype float antes de atribuir resultado de multiplicação.
+            # Pandas 2.x+ recusa atribuição de float em coluna int64 (LossySetitemError).
+            df['peso'] = df['peso'].astype(float)
+            for unit, factor in self.unit_conversions['peso'].items():
+                if isinstance(factor, float):
+                    mask = df['peso_unidade'].str.lower() == unit
+                    df.loc[mask, 'peso'] = df.loc[mask, 'peso'] * factor
+            df.loc[:, 'peso_unidade'] = 'kg'
+            self._log_transform("unidade", "Peso normalizado para kg")
+        return df
+
+    def build_vocabulary(self, df: pd.DataFrame, text_cols: List[str]) -> Dict[str, int]:
+        vocab = {"<PAD>": 0, "<UNK>": 1, "<MASK>": 2, "<CLS>": 3}
+        idx = 4
+        for col in text_cols:
+            if col not in df.columns:
+                logger.warning(f"Coluna '{col}' não encontrada — pulando vocabulário.")
+                continue
+            unique_vals = df[col].dropna().astype(str).unique()
+            for val in unique_vals:
+                if val not in vocab:
+                    vocab[val] = idx
+                    idx += 1
+        self.vocab_map = vocab
+        self._log_transform("vocab", f"Vocabulário construído: {len(vocab)} tokens (inclui <CLS>)")
+        return vocab
+
+    def encode_sequences(self, df: pd.DataFrame, text_cols: List[str]) -> pd.DataFrame:
+        df = df.copy()
+        for col in text_cols:
+            if col in df.columns:
+                df[col + '_encoded'] = df[col].astype(str).map(self.vocab_map).fillna(1).astype(int)
+        return df
+
+    def handle_missing(self, df: pd.DataFrame, strategy: str = "impute") -> pd.DataFrame:
+        before = len(df)
+        if strategy == "drop":
+            df = df.dropna(subset=df.columns[df.isnull().any()])
+            self.rejected_count += before - len(df)
+            self._log_transform("missing", "Registros removidos por valores ausentes", before - len(df))
+        elif strategy == "impute":
+            for col in df.select_dtypes(include=[np.number]).columns:
+                df[col] = df[col].fillna(df[col].median())
+            for col in df.select_dtypes(include=['object', 'str']).columns:
+                df[col] = df[col].fillna("<UNK>")
+            self._log_transform("missing", "Valores ausentes imputados (mediana/UNK)")
+        return df
+
+    def clean_text(self, df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
+        df = df.copy()
+        for col in cols:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.lower().str.strip()
+                df[col] = df[col].str.replace(r'[^\w\s\-]', '', regex=True)
+        self._log_transform("clean", "Texto limpo: lowercase, trim, remoção de pontuação")
+        return df
+
+    def process(self, df: pd.DataFrame, text_cols: Optional[List[str]] = None) -> Tuple[pd.DataFrame, Dict]:
+        self.total_count = len(df)
+        text_cols = text_cols or ['sintoma', 'exame', 'diagnostico']
+        df = self.clean_text(df, text_cols)
+        df = self.normalize_units(df)
+        df = self.handle_missing(df, strategy="impute")
+        self.build_vocabulary(df, text_cols)
+        df = self.encode_sequences(df, text_cols)
+        summary = {
+            "total_amostras": self.total_count,
+            "amostras_rejeitadas": self.rejected_count,
+            "percentual_rejeitado": round(self.rejected_count / self.total_count * 100, 2) if self.total_count else 0,
+            "tamanho_vocabulario": len(self.vocab_map),
+            "transformacoes": self.transform_log
+        }
+        logger.info(f"Pré-processamento concluído. Resumo: {json.dumps(summary, indent=2, ensure_ascii=False)}")
+        return df, summary
+
+
+def split_by_institution(
+    df: pd.DataFrame,
+    institution_col: str = 'instituicao',
+    num_clients: int = 5,
+    stratify_col: str = None,
+    random_state: int = None,
+) -> Dict[int, pd.DataFrame]:
+    """
+    Divide o DataFrame por instituição, criando um cliente FL por hospital.
+
+    Args:
+        df:               DataFrame processado.
+        institution_col:  Coluna com o identificador da instituição.
+        num_clients:      Número máximo de clientes (hospitais).
+        stratify_col:     Se informado, loga a distribuição dessa coluna por cliente
+                          (útil para verificar balanceamento de desfechos entre hospitais).
+        random_state:     Semente para embaralhamento antes da divisão (reprodutibilidade).
+
+    Returns:
+        Dict {client_id: DataFrame} com um subset por instituição.
+    """
+    clients = {}
+    institutions = df[institution_col].unique()
+
+    if random_state is not None:
+        rng = np.random.default_rng(random_state)
+        institutions = rng.permutation(institutions)
+
+    for i, inst in enumerate(institutions[:num_clients]):
+        subset = df[df[institution_col] == inst].copy()
+        clients[i] = subset
+
+        if stratify_col and stratify_col in subset.columns:
+            dist = subset[stratify_col].value_counts().to_dict()
+            logger.info(f"Cliente {i} ({inst}): {len(subset)} registros | {stratify_col}: {dist}")
+        else:
+            logger.info(f"Cliente {i} ({inst}): {len(subset)} registros")
+
+    return clients

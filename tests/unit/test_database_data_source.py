@@ -33,7 +33,7 @@ class TestDatabaseDataSource:
         assert src._engine is None
 
     def test_init_empty_connection_string_uses_default(self, monkeypatch):
-        import mosaicfl.core.data_loader as dl
+        import mosaicfl.core.data_loader.sources as dl
         monkeypatch.setattr(dl, "DEFAULT_CONNECTION_STRING", "sqlite:///env.db")
         src = dl.DatabaseDataSource(connection_string="")
         assert "sqlite" in src.connection_string
@@ -41,7 +41,7 @@ class TestDatabaseDataSource:
     # ── is_available() ────────────────────────────────────────────────────────
 
     def test_is_available_false_when_no_connection_string(self, monkeypatch):
-        import mosaicfl.core.data_loader as dl
+        import mosaicfl.core.data_loader.sources as dl
         monkeypatch.setattr(dl, "DEFAULT_CONNECTION_STRING", "")
         src = DatabaseDataSource(connection_string="")
         assert src.is_available() is False
@@ -83,14 +83,14 @@ class TestDatabaseDataSource:
     # ── load() ────────────────────────────────────────────────────────────────
 
     def test_load_raises_value_error_when_no_query(self, monkeypatch):
-        import mosaicfl.core.data_loader as dl
+        import mosaicfl.core.data_loader.sources as dl
         monkeypatch.setattr(dl, "DEFAULT_QUERY", "")
         src = dl.DatabaseDataSource(connection_string="sqlite:///x.db", query="")
         with pytest.raises(ValueError, match="Query SQL"):
             src.load(query="")
 
     def test_load_raises_value_error_when_no_connection_string(self, monkeypatch):
-        import mosaicfl.core.data_loader as dl
+        import mosaicfl.core.data_loader.sources as dl
         monkeypatch.setattr(dl, "DEFAULT_CONNECTION_STRING", "")
         src = dl.DatabaseDataSource(connection_string="", query="SELECT 1")
         with pytest.raises(ValueError, match="Connection string"):

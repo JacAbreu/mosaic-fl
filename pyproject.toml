@@ -103,10 +103,14 @@ omit = [
     "*/infrastructure/*/scheduler_cli.py",
     # runners bloqueantes (fl.server.start_server / APScheduler)
     "*/infrastructure/mosaicfl_server/runner.py",
+    "*/infrastructure/mosaicfl_server/runner/*",
     "*/infrastructure/mosaicfl_client/runner.py",
+    "*/infrastructure/mosaicfl_client/runner/*",
     # conectores de banco que exigem infraestrutura real
     "src/mosaicfl/core/data_loader.py",
+    "src/mosaicfl/core/data_loader/*",
     "*/infrastructure/mosaicfl_client/datasource.py",
+    "*/infrastructure/mosaicfl_client/datasource/*",
 ]
 
 [tool.coverage.report]

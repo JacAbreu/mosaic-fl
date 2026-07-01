@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 from typing import Dict, List
 
-from .config import MODEL_CFG
+from .config import DEVICE, MODEL_CFG
 
 _SPECIAL_TOKENS = frozenset({"[PAD]", "[UNK]", "[CLS]", "[SEP]", "<PAD>", "<UNK>", "<CLS>"})
 
@@ -63,6 +63,9 @@ class BEHRTPatternExtractor:
         with torch.no_grad():
             for batch_x, batch_y, *rest in dataloader:
                 batch_dia = rest[0] if rest else None
+                batch_x = batch_x.to(DEVICE)
+                batch_y = batch_y.to(DEVICE)
+                batch_dia = batch_dia.to(DEVICE) if batch_dia is not None else None
                 mask = (batch_x == 0)
                 logits, attn_weights = self.model(batch_x, mask, dia_relativo=batch_dia, return_attention=True)
 

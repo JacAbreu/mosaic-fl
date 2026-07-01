@@ -48,7 +48,7 @@ from mosaicfl.core.config import (
 from mosaicfl.core.model import BEHRTEncoderLayer, PositionalEncoding, SimplifiedBEHRT
 from mosaicfl.core.convergence import ConvergenceTracker
 from mosaicfl.core.federated import get_evaluate_fn, weighted_average
-from experiments.experiment_server import start_server
+from experiments.training.experiment_server import start_server
 from mosaicfl.core.client import FedProxClient, create_client_fn
 from mosaicfl.core.preprocessor import EHRPreprocessor, split_by_institution
 
@@ -347,11 +347,11 @@ class TestFederatedScheduler:
         dispatcher.check_convergence.return_value = converge_after_dispatch
         s = state or SchedulerState()
 
-        with patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerState") as MockState, \
-             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerStateStore"), \
-             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.ClientAvailabilityChecker",
+        with patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.core.SchedulerState") as MockState, \
+             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.core.SchedulerStateStore"), \
+             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.core.ClientAvailabilityChecker",
                    return_value=checker), \
-             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.RoundDispatcher",
+             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.core.RoundDispatcher",
                    return_value=dispatcher):
             MockState.load.return_value = s
             scheduler = FederatedScheduler(interval_hours=1, min_clients=3, max_rounds=20)
@@ -622,7 +622,7 @@ class TestProductionFedProxStrategy:
         log_dir = tmp_path / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        import infrastructure.mosaicfl_server.strategy as strat_mod
+        import infrastructure.mosaicfl_server.strategy.core as strat_mod
         old_log = strat_mod.LOG_DIR
         strat_mod.LOG_DIR = log_dir
         strategy.LOG_DIR = log_dir
@@ -642,7 +642,7 @@ class TestProductionFedProxStrategy:
 
     def test_aggregate_evaluate_sets_should_stop_on_convergence(self, strategy_and_model):
         strategy, _, tmp_path = strategy_and_model
-        import infrastructure.mosaicfl_server.strategy as strat_mod
+        import infrastructure.mosaicfl_server.strategy.core as strat_mod
         old_log = strat_mod.LOG_DIR
         strat_mod.LOG_DIR = tmp_path / "logs"
         strategy.LOG_DIR = tmp_path / "logs"
@@ -662,7 +662,7 @@ class TestProductionFedProxStrategy:
         checkpoint_dir = tmp_path / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        import infrastructure.mosaicfl_server.strategy as strat_mod
+        import infrastructure.mosaicfl_server.strategy.core as strat_mod
         old_ckpt = strat_mod.CHECKPOINT_DIR
         strat_mod.CHECKPOINT_DIR = checkpoint_dir
         strategy.CHECKPOINT_DIR = checkpoint_dir
@@ -696,11 +696,11 @@ class TestSchedulerIntegration:
 
     def _scheduler_with_connectivity_mock(self, state, checker, dispatcher):
         """Helper: cria FederatedScheduler com mocks injetados e TCP desabilitado."""
-        with patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerState") as MockState, \
-             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.SchedulerStateStore"), \
-             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.ClientAvailabilityChecker",
+        with patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.core.SchedulerState") as MockState, \
+             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.core.SchedulerStateStore"), \
+             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.core.ClientAvailabilityChecker",
                    return_value=checker), \
-             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.RoundDispatcher",
+             patch("infrastructure.mosaicfl_scheduler.scheduler_daemon.core.RoundDispatcher",
                    return_value=dispatcher):
             MockState.load.return_value = state
             scheduler = FederatedScheduler(interval_hours=1, min_clients=3, max_rounds=20)
@@ -857,7 +857,7 @@ class TestConfigLoaderWithStrategy:
             (tmp_path / "checkpoints").mkdir()
             (tmp_path / "logs").mkdir()
 
-        import infrastructure.mosaicfl_server.strategy as strat_mod
+        import infrastructure.mosaicfl_server.strategy.core as strat_mod
         strat_mod.CHECKPOINT_DIR = tmp_path / "checkpoints"
         strat_mod.LOG_DIR = tmp_path / "logs"
 
