@@ -53,7 +53,7 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 - `scheduler_daemon.py` com APScheduler, heartbeat e estado persistente
 - Suite de testes `test_mosaicfl.py` e `test_v2_core.py`
 
-## [0.1.0] — 2026-05-01
+## [0.1.0] — 2026-05-31
 
 ### Adicionado
 - Implementação v1 com dados sintéticos (BEHRT mean pooling, FedProx básico)
