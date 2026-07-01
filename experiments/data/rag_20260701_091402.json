@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"curado_pronto\" (probabilidade 0.81) para este paciente é razoável devido à consistência dos resultados laboratoriais que se assemelham aos casos anteriores de sucesso, particularmente aqueles que resultaram em cura e alta hospitalar.  Observa-se a",
+  "fontes": [
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Plaquetas HIGH, Hemoglobina Corpuscular Media NORMAL, Creatinina NORMAL.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.37284157438030285
+    },
+    {
+      "texto": "Desfecho: melhora_pronto. Marcadores de maior atenção: Basófilos NORMAL, Hemoglobina Corpuscular Media HIGH, Glicose HIGH, Monócitos NORMAL, Bilirrubina Indireta LOW.",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3962488534302192
+    },
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: RDW HIGH, Calcio Ionizavel NORMAL, Basofilos NORMAL, Hematócrito LOW, Concentracao de Hemoglobina Corpuscular NORMAL.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.41642796993255615
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.196,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0507,
+      "curado_internado": 0.2826,
+      "melhora_pronto": 0.3594,
+      "melhora_internado_breve": 0.406,
+      "melhora_internado_grave": 0.027
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

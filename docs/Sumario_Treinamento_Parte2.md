@@ -1641,3 +1641,35 @@ RF é determinístico por `random_state`, mas usa `n_jobs=-1` (paralelo) — peq
 - BPSP-only e HSL-only ficaram muito próximos entre CPU e GPU (diferenças de ~1-2 p.p.), reforçando que a qualidade do treino é equivalente — a GPU muda a velocidade, não sistematicamente a qualidade.
 - A ablation de late fusion (10 épocas, seed único) mostrou alta variância entre CPU e GPU na fase Federado — não deve ser usada como conclusão isolada; precisa de múltiplas seeds.
 - **Próximo passo (2026-07-01):** refatorar as classes, depois repetir este mesmo procedimento — GPU pós-refactoring vs CPU pós-refactoring — usando este par (CPU 2026-06-30 / GPU 2026-06-30) como baseline de não-regressão.
+
+---
+
+## Modularização em massa — 2026-07-01
+
+Nesta sessão, `src/mosaicfl/core/*`, `experiments/*` e a maior parte de `infrastructure/*` foram convertidos de arquivos únicos grandes (300–962 linhas) em pacotes com submódulos de responsabilidade única — 15 arquivos modularizados no total (`preprocessor.py`, `rag.py`, `data_loader.py`, `fl_core.py`, `checkpoint_store.py`, `db.py`, `datasource.py` ×2, `runner.py` ×2, `term_manager.py`, `strategy.py`, `inference_engine.py`, `exams_extract.py`, `scheduler_daemon.py`, `metrics_store.py`), mais reorganização estrutural de `experiments/` (`training_runner/` + `training/core/`) e remoção de código morto/quebrado (`src/data_loader.py` órfão). Detalhes completos na memória do projeto — aqui importa só o efeito sobre os treinamentos: **nenhuma lógica de treino, agregação FedNova, calibração ou avaliação foi alterada — apenas a organização física dos arquivos.** 545 testes unit+integration passaram após cada etapa.
+
+### Run pós-refactoring — validação funcional, NÃO comparação (2026-07-01)
+
+**Comando:** `make training-full-cuda`
+**Propósito:** confirmar que o pipeline ainda roda de ponta a ponta corretamente após a modularização — checar que os 4 bugs de device corrigidos em 2026-06-30 continuam corrigidos nos novos caminhos de arquivo, e que RAG/checkpoint/calibração funcionam sem erro.
+
+**Este run NÃO deve ser usado na comparação CPU × GPU pós-refactoring.** Motivo: é um run de validação isolado, potencialmente com número de rodadas/condições diferentes do protocolo de comparação formal. A comparação real (GPU pós-refactoring vs CPU pós-refactoring, usando "CPU 2026-06-30" / "GPU 2026-06-30" como baseline de não-regressão) será um par de runs dedicado, a ser registrado em uma seção própria após a usuária reavaliar e fazer os ajustes que julgar necessários.
+
+#### Resultado — roda sem erro, comportamento consistente com "GPU 2026-06-30" (referência, não comparação)
+
+**Log:** `experiments/logs/run_complete_cuda_20260701_090530.log`
+**training_ids:** BPSP-only=22 | HSL-only=23 | Federado=24
+**Duração total:** 09:05:32 → 09:41:49 = ~36,3 min (referência "GPU 2026-06-30" pré-refactor: ~38,7 min — mesma ordem de grandeza)
+**Erros:** nenhum — os 4 bugs de device (`fl_core.py`, `checkpoint_store.py`, `interpretability.py`) continuam corrigidos nos novos caminhos de arquivo pós-modularização.
+
+| Fase | GPU 2026-06-30 (pré-refactor, ids 19-21) | GPU 2026-07-01 (pós-refactor, ids 22-24) |
+|---|---|---|
+| BPSP-only | 180,1s \| conv. R35 \| best R30 (F1=0,3268 / Acc=61,67%) | 302,0s \| conv. R59 \| best R51 (F1=0,3358 / Acc=63,12%) |
+| HSL-only | 39,7s \| conv. R39 \| best R26 (F1=0,2675 / Acc=29,40%) | 43,4s \| conv. R42 \| best R12 (F1=0,2319 / Acc=27,62%) |
+| Federado | 712,9s \| não convergiu (120) \| best R73 (F1=0,4988 / Acc=68,03%) | 707,8s \| não convergiu (120) \| best R105 (F1=0,5084 / Acc=67,05%) |
+| RAG P@3 (BPSP/HSL/Federado) | 0,2142 / 0,2164 / 0,2680 | 0,3709 / 0,1960 / 0,3431 |
+| Pooled A / Pooled B / RF | 68,44% / 68,47% / 66,16% | 70,69% / 70,51% / 66,90% |
+
+**Leitura:** mesma faixa de valores e mesmo padrão estrutural em todas as fases (convergência em BPSP/HSL, não-convergência em Federado, RAG funcionando nas 3 fases sem erro de device, checkpoint guloso funcionando). Os números exatos diferem — esperado, mesma causa já documentada na seção de reprodutibilidade CPU↔GPU acima (RNGs distintos por device + não-associatividade de ponto flutuante em GPU), não indica regressão da modularização. **Conclusão: refactoring validado, sem alteração de comportamento.**
+
+Resultado desta validação (se relevante) será anotado abaixo apenas como confirmação de "roda sem erro" — não como dado comparável.

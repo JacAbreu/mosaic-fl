@@ -163,6 +163,11 @@ Se o processo for interrompido com `status="running"`, o próximo `flwr run` det
 
 O projeto segue **estrutura inspirada na arquitetura hexagonal**: `mosaicfl.core` contém o domínio puro, sem dependência de framework de deployment. `infrastructure/` e `experiments/` são adapters que importam o core e o conectam ao mundo externo.
 
+> **Nota (2026-07-01):** os arquivos grandes que antes eram um único módulo (300–962 linhas) foram
+> convertidos em **pacotes com submódulos de responsabilidade única** — a API pública não mudou
+> (`from mosaicfl.core.data_loader import load_with_fallback` continua funcionando, por exemplo),
+> só a organização física interna. A árvore abaixo já reflete essa estrutura.
+
 ```
 mosaic-fl/
 │
@@ -173,35 +178,71 @@ mosaic-fl/
 │           ├── config.py               # Hiperparâmetros (hardware-aware, frozen dataclass)
 │           ├── model.py                # BEHRT simplificado (CLS token pooling)
 │           ├── client.py               # FedProxClient (NumPyClient + proximal term)
-│           ├── preprocessor.py         # Preprocessador EHR (unidades médicas)
-│           ├── rag.py                  # RAG type-safe (ChromaDB + DistilGPT-2)
-│           ├── data_loader.py          # Strategy: SGBD → CSV → sintético
 │           ├── convergence.py          # ConvergenceTracker — janela deslizante
 │           ├── federated.py            # weighted_average_*, get_evaluate_fn
-│           └── interpretability.py     # BEHRTPatternExtractor (atenção → padrões RAG)
+│           ├── calibration.py          # TemperatureScaler, IsotonicCalibrator
+│           ├── evaluation.py           # evaluate(), print_report(), compute_ece()
+│           ├── interpretability.py     # BEHRTPatternExtractor (atenção → padrões RAG)
+│           ├── preprocessor/           # pacote — pré-processamento e pipelines de sequência
+│           │   ├── tokens.py           #   TokenMode, _make_token
+│           │   ├── outcomes.py         #   _map_outcome — mapeamento clínico de desfecho (5 classes)
+│           │   ├── legacy_csv.py       #   EHRPreprocessor, split_by_institution (caminho CSV/sintético)
+│           │   ├── sequence_pipeline.py #  SequencePipeline — pipeline de produção via banco
+│           │   └── legacy_reference.py #  SequencePipelineInicial (referência histórica, não usado)
+│           ├── rag/                    # pacote — RAG (ChromaDB/pgvector + Ollama/gemma3:4b ou HuggingFace)
+│           │   ├── __init__.py         #   ClinicalRAG (orquestração)
+│           │   ├── stores.py           #   _InMemoryStore, _PostgreSQLStore
+│           │   └── llm_backends.py     #   backends de geração (Ollama HTTP / HuggingFace pipeline)
+│           └── data_loader/            # pacote — Strategy: SGBD → CSV → sintético
+│               ├── sources.py          #   FileDataSource, DatabaseDataSource, DataSourceFactory
+│               ├── loaders.py          #   load_clinical_dataset, load_with_fallback
+│               ├── postprocessing.py   #   mapeamento de colunas, conversão de desfecho, fallback sintético
+│               ├── settings.py         #   constantes e tabelas de mapeamento (editável / env vars)
+│               ├── errors.py           #   DataLoadError
+│               └── diagnostics.py      #   diagnose_connection, diagnose_dataset
 │
 ├── infrastructure/                     ← adapters de produção (deployáveis como serviços independentes)
 │   ├── shared/                         ← concerns transversais (usados por todos os adapters)
 │   │   ├── health_server.py            # HTTP health/readiness + /metrics Prometheus (porta 8081)
 │   │   ├── metrics.py                  # Registry Prometheus isolado (CollectorRegistry)
 │   │   ├── logging_setup.py            # Logging JSON estruturado
-│   │   └── tls.py                      # Carga de certificados TLS (obrigatório — raises EnvironmentError)
+│   │   ├── tls.py                      # Carga de certificados TLS (obrigatório — raises EnvironmentError)
+│   │   ├── checkpoint_store/           # pacote — persistência de pesos (SQLite | PostgreSQL)
+│   │   │   ├── base.py                 #   CheckpointStore (interface ABC)
+│   │   │   ├── sqlite_store.py         #   SQLiteCheckpointStore (experimentos locais)
+│   │   │   ├── postgres_store.py       #   PostgreSQLCheckpointStore (produção/homologação)
+│   │   │   └── serialization.py        #   hash SHA-256 + serialização do checkpoint
+│   │   └── metrics_store/              # pacote — persistência de métricas (mesmo padrão do checkpoint_store)
+│   │       ├── base.py │ sqlite_store.py │ postgres_store.py │ serialization.py
 │   ├── mosaicfl_server/                ← adapter: servidor Flower (ServerApp)
-│   │   ├── runner.py                   # app = ServerApp(...) + FederatedServer (legado)
-│   │   ├── strategy.py                 # ProductionFedProxStrategy: FedProx + checkpoint + watchdog
+│   │   ├── runner/                     # pacote — app = ServerApp(...) (produção) + FederatedServer (legado)
+│   │   │   ├── superlink.py            #   _make_server_components + app (entrypoint `flwr run`)
+│   │   │   ├── legacy_server.py        #   FederatedServer (python -m, sem SuperLink)
+│   │   │   ├── checkpoint_io.py │ health.py │ config.py │ cli.py
+│   │   ├── strategy/                   # pacote — ProductionFedProxStrategy (mixins)
+│   │   │   ├── core.py                 #   __init__, aggregate_fit, aggregate_evaluate
+│   │   │   ├── fit_config_mixin.py     #   configure_fit, _load_global_weights
+│   │   │   ├── watchdog_mixin.py       #   recovery de estado + watchdog de timeout por round
+│   │   │   └── calibration_mixin.py    #   temperature scaling pós-convergência
 │   │   ├── state_store.py              # TrainingState + TrainingStateStore (recovery entre sessões)
 │   │   ├── config_loader.py            # Config de runtime: ChromaDB | arquivo (FL_CONFIG_BACKEND)
-│   │   ├── server_daemon.py            # Entrypoint legado (python -m)
 │   │   ├── __init__.py
 │   │   └── __main__.py
 │   ├── mosaicfl_client/                ← adapter: cliente Flower (SuperNode / hospital)
-│   │   ├── runner.py                   # app = ClientApp(...) + ProductionClient (legado)
-│   │   ├── datasource.py               # DataSourceFactory: simulated | sgbd | csv
+│   │   ├── runner/                     # pacote — app = ClientApp(...) (produção) + ProductionClient (legado)
+│   │   │   ├── supernode.py            #   _client_fn + app (entrypoint flower-supernode)
+│   │   │   ├── legacy_client.py        #   ProductionClient (reconexão com backoff exponencial)
+│   │   │   ├── data_utils.py │ config.py │ cli.py
+│   │   ├── datasource/                 # pacote — Strategy: simulated | sgbd | csv
+│   │   │   ├── base.py │ simulated.py │ sgbd.py │ csv_source.py │ factory.py
 │   │   ├── heartbeat.py                # Registry JSON de status
 │   │   ├── __init__.py
 │   │   └── __main__.py
 │   ├── mosaicfl_scheduler/             ← adapter: orquestrador de rounds
-│   │   ├── scheduler_daemon.py         # FederatedScheduler (APScheduler)
+│   │   ├── scheduler_daemon/           # pacote — FederatedScheduler (APScheduler, mixins)
+│   │   │   ├── core.py                 #   __init__, _check_server_connectivity, _job_round
+│   │   │   ├── lifecycle_mixin.py      #   start_daemon, run_once, _heartbeat, _stop_scheduler
+│   │   │   ├── config.py │ cli.py
 │   │   ├── scheduler_cli.py            # Entrypoint CLI (cron/systemd)
 │   │   ├── schedule_state.py           # SchedulerState: estado persistido em JSON
 │   │   ├── state_store.py              # SchedulerStateStore: persistência SQLite (WAL)
@@ -211,9 +252,17 @@ mosaic-fl/
 │   │   └── __main__.py
 │   └── mosaicfl_api/                   ← adapter: REST API de inferência (make api)
 │       ├── app.py                      # FastAPI factory + CORS + lifespan
-│       ├── inference_engine.py         # Carrega checkpoint (arquivo ou CheckpointStore) + MC Dropout
+│       ├── inference_engine/           # pacote — carrega checkpoint + MC Dropout
+│       │   ├── engine.py               #   InferenceEngine
+│       │   ├── tokenization.py         #   resolução canônica + classificação + records_to_tokens
+│       │   └── compat.py               #   fallback local quando mosaicfl não está instalado
 │       ├── state.py                    # Singleton engine com fallback ao banco de treinamento
-│       ├── db.py                       # PatientDB: histórico de risco, exames, ground truth tardio
+│       ├── db/                         # pacote — PatientDB via mixins (API pública inalterada)
+│       │   ├── schema.py │ engine.py │ core.py
+│       │   ├── patients_mixin.py       #   pacientes, atendimentos, export paths
+│       │   ├── clinical_mixin.py       #   risco, exames, desfechos clínicos
+│       │   ├── transactional_mixin.py  #   variantes *_tx (transação explícita)
+│       │   └── prediction_feedback_mixin.py  # predições + desfecho tardio (ground truth)
 │       ├── schemas.py                  # Pydantic: PredictRequest/Response, IngestRequest/Response
 │       ├── security.py                 # JWT, API Key, rate limiting, pseudonimização LGPD
 │       ├── audit.py                    # Audit log LGPD
@@ -227,8 +276,30 @@ mosaic-fl/
 │       └── __main__.py
 │
 ├── experiments/                        ← adapter de pesquisa (não deployável)
-│   ├── experiment_server.py            # CustomFedProxStrategy + start_server (simulação local)
-│   └── run_experiments_simulation.py   # Orquestrador dos experimentos do TCC (dados reais + baseline RF)
+│   ├── training_runner/                # scripts executáveis (invocados pelo Makefile)
+│   │   ├── run_training.py             #   treinamento federado com dados reais FAPESP
+│   │   ├── run_experiments_simulation.py  # simulação com dados sintéticos
+│   │   ├── run_behrt_pooled.py         #   baseline BEHRT pooled
+│   │   ├── run_recalibrate.py │ run_bootstrap_ci.py │ run_seed_sensitivity.py
+│   │   └── run_federated_real.py       #   rede federada real (servidor/cliente via socket)
+│   └── training/                       # orquestração
+│       ├── federated_training.py       #   shim de compatibilidade sobre core/
+│       ├── experiment_server.py        #   adapter Flower para simulação local (Ray)
+│       └── core/                       #   mecânica do pipeline federado
+│           ├── fl_core/                #     pacote — agregação FedAvg/FedNova, loops de treino
+│           │   ├── aggregation.py │ evaluation.py │ manual_loop.py │ ray_loop.py │ router.py
+│           ├── orchestrator.py         #     FederatedTraining (carregamento, FL, RAG, baseline, ablation)
+│           ├── dataloaders.py │ ablation.py │ baselines.py │ rag.py
+│
+├── integration/
+│   ├── clinical-path/
+│   ├── fhir/
+│   ├── fapesp/
+│   │   └── exams_extract/              # pacote — scan_analytes + load_exams (CSV → metrics.exam_records)
+│   │       ├── scan.py │ bulk_load.py │ lookups.py │ column_mapping.py
+│   ├── term_manager/                   # pacote — ciclo de vida de knowledge.term_dictionary
+│   │   ├── models.py │ resolution.py │ pending_workflow.py
+│   └── column_resolver.py
 │
 ├── tests/
 │   ├── test_fl_cycle_explained.py      # Documentação executável do ciclo FL completo
@@ -249,6 +320,15 @@ mosaic-fl/
 │       └── test_real_fl_cycle.py       # Ciclo FL real sem mocks (make test-e2e)
 │
 ├── scripts/
+│   ├── build_standard_vocab.py         # Vocabulário canônico distribuído (rodar antes do treino)
+│   ├── benchmark.py                    # Benchmark de performance (tempo, RAM, CPU, tráfego)
+│   ├── datasource.py                   # Referência histórica — implementação canônica é
+│   │                                   #   infrastructure/mosaicfl_client/datasource/
+│   ├── export_checkpoint.py            # Exporta melhor checkpoint do banco para arquivo .pt
+│   ├── compute_analyte_references.py   # Popula knowledge.analyte_references
+│   ├── reset_data.py
+│   ├── test_pipeline.py
+│   ├── db/                             # Migrations, geração de seeds (BPSP/HSL)
 │   ├── gerar_certs_tls.sh              # Gera certificados TLS de desenvolvimento
 │   ├── iniciar_servidor_fl.sh          # Inicia o coordenador FL (flower-superlink) com TLS
 │   └── iniciar_cliente_fl.sh           # Inicia um no cliente FL (hospital)
@@ -262,7 +342,6 @@ mosaic-fl/
 │   ├── .env.example
 │   └── seed/generate_data.py
 │
-├── benchmark.py                        # Benchmark de performance (tempo, RAM, CPU, tráfego)
 ├── Dockerfile.server
 ├── Dockerfile.client
 ├── docker-compose.yml
@@ -320,11 +399,17 @@ Executa as 4 fases em sequência, gravando resultados por fase em `experiments/l
 # Pré-requisito: banco carregado (make server-setup)
 make training-full
 
+# Em GPU (requer CUDA disponível — torch.cuda.is_available()):
+make training-full-cuda
+# equivalente a rodar training-full com FL_DEVICE=cuda em cada uma das 4 fases
+
 # Com Differential Privacy (série DP):
 FL_DP_NOISE=1.0 FL_DP_CLIP=1.0 make training-full  # Exp 17: σ=1,0
 FL_DP_NOISE=0.5 FL_DP_CLIP=1.0 make training-full  # Exp 18: σ=0,5
 FL_DP_NOISE=2.0 FL_DP_CLIP=1.0 make training-full  # Exp 19: σ=2,0
 ```
+
+> `FL_DEVICE` não é auto-detectado — o padrão é sempre `cpu` (`torch.device(os.getenv("FL_DEVICE", "cpu"))` em `config.py`). `make training-full-cuda` já exporta `FL_DEVICE=cuda` nas 4 fases; para chamadas manuais de `run_training.py`, defina a variável explicitamente.
 
 O pipeline executa em 4 fases:
 
@@ -345,7 +430,7 @@ O pipeline executa em 4 fases:
       → Pooled B (late fusion demográfica): 68,68% Acc (Exp 16)
 ```
 
-**Duração:** ~9h43min total na máquina de desenvolvimento (CPU, sem GPU driver).
+**Duração:** ~7h em CPU (i7-1165G7) · **~35–40 min em GPU** (RTX 4070 Ti, `make training-full-cuda`) — ganho medido de ~10,9× no pipeline completo, validado componente a componente (ver `docs/Sumario_Treinamento_Parte2.md`).
 
 **5 classes de prognóstico** (definidas em `preprocessor.py:_map_outcome()`):
 
@@ -399,13 +484,19 @@ make sim
 
 ```bash
 # Configuração padrão: 1000 amostras, 10 rodadas, 5 clientes
-python benchmark.py
+python scripts/benchmark.py
 
 # Configuração customizada
-python benchmark.py --samples 2000 --rounds 5 --clients 3 --output meus_resultados
+python scripts/benchmark.py --samples 2000 --rounds 5 --clients 3 --output meus_resultados
 ```
 
 Artefatos gerados em `benchmark_results/`: métricas JSON por rodada + 6 gráficos PNG.
+
+> **Atenção:** `scripts/benchmark.py` está atualmente desatualizado — importa `mosaicfl.core.model_v2`,
+> `mosaicfl.core.client_v2` e `mosaicfl.core.preprocess_v2`, nomes de uma reestruturação anterior do
+> pacote que não existem mais (os módulos atuais são `model.py`, `client.py`, `preprocessor/`). Pendente
+> de correção; use `make training-full` / `make training-full-cuda` para medir desempenho real do pipeline
+> enquanto isso não é resolvido.
 
 ---
 
