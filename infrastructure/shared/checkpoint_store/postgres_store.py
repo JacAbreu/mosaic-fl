@@ -25,24 +25,28 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         log_file: str = "",
         n_rounds_max: int = 120,
         checkpoint_criterion: str = "f1_macro",
+        partition_mode: str = "natural",
     ) -> int:
         import sqlalchemy as sa
         with self._engine.begin() as conn:
             row = conn.execute(
                 sa.text(
-                    "INSERT INTO metrics.fl_trainings (algorithm, log_file, n_rounds_max, checkpoint_criterion) "
-                    "VALUES (:algorithm, :log_file, :n_rounds_max, :checkpoint_criterion) RETURNING id"
+                    "INSERT INTO metrics.fl_trainings "
+                    "(algorithm, log_file, n_rounds_max, checkpoint_criterion, partition_mode) "
+                    "VALUES (:algorithm, :log_file, :n_rounds_max, :checkpoint_criterion, :partition_mode) "
+                    "RETURNING id"
                 ),
                 {
                     "algorithm":            algorithm,
                     "log_file":             log_file,
                     "n_rounds_max":         n_rounds_max,
                     "checkpoint_criterion": checkpoint_criterion,
+                    "partition_mode":       partition_mode,
                 },
             ).fetchone()
         training_id = row[0]
-        logger.info("training_registered_postgres id=%d algorithm=%s criterion=%s",
-                    training_id, algorithm, checkpoint_criterion)
+        logger.info("training_registered_postgres id=%d algorithm=%s criterion=%s partition_mode=%s",
+                    training_id, algorithm, checkpoint_criterion, partition_mode)
         return training_id
 
     def complete_training(
@@ -78,6 +82,32 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "avg_cpu_pct":      avg_cpu_pct,
                 },
             )
+
+    def update_evaluation_metrics(
+        self,
+        training_id: int,
+        macro_auc: Optional[float] = None,
+        macro_f1: Optional[float] = None,
+        ece: Optional[float] = None,
+    ) -> None:
+        import sqlalchemy as sa
+        with self._engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "UPDATE metrics.fl_trainings SET macro_auc=:macro_auc, "
+                    "macro_f1=:macro_f1, ece=:ece WHERE id=:training_id"
+                ),
+                {
+                    "training_id": training_id,
+                    "macro_auc":   macro_auc,
+                    "macro_f1":    macro_f1,
+                    "ece":         ece,
+                },
+            )
+        logger.info(
+            "training_evaluation_metrics_saved id=%d macro_auc=%s macro_f1=%s ece=%s",
+            training_id, macro_auc, macro_f1, ece,
+        )
         logger.info(
             "training_completed_postgres id=%d best_round=%d best_accuracy=%.4f converged=%s "
             "duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%%",

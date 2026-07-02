@@ -683,3 +683,90 @@ README.md atualizado no mesmo dia para refletir a nova estrutura de diretórios,
 | 2026-06-25 (Avaliação 4, pós-redesign de labels) | idem | **8,3** | 8,0 |
 
 Nenhuma avaliação formal posterior a 2026-06-25 foi localizada nos documentos lidos — ou seja, os marcos mais importantes do projeto (Exp15, Bloco 2, GPU, modularização) ainda não foram formalmente reavaliados com este critério.
+
+---
+
+## Fechamento da Fase de Ajuste e início da Fase de Experimentos Formais (decisão de 2026-07-01)
+
+**Decisão tomada pela autora em 2026-07-01, após revisão desta linha do tempo e do `docs/Comparativo_Metodologia_Planejada_vs_Executada.md`:**
+
+> Tudo o que está documentado neste arquivo — Experimentos 1–17/T1–T16 (`Sumario_Treinamento.md`), Bloco 1 e Bloco 2 CPU/GPU (`Sumario_Treinamento_Parte2.md`) e a modularização de 2026-07-01 — passa a ser classificado retroativamente como **"Treinamentos de Ajuste"**, não como resultados finais comparáveis entre si.
+
+**Justificativa registrada pela autora:** ao longo de todo esse período, bugs estavam sendo ativamente corrigidos (cross-contamination de checkpoint, bugs de RAG, bug do RNG compartilhado entre hospitais, bug de calibração em log-space, 4 bugs de device na GPU, entre outros — ver Partes 5–9 acima), o esquema de labels foi redesenhado 3 vezes, o critério de checkpoint mudou de accuracy para F1 macro, e o próprio código passou por uma reestruturação completa (15 arquivos modularizados). **Comparar resultados numéricos entre pontos diferentes desse período não é justo nem metodologicamente válido** — cada "treinamento" media, em parte, o efeito de um bug corrigido ou de uma mudança estrutural, não apenas o efeito do hiperparâmetro ou algoritmo em teste.
+
+**Marco de corte:** a validação funcional pós-modularização executada na manhã de 2026-07-01 (`make training-full-cuda`, training_ids 22-24 — ver Parte 10) é o ponto em que a autora considera "todas as arestas ajustadas" confirmadas — pipeline rodando sem erro, comportamento estrutural consistente com o run de referência pré-refactor. **A partir deste ponto, e não antes, começam os "Treinamentos Reais"** — a serem usados como resultados formais e comparáveis no texto da defesa.
+
+**Ressalva explícita da autora:** este corte vale **"a menos que a gente perceba outra oportunidade"** — ou seja, se um novo bug ou lacuna estrutural for identificado depois deste ponto, o marco de início dos "Treinamentos Reais" desloca para depois da correção desse novo achado. O critério não é a data em si, é a ausência de arestas soltas conhecidas.
+
+**Consequências práticas desta decisão:**
+
+1. Nenhum número do Bloco 1 ou Bloco 2 (T1–T16, incluindo o marco "FL supera todos os baselines" do T15/Exp15, e a comparação CPU×GPU de 2026-06-30) deve ser apresentado no capítulo de resultados do TCC como resultado final — eles continuam válidos como **narrativa de desenvolvimento metodológico** (o "como chegamos até aqui"), mas não como a tabela de resultados que responde à pergunta de pesquisa.
+2. A comparação formal CPU×GPU pós-refactoring (já listada como pendente na tabela acima) deixa de ser "pós-refactoring vs. pré-refactoring" e passa a ser, junto com todo o resto, o **primeiro Treinamento Real**.
+3. Os experimentos formais (revisão do que restou do plano original — Seção 10 e 16 do `Comparativo_Metodologia_Planejada_vs_Executada.md`, incluindo os nunca executados Experimento 3 e Experimento 4) devem ser desenhados e executados a partir daqui, sobre o código estável e modularizado.
+4. Um novo documento de sumário (`docs/Sumario_Treinamento_Parte3.md` ou nome a definir) deve ser iniciado quando o primeiro Treinamento Real for executado, para não misturar essa fase com o histórico de ajuste já registrado em `Sumario_Treinamento.md` e `Sumario_Treinamento_Parte2.md`.
+
+**Pendência imediata:** o desenho exato do(s) primeiro(s) Treinamento(s) Real(is) ainda não foi definido nesta sessão — fica para quando a autora retomar o trabalho.
+
+---
+
+## Preparação do primeiro Treinamento Real — AUC-ROC no banco + Fase 5 (Experimento 3) (2026-07-01, mesma sessão)
+
+Antes de disparar o primeiro `make training-full-cuda` da Fase de Experimentos Formais, duas lacunas identificadas na revisão do `Comparativo_Metodologia_Planejada_vs_Executada.md` foram fechadas.
+
+### AUC-ROC passa a ser gravado no banco
+
+**Problema encontrado:** o Macro AUC já era calculado ao final de cada treino federado (pré e pós-calibração), mas nunca chegava a `metrics.fl_trainings` — `orchestrator.py` gravava `macro_auc: None` fixo em `metrics_store.fl_metrics`, porque o valor calculado em `manual_loop.py` nunca era devolvido no `history`. O baseline RF/Pooled já gravava o AUC real corretamente; só a fase de treino FL em si (BPSP-only/HSL-only/Federado) ficava com `None`.
+
+**Correção:**
+- Migration 016: `macro_auc`, `macro_f1`, `ece` adicionados a `metrics.fl_trainings` (aplicada).
+- `manual_loop.py`: captura `report_cal.macro_auc` (com fallback para `report_raw.macro_auc`) e grava via novo método `checkpoint_store.update_evaluation_metrics()`.
+- `orchestrator.py`: `metrics_store.save()` passa a ler os valores reais de `self.history` em vez de `None` fixo — corrigido o mesmo bug para `macro_f1` e `ece` (mesma causa raiz).
+- SQLite recebeu o método por paridade de interface, mas só loga — o schema local do SQLite já estava atrasado em relação às migrations do Postgres antes disso (`checkpoint_criterion` e métricas de recurso da migration 015 também nunca foram persistidas lá). Não corrigido — os treinos reais usam Postgres.
+
+**Motivação da autora:** ter o AUC-ROC disponível para todo treino futuro, para poder trazê-lo depois e justificar comparativamente a escolha de F1 macro como critério de checkpoint (em vez de accuracy ou AUC) com dado, não só com afirmação.
+
+### Fase 5 — contraste non-IID real vs. IID simulado (fecha o Experimento 3 do plano original)
+
+**Decisão da autora:** não criar um treino "non-IID real" separado — a Fase 3 (Federado, BPSP+HSL reais) já é isso, roda toda vez. Só a Fase 5 (IID simulado) precisava ser construída. As duas fases saem do mesmo `make training-full[-cuda]`, com seed de inicialização, algoritmo e hiperparâmetros idênticos — só a origem dos dados de cada cliente muda.
+
+**Implementação:**
+- `dataloaders.py`: novo `FL_PARTITION_MODE` (`natural` [padrão] | `iid_simulado`). Em `iid_simulado`, nova função `_build_iid_simulated_hospital_data()` agrupa todos os hospitais num pool único, embaralha com seed dedicada (`RANDOM_SEED + 2000` — namespace novo, não colide com o `+1000` do split natural), e refatia em N clientes virtuais (`IID_0`, `IID_1`, ...). Testado com dados sintéticos na razão real (~4,35×): os dois clientes virtuais saíram com distribuição de classe quase idêntica entre si e a proporção de origem hospitalar preservada nos dois — a heterogeneidade desaparece por construção, sem perda de amostras.
+- Avaliação por subgrupo de origem hospitalar (`_evaluate_subgroups()`) — uma única passagem sobre o checkpoint final (não por rodada, decisão de custo já registrada anteriormente), disponível nos dois modos de partição via um novo `test_loader_origin` retornado por `prepare_dataloaders_from_db()`. A Fase 3 (natural) ganha essa métrica de brinde, já que o mecanismo é o mesmo.
+- Migration 017: `partition_mode` em `fl_trainings` (aplicada).
+- Makefile: `training-iid-contrast[-cuda]` como alvos standalone, e a Fase 5 encadeada dentro de `training-full`/`training-full-cuda` — agora pipelines de **5 fases** (`1/5` a `5/5`), não mais 4.
+
+**Achado colateral, não corrigido:** bug pré-existente em `SQLiteCheckpointStore.save()` (`ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint`) — reproduzido na `main` sem nenhuma das mudanças desta sessão. Não bloqueia nada porque os treinos reais usam Postgres; registrado para o caso de o caminho SQLite (testes locais sem banco) vir a ser usado.
+
+**Validação:** 545 testes (unit + integration) passando após cada etapa; smoke test funcional isolado de `_build_iid_simulated_hospital_data()` e de `run_federated_learning_manual()` de ponta a ponta (com stub contornando o bug do SQLite) confirmando que `partition_mode`, `macro_auc`/`macro_f1`/`ece` reais e a avaliação por subgrupo chegam corretamente no fluxo.
+
+### Estado ao final desta sessão
+
+**Cronograma confirmado pela autora (2026-07-01, quarta-feira):**
+
+- **Quarta-feira (2026-07-01, hoje):** `make training-full-cuda` disparado como **validação das alterações desta sessão** (Fase 5 + gravação de AUC-ROC) — mesmo padrão já usado pela manhã para validar a modularização. **Ainda não é o Treinamento Real.**
+- **Quinta-feira (2026-07-02):** se a validação de hoje estiver OK, as rodadas de **Treinamento Real** acontecem — CUDA e CPU, 5 fases cada (BPSP-only, HSL-only, Federado non-IID real, BEHRT Pooled, Federado IID simulado). É aqui que os Experimentos 1, 2, 3 e 5 do plano original ficam formalmente cobertos.
+- **Sexta-feira (2026-07-03):** simulação/avaliação do RAG — Experimento 4 (avaliação Likert humana).
+
+### Validação de quarta-feira — resultado: implementação sem erros, pronta para o Treinamento Real de quinta
+
+**Log:** `experiments/logs/run_complete_cuda_20260701_211304.log` | **Duração:** 21:13→21:41 (~28,5 min) | **training_ids:** 25 (BPSP-only), 26 (HSL-only), 27 (Federado non-IID real), 28 (Federado IID simulado — Fase 5).
+
+**Checklist de validação — tudo confirmado:**
+- Nenhum erro em nenhuma das 5 fases (`TREINAMENTO_COMPLETO status=ok fl_rounds=44 rag_ok=True baseline_rf_ok=True ablation_ok=True`).
+- Fase 5 (`FL_PARTITION_MODE=iid_simulado`) rodou de fato: pool de 33.773 amostras (BPSP+HSL) redividido corretamente em 2 clientes virtuais de ~16.886 cada.
+- `partition_mode` chega correto ao banco: `natural` nas fases 1-3, `iid_simulado` na fase 5 — confirmado tanto no log quanto em query SQL direta (`SELECT partition_mode FROM metrics.fl_trainings WHERE id IN (25,26,27,28)`).
+- `macro_auc`/`macro_f1`/`ece` gravados com valores reais nas 4 fases FL (não mais `None`) — confirmado via `training_evaluation_metrics_saved` no log e via query SQL direta na tabela.
+- `subgroup_metrics` (avaliação por origem hospitalar) calculado corretamente nas fases 3 e 5, com rótulos legíveis (`BPSP`/`HSL`, não índices numéricos).
+
+**Resultado desta validação (ids 25-28) — só para checar plausibilidade, NÃO é dado formal do TCC:**
+
+| id | Fase | partition_mode | Acc | AUC | F1 | ECE | Convergiu |
+|---|---|---|---|---|---|---|---|
+| 25 | BPSP-only | natural | 62,79% | 0,7326 | 0,3619 | 0,0621 | Não (120) |
+| 26 | HSL-only | natural | 30,41% | 0,6709 | 0,2206 | 0,1237 | Sim (R27) |
+| 27 | Federado (non-IID real) | natural | 64,71% | 0,8177 | 0,4918 | 0,1305 | Sim (R28) |
+| 28 | Federado (IID simulado) | iid_simulado | **71,52%** | **0,8509** | **0,5298** | 0,0876 | Sim (R39) |
+
+Achado preliminar (não formal): o cenário IID simulado (id=28) superou o non-IID real (id=27) em todas as métricas — Acc +6,81 p.p., F1 +0,038, AUC +0,033, ECE melhor, convergência mais rápida (R39 vs. R53) — primeira evidência direta e comparável de que a heterogeneidade non-IID prejudica o treinamento, com tudo mais (algoritmo, hiperparâmetros, seed) mantido idêntico entre as duas fases. A confirmar (ou refutar) com o Treinamento Real de quinta-feira.
+
+**Conclusão:** implementação da sessão de 2026-07-01 (AUC-ROC no banco + Fase 5) validada sem erros — **pronta para o Treinamento Real de 2026-07-02 (CUDA e CPU)**.

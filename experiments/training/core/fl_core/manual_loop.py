@@ -28,12 +28,56 @@ from .evaluation import evaluate_global_model
 logger = logging.getLogger(__name__)
 
 
+def _evaluate_subgroups(
+    model: SimplifiedBEHRT,
+    test_loader_origin: DataLoader,
+    device,
+    origin_labels: Optional[Dict[int, str]] = None,
+) -> Dict[str, Dict[str, float]]:
+    """Avalia accuracy/F1 macro por origem hospitalar — uma única passagem sobre o
+    checkpoint final já restaurado (não é repetido por rodada). Usado para o
+    contraste do Experimento 3 (fase 5, iid_simulado) e, de brinde, também
+    disponível na fase 3 (non-IID natural), já que o mecanismo é o mesmo nos
+    dois modos (ver dataloaders.py::prepare_dataloaders_from_db)."""
+    from sklearn.metrics import f1_score
+
+    model.eval()
+    all_preds, all_labels, all_origins = [], [], []
+    with torch.no_grad():
+        for batch_x, batch_y, batch_dia, batch_origin in test_loader_origin:
+            batch_x, batch_dia = batch_x.to(device), batch_dia.to(device)
+            logits = model(batch_x, dia_relativo=batch_dia)
+            all_preds.append(logits.argmax(dim=1).cpu())
+            all_labels.append(batch_y)
+            all_origins.append(batch_origin)
+
+    preds   = torch.cat(all_preds).numpy()
+    labels  = torch.cat(all_labels).numpy()
+    origins = torch.cat(all_origins).numpy()
+
+    result: Dict[str, Dict[str, float]] = {}
+    for origin_id in sorted(set(origins.tolist())):
+        mask = origins == origin_id
+        n = int(mask.sum())
+        if n == 0:
+            continue
+        label = (origin_labels or {}).get(origin_id, str(origin_id))
+        result[label] = {
+            "n":        n,
+            "accuracy": float((preds[mask] == labels[mask]).mean()),
+            "f1_macro": float(f1_score(labels[mask], preds[mask], average="macro", zero_division=0)),
+        }
+    return result
+
+
 def run_federated_learning_manual(
     client_loaders: Dict,
     test_loader: DataLoader,
     total_train_samples: int,
     vocab: Dict[str, int] = None,
     cal_loader: DataLoader = None,
+    test_loader_origin: Optional[DataLoader] = None,
+    origin_labels: Optional[Dict[int, str]] = None,
     # Overrides para análise de sensibilidade — não usar no treinamento principal
     override_num_rounds: Optional[int] = None,
     override_use_fednova: Optional[bool] = None,
@@ -90,17 +134,19 @@ def run_federated_learning_manual(
 
     # Registra o treinamento antes do loop — garante 1 checkpoint por treinamento
     training_id: Optional[int] = None
+    import os
+    partition_mode = os.environ.get("FL_PARTITION_MODE", "natural").strip().lower()
     if not sensitivity_mode:
-        import os
         log_file = os.environ.get("FL_LOG_FILE", "")
         training_id = checkpoint_store.register_training(
             algorithm=agregador,
             log_file=log_file,
             n_rounds_max=n_rounds,
             checkpoint_criterion=FED_CFG.checkpoint_criterion,
+            partition_mode=partition_mode,
         )
-        logger.info("training_registered id=%d algorithm=%s criterion=%s n_rounds_max=%d",
-                    training_id, agregador, FED_CFG.checkpoint_criterion, n_rounds)
+        logger.info("training_registered id=%d algorithm=%s criterion=%s n_rounds_max=%d partition_mode=%s",
+                    training_id, agregador, FED_CFG.checkpoint_criterion, n_rounds, partition_mode)
 
     overall_start = time.time()
 
@@ -346,6 +392,18 @@ def run_federated_learning_manual(
     except Exception as exc:
         logger.warning(f"isotonic_calibration_failed: {exc}")
 
+    # Avaliação por subgrupo de origem hospitalar — uma única passagem sobre o
+    # checkpoint final (não por rodada). Disponível nos dois modos de partição
+    # (natural e iid_simulado); é o que sustenta o contraste causal do
+    # Experimento 3 quando este treino é a fase 5 do pipeline.
+    subgroup_metrics: Optional[Dict] = None
+    if test_loader_origin is not None:
+        try:
+            subgroup_metrics = _evaluate_subgroups(global_model, test_loader_origin, DEVICE, origin_labels)
+            logger.info("subgroup_metrics partition_mode=%s %s", partition_mode, subgroup_metrics)
+        except Exception as exc:
+            logger.warning("Falha ao avaliar por subgrupo de origem: %s", exc)
+
     import dataclasses
     evaluation_payload = {
         "best_round":       best_round,
@@ -356,7 +414,28 @@ def run_federated_learning_manual(
         "ece_isotonic":     ece_iso,
         "pre_calibration":  dataclasses.asdict(report_raw) if report_raw  else None,
         "post_calibration": dataclasses.asdict(report_cal) if report_cal  else None,
+        "partition_mode":   partition_mode,
+        "subgroup_metrics": subgroup_metrics,
     }
+
+    # Preferência: pós-calibração (report_cal) > pré-calibração (report_raw) > None.
+    # Fica disponível em history (→ metrics_store, via orchestrator) e em fl_trainings
+    # (→ update_evaluation_metrics, abaixo) — consultável por SQL sem re-parsing de log/JSONB.
+    _best_report = report_cal or report_raw
+    history["macro_auc"] = _best_report.macro_auc if _best_report else None
+    history["macro_f1_report"] = _best_report.macro_f1 if _best_report else None
+    history["ece"] = _best_report.calibration.ece if _best_report else None
+
+    if training_id is not None:
+        try:
+            checkpoint_store.update_evaluation_metrics(
+                training_id=training_id,
+                macro_auc=history["macro_auc"],
+                macro_f1=history["macro_f1_report"],
+                ece=history["ece"],
+            )
+        except Exception as exc:
+            logger.warning("Falha ao salvar macro_auc/macro_f1/ece em fl_trainings: %s", exc)
 
     # Banco é a fonte da verdade — persiste junto com o checkpoint.
     # O arquivo é mantido como cache de leitura rápida (sobrescrito a cada run).

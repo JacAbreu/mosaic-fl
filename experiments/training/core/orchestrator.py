@@ -48,6 +48,8 @@ class FederatedTraining:
         self.demographics_by_client: Optional[Dict]      = None
         self.test_loader_demo:      Optional[DataLoader] = None
         self.cal_loader:            Optional[DataLoader] = None
+        self.test_loader_origin:    Optional[DataLoader] = None
+        self.origin_labels:         Optional[Dict]       = None
         self.history:               Optional[Dict]       = None
         self.global_model:          Optional[SimplifiedBEHRT] = None
         self._last_round:           int                  = 0
@@ -64,6 +66,8 @@ class FederatedTraining:
             self.demographics_by_client,
             self.test_loader_demo,
             self.cal_loader,
+            self.test_loader_origin,
+            self.origin_labels,
         ) = prepare_dataloaders_from_db(db_url)
 
     def load_synthetic(self) -> None:
@@ -83,6 +87,8 @@ class FederatedTraining:
             self.total,
             vocab=self.vocab_map,
             cal_loader=self.cal_loader,
+            test_loader_origin=self.test_loader_origin,
+            origin_labels=self.origin_labels,
         )
         self._training_id = (self.history or {}).get("training_id")
 
@@ -106,9 +112,9 @@ class FederatedTraining:
                 metrics={
                     "accuracy":      self.history["accuracy"][-1] if self.history.get("accuracy") else None,
                     "loss":          self.history["loss"][-1] if self.history.get("loss") else None,
-                    "macro_auc":     None,
-                    "macro_f1":      None,
-                    "ece":           None,
+                    "macro_auc":     self.history.get("macro_auc"),
+                    "macro_f1":      self.history.get("macro_f1_report"),
+                    "ece":           self.history.get("ece"),
                     "per_class_auc": None,
                     "per_class_f1":  None,
                 },

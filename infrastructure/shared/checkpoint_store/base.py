@@ -14,8 +14,12 @@ class CheckpointStore(ABC):
         log_file: str = "",
         n_rounds_max: int = 120,
         checkpoint_criterion: str = "f1_macro",
+        partition_mode: str = "natural",
     ) -> int:
-        """Registra um novo treinamento antes do loop FL. Retorna training_id."""
+        """Registra um novo treinamento antes do loop FL. Retorna training_id.
+
+        partition_mode: "natural" (hospital real = cliente) ou "iid_simulado"
+        (pool embaralhado — Experimento 3 / fase 5, contraste non-IID vs. IID)."""
 
     @abstractmethod
     def complete_training(
@@ -30,6 +34,18 @@ class CheckpointStore(ABC):
         avg_cpu_pct: float = 0.0,
     ) -> None:
         """Atualiza fl_trainings com resultado final ao término do loop FL."""
+
+    @abstractmethod
+    def update_evaluation_metrics(
+        self,
+        training_id: int,
+        macro_auc: Optional[float] = None,
+        macro_f1: Optional[float] = None,
+        ece: Optional[float] = None,
+    ) -> None:
+        """Grava em fl_trainings o AUC-ROC/F1/ECE pós-calibração, calculados após
+        complete_training() (a avaliação final só roda depois do melhor checkpoint
+        ser restaurado). Chamado uma vez por treinamento, ao final da calibração."""
 
     @abstractmethod
     def save(

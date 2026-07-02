@@ -82,10 +82,76 @@ def prepare_dataloaders(
     return client_loaders, test_loader, preprocessor.vocab_map, total_train_samples
 
 
+def _build_iid_simulated_hospital_data(hospital_data: Dict) -> Tuple[Dict, Dict]:
+    """Pool todos os hospitais reais, embaralha com seed dedicada, e refatia em
+    N clientes virtuais (N = número de hospitais reais) — remove estatisticamente
+    a correspondência 1:1 hospital-real→cliente que produz o non-IID natural.
+
+    Usado no modo FL_PARTITION_MODE=iid_simulado (contraste non-IID vs. IID —
+    fase 5 do pipeline). Retorna:
+      virtual_hospital_data — MESMO formato de hospital_data
+          ({vcid: (seqs, labels, vocab, demo, dia_rels)}), para que o restante de
+          prepare_dataloaders_from_db() (split 70/10/10/10, DataLoaders) seja
+          reaproveitado sem duplicar lógica.
+      virtual_origin — {vcid: tensor} com a origem hospitalar REAL de cada amostra
+          (índice do hospital original, não do cliente virtual) — cada cliente
+          virtual mistura amostras de todos os hospitais reais, então a origem
+          não pode mais ser inferida pelo vcid; precisa viajar por amostra através
+          do embaralhamento para permitir avaliação por subgrupo depois.
+
+    Tudo o mais (algoritmo, hiperparâmetros, seed de inicialização do modelo,
+    número de clientes) permanece idêntico ao treino non-IID natural — é o que
+    garante que a diferença de resultado entre as duas fases seja atribuível à
+    heterogeneidade da partição, não a outra variável.
+    """
+    hospital_ids = list(hospital_data.keys())
+    vocab = next(iter(hospital_data.values()))[2]
+
+    all_seqs, all_labels, all_demo, all_dia, all_origin = [], [], [], [], []
+    for h_idx, hospital_id in enumerate(hospital_ids):
+        seqs, labels, _, demo, dia_rels = hospital_data[hospital_id]
+        all_seqs.append(seqs)
+        all_labels.append(labels)
+        all_demo.append(demo)
+        all_dia.append(dia_rels)
+        all_origin.append(torch.full((len(seqs),), h_idx, dtype=torch.long))
+
+    pooled_seqs   = torch.cat(all_seqs, dim=0)
+    pooled_labels = torch.cat(all_labels, dim=0)
+    pooled_demo   = torch.cat(all_demo, dim=0)
+    pooled_dia    = torch.cat(all_dia, dim=0)
+    pooled_origin = torch.cat(all_origin, dim=0)
+
+    n = len(pooled_seqs)
+    # Seed dedicada — namespace novo (+2000), não colide com o split natural (+1000).
+    _pool_rng = torch.Generator().manual_seed(RANDOM_SEED + 2000)
+    perm = torch.randperm(n, generator=_pool_rng)
+
+    num_virtual_clients = len(hospital_ids)
+    chunk_size = n // num_virtual_clients
+    virtual_hospital_data: Dict = {}
+    virtual_origin: Dict = {}
+    for vcid in range(num_virtual_clients):
+        start = vcid * chunk_size
+        end   = (vcid + 1) * chunk_size if vcid < num_virtual_clients - 1 else n
+        idx = perm[start:end]
+        key = f"IID_{vcid}"
+        virtual_hospital_data[key] = (
+            pooled_seqs[idx], pooled_labels[idx], vocab, pooled_demo[idx], pooled_dia[idx],
+        )
+        virtual_origin[key] = pooled_origin[idx]
+    logger.info(
+        "[db] iid_simulado: pool de %d amostras (origem: %s) redividido em %d clientes virtuais "
+        "(~%d amostras cada) | seed=%d",
+        n, hospital_ids, num_virtual_clients, chunk_size, RANDOM_SEED + 2000,
+    )
+    return virtual_hospital_data, virtual_origin
+
+
 def prepare_dataloaders_from_db(
     db_url: str,
     batch_size: int = BATCH_SIZE,
-) -> Tuple[Dict, DataLoader, Dict, int, Dict, DataLoader, DataLoader]:
+) -> Tuple[Dict, DataLoader, Dict, int, Dict, DataLoader, DataLoader, Optional[DataLoader], Dict[int, str]]:
     """
     Constrói DataLoaders para FL a partir dos tensores reais do SequencePipeline.
 
@@ -98,9 +164,19 @@ def prepare_dataloaders_from_db(
         O test set e cal set continuam globais (todos os hospitais) para comparação justa.
         Uso: leave-one-client-out — permite isolar a contribuição de cada hospital.
 
+    FL_PARTITION_MODE ("natural" [padrão] | "iid_simulado"):
+        "iid_simulado" agrupa todos os hospitais num pool único embaralhado e
+        redivide em clientes virtuais, removendo a heterogeneidade non-IID
+        natural por construção — usado para o contraste causal do Experimento 3
+        (fase 5 do pipeline) contra o treino non-IID real (fase 3).
+
     Returns:
         client_loaders, test_loader, vocab, total_train_samples,
-        demographics_by_client, test_loader_demo, cal_loader
+        demographics_by_client, test_loader_demo, cal_loader,
+        test_loader_origin (seqs, labels, dia, hospital_origin — para avaliação
+            por subgrupo no checkpoint final, disponível nos dois modos),
+        origin_labels (mapeia o id inteiro de origem para o hospital_id real,
+            só para leitura em logs/relatórios)
     """
     import os
     _include_raw = os.getenv("FL_INCLUDE_HOSPITALS", "").strip()
@@ -113,6 +189,8 @@ def prepare_dataloaders_from_db(
     else:
         logger.info("[db] FL_INCLUDE_HOSPITALS não definido — todos os hospitais como clientes")
 
+    partition_mode = os.getenv("FL_PARTITION_MODE", "natural").strip().lower()
+
     logger.info("[db] Iniciando carregamento via SequencePipeline...")
     pipeline = SequencePipeline(connection_string=db_url, max_seq_len=MAX_SEQ_LEN)
     hospital_data = pipeline.build_per_hospital()
@@ -120,11 +198,18 @@ def prepare_dataloaders_from_db(
     if not hospital_data:
         raise RuntimeError("build_per_hospital() retornou vazio — sem dados na base.")
 
+    origin_labels: Dict[int, str] = {cid: hospital_id for cid, hospital_id in enumerate(hospital_data.keys())}
+
+    virtual_origin: Optional[Dict] = None
+    if partition_mode == "iid_simulado":
+        logger.info("[db] FL_PARTITION_MODE=iid_simulado — non-IID natural substituído por pool embaralhado")
+        hospital_data, virtual_origin = _build_iid_simulated_hospital_data(hospital_data)
+
     vocab = next(iter(hospital_data.values()))[2]
 
     client_loaders: Dict = {}
     demographics_by_client: Dict = {}
-    test_seqs_list, test_lbls_list, test_demo_list, test_dia_list = [], [], [], []
+    test_seqs_list, test_lbls_list, test_demo_list, test_dia_list, test_origin_list = [], [], [], [], []
     cal_seqs_list, cal_lbls_list, cal_dia_list = [], [], []
     total_train_samples = 0
 
@@ -159,6 +244,12 @@ def prepare_dataloaders_from_db(
         test_lbls_list.append(labels[perm[n_train + n_val + n_cal:]])
         test_demo_list.append(demo[perm[n_train + n_val + n_cal:]])
         test_dia_list.append(dia_rels[perm[n_train + n_val + n_cal:]])
+        # Origem hospitalar real por amostra — em modo natural, cid já É o hospital;
+        # em modo iid_simulado, cada cliente virtual mistura hospitais, então a origem
+        # vem de virtual_origin (construída em _build_iid_simulated_hospital_data).
+        origin_full = virtual_origin[hospital_id] if virtual_origin is not None \
+            else torch.full((n,), cid, dtype=torch.long)
+        test_origin_list.append(origin_full[perm[n_train + n_val + n_cal:]])
         cal_seqs_list.append(cal_seqs)
         cal_lbls_list.append(cal_lbls)
         cal_dia_list.append(cal_dia)
@@ -191,24 +282,30 @@ def prepare_dataloaders_from_db(
     if not client_loaders:
         raise RuntimeError("Nenhum cliente válido criado a partir dos dados reais.")
 
-    test_seqs  = torch.cat(test_seqs_list, dim=0)
-    test_lbls  = torch.cat(test_lbls_list, dim=0)
-    test_demo  = torch.cat(test_demo_list, dim=0)
-    test_dia   = torch.cat(test_dia_list, dim=0)
+    test_seqs   = torch.cat(test_seqs_list, dim=0)
+    test_lbls   = torch.cat(test_lbls_list, dim=0)
+    test_demo   = torch.cat(test_demo_list, dim=0)
+    test_dia    = torch.cat(test_dia_list, dim=0)
+    test_origin = torch.cat(test_origin_list, dim=0)
     cal_seqs_all = torch.cat(cal_seqs_list, dim=0)
     cal_lbls_all = torch.cat(cal_lbls_list, dim=0)
     cal_dia_all  = torch.cat(cal_dia_list, dim=0)
 
-    test_loader      = DataLoader(TensorDataset(test_seqs, test_lbls, test_dia), batch_size=batch_size)
-    test_loader_demo = DataLoader(TensorDataset(test_seqs, test_lbls, test_demo, test_dia), batch_size=batch_size)
-    cal_loader       = DataLoader(TensorDataset(cal_seqs_all, cal_lbls_all, cal_dia_all), batch_size=batch_size)
+    test_loader        = DataLoader(TensorDataset(test_seqs, test_lbls, test_dia), batch_size=batch_size)
+    test_loader_demo   = DataLoader(TensorDataset(test_seqs, test_lbls, test_demo, test_dia), batch_size=batch_size)
+    cal_loader         = DataLoader(TensorDataset(cal_seqs_all, cal_lbls_all, cal_dia_all), batch_size=batch_size)
+    test_loader_origin = DataLoader(TensorDataset(test_seqs, test_lbls, test_dia, test_origin), batch_size=batch_size)
 
     logger.info(
         f"[db] Teste global: {len(test_seqs)} amostras | Cal global: {len(cal_seqs_all)} amostras "
-        f"| {len(client_loaders)} clientes FL"
+        f"| {len(client_loaders)} clientes FL | partition_mode={partition_mode}"
     )
 
-    return client_loaders, test_loader, vocab, total_train_samples, demographics_by_client, test_loader_demo, cal_loader
+    return (
+        client_loaders, test_loader, vocab, total_train_samples,
+        demographics_by_client, test_loader_demo, cal_loader,
+        test_loader_origin, origin_labels,
+    )
 
 
 def create_synthetic_client(

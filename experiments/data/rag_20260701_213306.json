@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de “curado_pronto” (com alta probabilidade) para este paciente é razoável considerando os resultados dos exames, que se assemelham aos casos anteriores com desfechos favoráveis (“curado_internado”). A predominância de Basofilos NORMAL e Concentração de",
+  "fontes": [
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Creatinina NORMAL, Plaquetas HIGH, Hemoglobina Corpuscular Media NORMAL.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.37279055633516744
+    },
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Creatinina NORMAL, Plaquetas HIGH, Hemoglobina Corpuscular Media NORMAL.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.37279055633516744
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Hemoglobina Corpuscular Media HIGH, Glicose, sangue NORMAL, Volume plaquetario medio NORMAL, TP/INR HIGH, Magnésio NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.40115448243346596
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.1853,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0211,
+      "curado_internado": 0.3841,
+      "melhora_pronto": 0.1688,
+      "melhora_internado_breve": 0.4407,
+      "melhora_internado_grave": 0.1194
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

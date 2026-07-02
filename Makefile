@@ -35,7 +35,8 @@ BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
 
 .PHONY: setup ollama-setup ollama-check \
         test test-integration test-e2e test-all test-cov experiment training training-full \
-        training-full-cuda training-bpsp-only training-hsl-only clean \
+        training-full-cuda training-bpsp-only training-hsl-only \
+        training-iid-contrast training-iid-contrast-cuda clean \
         superlink server-app supernode sim test-pipeline behrt-pooled recalibrate \
         bootstrap-ci seed-sensitivity \
         db-up db-down db-wait fl-server fl-client fl-check \
@@ -149,7 +150,21 @@ training-hsl-only:
 	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LOG_FILE="$$LOG" \
 	$(PYTHON) experiments/training_runner/run_training.py
 
-## Pipeline completo: BPSP-only → HSL-only → federado (BPSP+HSL) → pooled baseline.
+## Treinamento federado com partição IID simulada (pool BPSP+HSL embaralhado,
+## clientes virtuais) — Experimento 3: contraste causal non-IID real (fase 3)
+## vs. IID simulado, mesmo algoritmo/hiperparâmetros/seed. Requer FL_DB_URL.
+training-iid-contrast:
+	@LOG="experiments/logs/training_iid_contrast_$$(date +%Y%m%d_%H%M%S).log"; \
+	FL_ENV=production FL_PARTITION_MODE=iid_simulado FL_LOG_FILE="$$LOG" \
+	$(PYTHON) experiments/training_runner/run_training.py
+
+## Mesma coisa, forçando GPU.
+training-iid-contrast-cuda:
+	@LOG="experiments/logs/training_iid_contrast_cuda_$$(date +%Y%m%d_%H%M%S).log"; \
+	FL_ENV=production FL_DEVICE=cuda FL_PARTITION_MODE=iid_simulado FL_LOG_FILE="$$LOG" \
+	$(PYTHON) experiments/training_runner/run_training.py
+
+## Pipeline completo: BPSP-only → HSL-only → federado (BPSP+HSL) → pooled baseline → IID simulado (contraste).
 ## Sem parametrização externa — env vars definidas internamente.
 ## Requer FL_DB_URL, dados de ambos os hospitais no banco e Ollama rodando com gemma3:4b.
 ## Para trocar o modelo LLM: FL_LLM_MODEL=outro-modelo make training-full
@@ -160,28 +175,32 @@ FL_DP_CLIP     ?= 1.0   # S = norma máxima do update do cliente
 
 training-full:
 	@LOG="experiments/logs/run_complete_$$(date +%Y%m%d_%H%M%S).log"; \
-	echo "=== 1/4 training-bpsp-only ===" | tee -a "$$LOG"; \
+	echo "=== 1/5 training-bpsp-only ===" | tee -a "$$LOG"; \
 	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
-	echo "=== 2/4 training-hsl-only ===" | tee -a "$$LOG"; \
+	echo "=== 2/5 training-hsl-only ===" | tee -a "$$LOG"; \
 	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
-	echo "=== 3/4 training-federated (BPSP+HSL) ===" | tee -a "$$LOG"; \
+	echo "=== 3/5 training-federated (BPSP+HSL, non-IID real) ===" | tee -a "$$LOG"; \
 	FL_ENV=production FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
-	echo "=== 4/4 behrt-pooled baseline ===" | tee -a "$$LOG"; \
-	FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_behrt_pooled.py
+	echo "=== 4/5 behrt-pooled baseline ===" | tee -a "$$LOG"; \
+	FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_behrt_pooled.py; \
+	echo "=== 5/5 training-federated (IID simulado — contraste Experimento 3) ===" | tee -a "$$LOG"; \
+	FL_ENV=production FL_PARTITION_MODE=iid_simulado FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py
 
-## Pipeline completo (mesmas 4 fases de training-full), forçando execução na GPU via FL_DEVICE=cuda.
+## Pipeline completo (mesmas 5 fases de training-full), forçando execução na GPU via FL_DEVICE=cuda.
 ## Requer FL_DB_URL, dados de ambos os hospitais no banco, Ollama rodando com gemma3:4b e CUDA disponível
 ## (validar antes com: .venv/bin/python -c "import torch; print(torch.cuda.is_available())").
 training-full-cuda:
 	@LOG="experiments/logs/run_complete_cuda_$$(date +%Y%m%d_%H%M%S).log"; \
-	echo "=== 1/4 training-bpsp-only (cuda) ===" | tee -a "$$LOG"; \
+	echo "=== 1/5 training-bpsp-only (cuda) ===" | tee -a "$$LOG"; \
 	FL_ENV=production FL_DEVICE=cuda FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
-	echo "=== 2/4 training-hsl-only (cuda) ===" | tee -a "$$LOG"; \
+	echo "=== 2/5 training-hsl-only (cuda) ===" | tee -a "$$LOG"; \
 	FL_ENV=production FL_DEVICE=cuda FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
-	echo "=== 3/4 training-federated (BPSP+HSL, cuda) ===" | tee -a "$$LOG"; \
+	echo "=== 3/5 training-federated (BPSP+HSL, non-IID real, cuda) ===" | tee -a "$$LOG"; \
 	FL_ENV=production FL_DEVICE=cuda FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
-	echo "=== 4/4 behrt-pooled baseline (cuda) ===" | tee -a "$$LOG"; \
-	FL_DEVICE=cuda FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_behrt_pooled.py
+	echo "=== 4/5 behrt-pooled baseline (cuda) ===" | tee -a "$$LOG"; \
+	FL_DEVICE=cuda FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_behrt_pooled.py; \
+	echo "=== 5/5 training-federated (IID simulado — contraste Experimento 3, cuda) ===" | tee -a "$$LOG"; \
+	FL_ENV=production FL_DEVICE=cuda FL_PARTITION_MODE=iid_simulado FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py
 
 # ── Banco de dados (PostgreSQL via Docker) ────────────────────────────────────
 

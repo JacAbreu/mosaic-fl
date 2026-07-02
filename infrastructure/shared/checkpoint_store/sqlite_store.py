@@ -37,7 +37,10 @@ class SQLiteCheckpointStore(CheckpointStore):
         log_file: str = "",
         n_rounds_max: int = 120,
         checkpoint_criterion: str = "f1_macro",
+        partition_mode: str = "natural",
     ) -> int:
+        # fl_trainings do SQLite não tem coluna partition_mode (mesma lacuna já
+        # existente para checkpoint_criterion/métricas de recurso nesta classe).
         started_at = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self._db_path) as conn:
             cur = conn.execute(
@@ -46,8 +49,8 @@ class SQLiteCheckpointStore(CheckpointStore):
                 (algorithm, log_file, n_rounds_max, started_at),
             )
             training_id = cur.lastrowid
-        logger.info("training_registered_sqlite id=%d algorithm=%s criterion=%s",
-                    training_id, algorithm, checkpoint_criterion)
+        logger.info("training_registered_sqlite id=%d algorithm=%s criterion=%s partition_mode=%s (não persistido)",
+                    training_id, algorithm, checkpoint_criterion, partition_mode)
         return training_id
 
     def complete_training(
@@ -74,6 +77,24 @@ class SQLiteCheckpointStore(CheckpointStore):
             "duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%%",
             training_id, best_round, best_accuracy, converged,
             total_duration_s, peak_ram_mb, avg_cpu_pct,
+        )
+
+    def update_evaluation_metrics(
+        self,
+        training_id: int,
+        macro_auc: Optional[float] = None,
+        macro_f1: Optional[float] = None,
+        ece: Optional[float] = None,
+    ) -> None:
+        # fl_trainings do SQLite ainda não tem colunas macro_auc/macro_f1/ece
+        # (schema local, sem Alembic — mesma lacuna já existente para as métricas
+        # de recurso computacional desta classe). O valor completo continua
+        # disponível em evaluation_json, salvo por save(). Loga para não perder
+        # o dado silenciosamente.
+        logger.info(
+            "training_evaluation_metrics_sqlite_not_persisted id=%d macro_auc=%s macro_f1=%s ece=%s "
+            "(ver evaluation_json no checkpoint)",
+            training_id, macro_auc, macro_f1, ece,
         )
 
     def save(

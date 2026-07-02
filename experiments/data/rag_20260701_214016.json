@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "melhora_internado_grave",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"melhora_internado_grave\" (0.81) para este paciente, apesar dos resultados normais em basofilos e concentração de hemoglobina corporal, é um tanto preocupante considerando o padrão observado nos casos similares.  Os casos anteriores consistentemente apontam para uma melhora",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Basofilos NORMAL, Potassio NORMAL, CK NORMAL, DHL NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.30392166329363524
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Basofilos NORMAL, Monocitos NORMAL, Hematocrito NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, RDW NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3583796429151187
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Basofilos NORMAL, Hematocrito NORMAL, Monocitos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Eosinofilos NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3642529249191284
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.3128,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.1788,
+      "curado_internado": 0.0815,
+      "melhora_pronto": 0.011,
+      "melhora_internado_breve": 0.689,
+      "melhora_internado_grave": 0.0791
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}
