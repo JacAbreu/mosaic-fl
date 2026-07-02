@@ -32,8 +32,13 @@ class CheckpointStore(ABC):
         total_duration_s: float = 0.0,
         peak_ram_mb: float = 0.0,
         avg_cpu_pct: float = 0.0,
+        gpu_avg_power_w: Optional[float] = None,
+        gpu_peak_power_w: Optional[float] = None,
+        gpu_energy_wh: Optional[float] = None,
     ) -> None:
-        """Atualiza fl_trainings com resultado final ao término do loop FL."""
+        """Atualiza fl_trainings com resultado final ao término do loop FL.
+
+        gpu_*: None quando não há GPU NVIDIA disponível (treino CPU-only) — não é erro."""
 
     @abstractmethod
     def update_evaluation_metrics(
@@ -42,10 +47,17 @@ class CheckpointStore(ABC):
         macro_auc: Optional[float] = None,
         macro_f1: Optional[float] = None,
         ece: Optional[float] = None,
+        ece_pre: Optional[float] = None,
+        dp_noise_multiplier: Optional[float] = None,
+        dp_max_grad_norm: Optional[float] = None,
+        dp_epsilon_simple: Optional[float] = None,
+        dp_epsilon_rdp: Optional[float] = None,
     ) -> None:
-        """Grava em fl_trainings o AUC-ROC/F1/ECE pós-calibração, calculados após
-        complete_training() (a avaliação final só roda depois do melhor checkpoint
-        ser restaurado). Chamado uma vez por treinamento, ao final da calibração."""
+        """Grava em fl_trainings o AUC-ROC/F1/ECE pós-calibração (+ ECE pré-calibração,
+        ece_pre) e, quando DP-FedAvg está habilitado, os parâmetros e o ε acumulado
+        (composição simples e RDP). Calculados após complete_training() (a avaliação
+        final só roda depois do melhor checkpoint ser restaurado). Chamado uma vez
+        por treinamento, ao final da calibração."""
 
     @abstractmethod
     def save(

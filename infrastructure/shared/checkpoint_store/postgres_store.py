@@ -59,6 +59,9 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         total_duration_s: float = 0.0,
         peak_ram_mb: float = 0.0,
         avg_cpu_pct: float = 0.0,
+        gpu_avg_power_w: Optional[float] = None,
+        gpu_peak_power_w: Optional[float] = None,
+        gpu_energy_wh: Optional[float] = None,
     ) -> None:
         import sqlalchemy as sa
         with self._engine.begin() as conn:
@@ -68,7 +71,8 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "n_rounds_done=:n_rounds_done, best_round=:best_round, "
                     "best_accuracy=:best_accuracy, converged=:converged, "
                     "total_duration_s=:total_duration_s, peak_ram_mb=:peak_ram_mb, "
-                    "avg_cpu_pct=:avg_cpu_pct "
+                    "avg_cpu_pct=:avg_cpu_pct, gpu_avg_power_w=:gpu_avg_power_w, "
+                    "gpu_peak_power_w=:gpu_peak_power_w, gpu_energy_wh=:gpu_energy_wh "
                     "WHERE id=:training_id"
                 ),
                 {
@@ -80,6 +84,9 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "total_duration_s": total_duration_s,
                     "peak_ram_mb":      peak_ram_mb,
                     "avg_cpu_pct":      avg_cpu_pct,
+                    "gpu_avg_power_w":  gpu_avg_power_w,
+                    "gpu_peak_power_w": gpu_peak_power_w,
+                    "gpu_energy_wh":    gpu_energy_wh,
                 },
             )
 
@@ -89,24 +96,39 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         macro_auc: Optional[float] = None,
         macro_f1: Optional[float] = None,
         ece: Optional[float] = None,
+        ece_pre: Optional[float] = None,
+        dp_noise_multiplier: Optional[float] = None,
+        dp_max_grad_norm: Optional[float] = None,
+        dp_epsilon_simple: Optional[float] = None,
+        dp_epsilon_rdp: Optional[float] = None,
     ) -> None:
         import sqlalchemy as sa
         with self._engine.begin() as conn:
             conn.execute(
                 sa.text(
                     "UPDATE metrics.fl_trainings SET macro_auc=:macro_auc, "
-                    "macro_f1=:macro_f1, ece=:ece WHERE id=:training_id"
+                    "macro_f1=:macro_f1, ece=:ece, ece_pre=:ece_pre, "
+                    "dp_noise_multiplier=:dp_noise_multiplier, dp_max_grad_norm=:dp_max_grad_norm, "
+                    "dp_epsilon_simple=:dp_epsilon_simple, dp_epsilon_rdp=:dp_epsilon_rdp "
+                    "WHERE id=:training_id"
                 ),
                 {
-                    "training_id": training_id,
-                    "macro_auc":   macro_auc,
-                    "macro_f1":    macro_f1,
-                    "ece":         ece,
+                    "training_id":         training_id,
+                    "macro_auc":           macro_auc,
+                    "macro_f1":            macro_f1,
+                    "ece":                 ece,
+                    "ece_pre":             ece_pre,
+                    "dp_noise_multiplier": dp_noise_multiplier,
+                    "dp_max_grad_norm":    dp_max_grad_norm,
+                    "dp_epsilon_simple":   dp_epsilon_simple,
+                    "dp_epsilon_rdp":      dp_epsilon_rdp,
                 },
             )
         logger.info(
-            "training_evaluation_metrics_saved id=%d macro_auc=%s macro_f1=%s ece=%s",
-            training_id, macro_auc, macro_f1, ece,
+            "training_evaluation_metrics_saved id=%d macro_auc=%s macro_f1=%s ece=%s ece_pre=%s "
+            "dp_sigma=%s dp_clip=%s dp_eps_simple=%s dp_eps_rdp=%s",
+            training_id, macro_auc, macro_f1, ece, ece_pre,
+            dp_noise_multiplier, dp_max_grad_norm, dp_epsilon_simple, dp_epsilon_rdp,
         )
         logger.info(
             "training_completed_postgres id=%d best_round=%d best_accuracy=%.4f converged=%s "

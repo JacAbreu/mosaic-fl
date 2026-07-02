@@ -63,6 +63,9 @@ class SQLiteCheckpointStore(CheckpointStore):
         total_duration_s: float = 0.0,
         peak_ram_mb: float = 0.0,
         avg_cpu_pct: float = 0.0,
+        gpu_avg_power_w: Optional[float] = None,
+        gpu_peak_power_w: Optional[float] = None,
+        gpu_energy_wh: Optional[float] = None,
     ) -> None:
         completed_at = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self._db_path) as conn:
@@ -74,9 +77,10 @@ class SQLiteCheckpointStore(CheckpointStore):
             )
         logger.info(
             "training_completed_sqlite id=%d best_round=%d best_accuracy=%.4f converged=%s "
-            "duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%%",
+            "duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%% gpu_avg_power=%sW gpu_energy=%sWh "
+            "(campos de recurso/GPU não persistidos no schema local — ver evaluation_json)",
             training_id, best_round, best_accuracy, converged,
-            total_duration_s, peak_ram_mb, avg_cpu_pct,
+            total_duration_s, peak_ram_mb, avg_cpu_pct, gpu_avg_power_w, gpu_energy_wh,
         )
 
     def update_evaluation_metrics(
@@ -85,16 +89,21 @@ class SQLiteCheckpointStore(CheckpointStore):
         macro_auc: Optional[float] = None,
         macro_f1: Optional[float] = None,
         ece: Optional[float] = None,
+        ece_pre: Optional[float] = None,
+        dp_noise_multiplier: Optional[float] = None,
+        dp_max_grad_norm: Optional[float] = None,
+        dp_epsilon_simple: Optional[float] = None,
+        dp_epsilon_rdp: Optional[float] = None,
     ) -> None:
-        # fl_trainings do SQLite ainda não tem colunas macro_auc/macro_f1/ece
-        # (schema local, sem Alembic — mesma lacuna já existente para as métricas
-        # de recurso computacional desta classe). O valor completo continua
-        # disponível em evaluation_json, salvo por save(). Loga para não perder
-        # o dado silenciosamente.
+        # fl_trainings do SQLite ainda não tem essas colunas (schema local, sem
+        # Alembic — mesma lacuna já existente para as métricas de recurso
+        # computacional desta classe). O valor completo continua disponível em
+        # evaluation_json, salvo por save(). Loga para não perder o dado silenciosamente.
         logger.info(
-            "training_evaluation_metrics_sqlite_not_persisted id=%d macro_auc=%s macro_f1=%s ece=%s "
-            "(ver evaluation_json no checkpoint)",
-            training_id, macro_auc, macro_f1, ece,
+            "training_evaluation_metrics_sqlite_not_persisted id=%d macro_auc=%s macro_f1=%s ece=%s ece_pre=%s "
+            "dp_sigma=%s dp_clip=%s dp_eps_simple=%s dp_eps_rdp=%s (ver evaluation_json no checkpoint)",
+            training_id, macro_auc, macro_f1, ece, ece_pre,
+            dp_noise_multiplier, dp_max_grad_norm, dp_epsilon_simple, dp_epsilon_rdp,
         )
 
     def save(

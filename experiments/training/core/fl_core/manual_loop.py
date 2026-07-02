@@ -28,6 +28,27 @@ from .evaluation import evaluate_global_model
 logger = logging.getLogger(__name__)
 
 
+def _sample_gpu_power_w() -> Optional[float]:
+    """Amostra a potência instantânea da GPU (Watts) via nvidia-smi.
+
+    Retorna None em qualquer falha (sem GPU NVIDIA, driver ausente, timeout) —
+    nunca interrompe o treinamento por causa de coleta de métrica de energia.
+    Relevante para viabilidade de implantação em ambientes com energia/água
+    limitadas para resfriamento — custo energético real, não estimado.
+    """
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=power.draw", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=2.0,
+        )
+        if result.returncode != 0:
+            return None
+        return float(result.stdout.strip().splitlines()[0])
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, IndexError):
+        return None
+
+
 def _evaluate_subgroups(
     model: SimplifiedBEHRT,
     test_loader_origin: DataLoader,
@@ -124,13 +145,24 @@ def run_federated_learning_manual(
     best_f1            = 0.0  # f1_macro na rodada do melhor checkpoint (sempre rastreado)
     best_accuracy      = 0.0  # accuracy na rodada do melhor checkpoint (sempre rastreado)
     best_round         = 0
+    dp_epsilon_simple: Optional[float] = None  # None quando DP desabilitado (FL_DP_NOISE=0)
     checkpoint_store = override_checkpoint_store if override_checkpoint_store is not None else get_checkpoint_store(FL_DB_URL)
+
+    # RDP (Rényi DP) via opacus — cota mais apertada que a composição simples acima,
+    # para o mesmo ruído aplicado (McMahan et al. 2018 continua sendo o mecanismo;
+    # isto só troca a contabilidade/prova de privacidade). sample_rate=1.0 porque
+    # os 2 clientes participam de toda rodada — sem subamostragem, sem amplificação.
+    _rdp_accountant = None
+    if DP_NOISE_MULTIPLIER > 0:
+        from opacus.accountants import RDPAccountant
+        _rdp_accountant = RDPAccountant()
 
     # Monitoramento de recursos computacionais (psutil)
     _proc = psutil.Process()
     _proc.cpu_percent(interval=None)  # primeira chamada calibra — descartada; próximas retornam % real
     _peak_ram_mb  = 0.0
     _cpu_samples: List[float] = []
+    _gpu_power_samples: List[float] = []  # fica vazio se não houver GPU NVIDIA — normal em treino CPU-only
 
     # Registra o treinamento antes do loop — garante 1 checkpoint por treinamento
     training_id: Optional[int] = None
@@ -189,7 +221,10 @@ def run_federated_learning_manual(
             tau_eff = None
 
         if DP_NOISE_MULTIPLIER > 0:
-            apply_dp_noise(global_state, round_num, len(client_loaders), DP_NOISE_MULTIPLIER, DP_MAX_GRAD_NORM)
+            dp_epsilon_simple = apply_dp_noise(
+                global_state, round_num, len(client_loaders), DP_NOISE_MULTIPLIER, DP_MAX_GRAD_NORM
+            )
+            _rdp_accountant.step(noise_multiplier=DP_NOISE_MULTIPLIER, sample_rate=1.0)
 
         global_model.load_state_dict(global_state)
 
@@ -202,6 +237,9 @@ def run_federated_learning_manual(
         _cpu_pct = _proc.cpu_percent(interval=None)
         _peak_ram_mb = max(_peak_ram_mb, _ram_mb)
         _cpu_samples.append(_cpu_pct)
+        _gpu_power_w = _sample_gpu_power_w()
+        if _gpu_power_w is not None:
+            _gpu_power_samples.append(_gpu_power_w)
 
         logger.info(
             f"  [Servidor] Rodada {round_num} em {round_duration:.2f}s | "
@@ -262,9 +300,24 @@ def run_federated_learning_manual(
     overall_duration = time.time() - overall_start
     _avg_cpu = sum(_cpu_samples) / len(_cpu_samples) if _cpu_samples else 0.0
 
+    # Energia estimada por amostragem (potência média × duração) — não é medição
+    # contínua, é uma estimativa best-effort. None quando não há GPU NVIDIA (CPU-only).
+    _gpu_avg_power_w:  Optional[float] = None
+    _gpu_peak_power_w: Optional[float] = None
+    _gpu_energy_wh:    Optional[float] = None
+    if _gpu_power_samples:
+        _gpu_avg_power_w  = sum(_gpu_power_samples) / len(_gpu_power_samples)
+        _gpu_peak_power_w = max(_gpu_power_samples)
+        _gpu_energy_wh    = _gpu_avg_power_w * (overall_duration / 3600)
+
     logger.info(
-        "resource_summary duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%% rounds=%d",
-        overall_duration, _peak_ram_mb, _avg_cpu, round_num,
+        "resource_summary duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%% "
+        "gpu_avg_power=%sW gpu_peak_power=%sW gpu_energy=%sWh rounds=%d",
+        overall_duration, _peak_ram_mb, _avg_cpu,
+        f"{_gpu_avg_power_w:.1f}" if _gpu_avg_power_w is not None else "n/a",
+        f"{_gpu_peak_power_w:.1f}" if _gpu_peak_power_w is not None else "n/a",
+        f"{_gpu_energy_wh:.4f}" if _gpu_energy_wh is not None else "n/a",
+        round_num,
     )
 
     if best_round == 0:
@@ -284,6 +337,9 @@ def run_federated_learning_manual(
             total_duration_s=overall_duration,
             peak_ram_mb=_peak_ram_mb,
             avg_cpu_pct=_avg_cpu,
+            gpu_avg_power_w=_gpu_avg_power_w,
+            gpu_peak_power_w=_gpu_peak_power_w,
+            gpu_energy_wh=_gpu_energy_wh,
         )
 
     best_ckpt = checkpoint_store.load_best(training_id=training_id)
@@ -404,6 +460,14 @@ def run_federated_learning_manual(
         except Exception as exc:
             logger.warning("Falha ao avaliar por subgrupo de origem: %s", exc)
 
+    # ε via RDP (opacus) — mesmo mecanismo de ruído, cota mais apertada que a
+    # composição simples. delta=1e-5 igual ao default de apply_dp_noise, para
+    # os dois números serem diretamente comparáveis.
+    _DP_DELTA = 1e-5
+    dp_epsilon_rdp: Optional[float] = None
+    if _rdp_accountant is not None:
+        dp_epsilon_rdp = _rdp_accountant.get_epsilon(delta=_DP_DELTA)
+
     import dataclasses
     evaluation_payload = {
         "best_round":       best_round,
@@ -416,7 +480,18 @@ def run_federated_learning_manual(
         "post_calibration": dataclasses.asdict(report_cal) if report_cal  else None,
         "partition_mode":   partition_mode,
         "subgroup_metrics": subgroup_metrics,
+        "dp_noise_multiplier": DP_NOISE_MULTIPLIER,
+        "dp_max_grad_norm":    DP_MAX_GRAD_NORM,
+        "dp_epsilon_simple":   dp_epsilon_simple,  # None se DP desabilitado — composição gaussiana simples
+        "dp_epsilon_rdp":      dp_epsilon_rdp,      # None se DP desabilitado — Rényi DP (opacus), cota mais apertada
     }
+    if dp_epsilon_simple is not None:
+        logger.info(
+            "dp_summary sigma=%.2f clip=%.2f rounds=%d delta=%.0e "
+            "epsilon_simple=%.3f epsilon_rdp=%.3f (rdp = cota mais apertada, mesmo ruído)",
+            DP_NOISE_MULTIPLIER, DP_MAX_GRAD_NORM, round_num, _DP_DELTA,
+            dp_epsilon_simple, dp_epsilon_rdp,
+        )
 
     # Preferência: pós-calibração (report_cal) > pré-calibração (report_raw) > None.
     # Fica disponível em history (→ metrics_store, via orchestrator) e em fl_trainings
@@ -425,6 +500,13 @@ def run_federated_learning_manual(
     history["macro_auc"] = _best_report.macro_auc if _best_report else None
     history["macro_f1_report"] = _best_report.macro_f1 if _best_report else None
     history["ece"] = _best_report.calibration.ece if _best_report else None
+    # ece_pre é sempre a saída bruta do modelo (report_raw), independente de report_cal
+    # existir ou não — não segue a preferência pós>pré usada nos outros campos, porque
+    # aqui o objetivo é exatamente o par antes/depois lado a lado.
+    history["ece_pre"] = report_raw.calibration.ece if report_raw else None
+
+    history["dp_epsilon_simple"] = dp_epsilon_simple
+    history["dp_epsilon_rdp"]    = dp_epsilon_rdp
 
     if training_id is not None:
         try:
@@ -433,9 +515,14 @@ def run_federated_learning_manual(
                 macro_auc=history["macro_auc"],
                 macro_f1=history["macro_f1_report"],
                 ece=history["ece"],
+                ece_pre=history["ece_pre"],
+                dp_noise_multiplier=DP_NOISE_MULTIPLIER if dp_epsilon_simple is not None else None,
+                dp_max_grad_norm=DP_MAX_GRAD_NORM if dp_epsilon_simple is not None else None,
+                dp_epsilon_simple=dp_epsilon_simple,
+                dp_epsilon_rdp=dp_epsilon_rdp,
             )
         except Exception as exc:
-            logger.warning("Falha ao salvar macro_auc/macro_f1/ece em fl_trainings: %s", exc)
+            logger.warning("Falha ao salvar macro_auc/macro_f1/ece/ece_pre/dp_* em fl_trainings: %s", exc)
 
     # Banco é a fonte da verdade — persiste junto com o checkpoint.
     # O arquivo é mantido como cache de leitura rápida (sobrescrito a cada run).

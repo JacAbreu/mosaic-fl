@@ -220,16 +220,9 @@
     ]
   },
   "partition_mode": "natural",
-  "subgroup_metrics": {
-    "BPSP": {
-      "n": 20,
-      "accuracy": 0.3,
-      "f1_macro": 0.21904761904761902
-    },
-    "HSL": {
-      "n": 10,
-      "accuracy": 0.3,
-      "f1_macro": 0.29333333333333333
-    }
-  }
+  "subgroup_metrics": null,
+  "dp_noise_multiplier": 0.0,
+  "dp_max_grad_norm": 1.0,
+  "dp_epsilon_simple": null,
+  "dp_epsilon_rdp": null
 }

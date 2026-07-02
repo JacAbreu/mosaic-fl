@@ -792,3 +792,85 @@ Antes de disparar o Treinamento Real de quinta-feira, dois itens foram identific
 ---
 
 **Conclusão revista:** implementação da sessão de 2026-07-01 (AUC-ROC no banco + Fase 5) validada sem erros. **As duas pendências acima (ECE pré-calibração + custo energético) devem ser resolvidas no início de 2026-07-02 antes de disparar o Treinamento Real** — são adições de registro, não mudanças de comportamento, e não exigem novo ciclo de validação funcional completa.
+
+---
+
+## Sessão de 2026-07-02 (quinta-feira) — auditoria de fontes, ECE pré-calibração e revisão do DP-FedAvg
+
+### Aviso de credibilidade — dois documentos gerados fora desta sessão continham dados incorretos
+
+No início da sessão, a autora trouxe `AVALIACAO_MOSAIC_FL.md` (novo) e a "Avaliação 5" adicionada a `AVALIACAO_PROJETO.md` (commit `9b41188`, 2026-07-01 22:37) — gerados por uma instância separada do Claude rodando no notebook da autora, sem acesso ao código real desta sessão, enquanto ela revisava a documentação em paralelo.
+
+**Três afirmações técnicas específicas desses documentos foram checadas contra o código real e nenhuma se confirmou:**
+1. Migration 016 — os documentos afirmam colunas `best_f1_macro`, `best_auc_roc`, `ece_pre`, `ece_post_isotonic`. A migration real tem `macro_auc`, `macro_f1`, `ece`.
+2. Testes — os documentos afirmam "417 passando, 4 falhando". Confirmado nesta sessão: 545 passando, 0 falhando.
+3. "Bug fix: training_id ausente no save final" em `postgres_store.py` — o código já passava `training_id` corretamente; não havia bug para corrigir.
+
+**Lição registrada:** uma sessão de IA sem acesso ao repositório real vai preencher detalhes técnicos específicos (nomes de coluna, contagem de testes) de forma plausível, não verificada. Esses dois documentos devem ser tratados como **lista de pontos a investigar**, não como fatos — cada afirmação técnica específica precisa ser conferida contra o código antes de virar ação. As partes qualitativas/narrativas desses documentos (não verificadas item a item nesta sessão) devem ser lidas com a mesma cautela.
+
+### Pendência A resolvida — `ece_pre` gravado no banco
+
+Migration 018 (`fl_trainings_ece_pre`): coluna `ece_pre` adicionada a `metrics.fl_trainings`, par direto com a coluna `ece` (que passa a ser explicitamente documentada como pós-temperature-scaling). `manual_loop.py` captura `report_raw.calibration.ece` (sempre a saída bruta do modelo, independente de `report_cal` existir) e persiste via `checkpoint_store.update_evaluation_metrics(ece_pre=...)`. Validado com smoke test: `ece_pre=0,0509` vs. `ece=0,0856` (pós) em dados sintéticos — os dois valores chegam distintos e corretos.
+
+### Auditoria do DP-FedAvg — mecanismo correto, contabilidade de privacidade a melhorar
+
+A autora pediu revisão (não execução) do DP-FedAvg existente, e esclareceu que "DP-SGD" nas suas anotações de aula se refere ao mesmo mecanismo já implementado (DP-FedAvg, McMahan et al. 2018 — clipping do update do cliente + ruído gaussiano na agregação do servidor), não a DP-SGD por amostra (Abadi et al. 2016).
+
+**Auditoria linha a linha (`client.py` + `aggregation.py`) — conclusão: o mecanismo está matematicamente correto:**
+- Clipping por cliente calcula a norma L2 do update completo (concatenação de todos os parâmetros) e escala tudo pelo mesmo fator — bate com a definição de DP-FedAvg.
+- Ruído no servidor usa `σ·S/n_clientes`, consistente com a fórmula do paper original.
+- Ordem de operações correta (ruído aplicado antes de carregar o estado no modelo).
+- Ruído aplicado independente do algoritmo de agregação (FedAvg ou FedNova).
+
+**Achado real corrigido nesta sessão:** `apply_dp_noise()` já calculava e logava o ε acumulado a cada rodada, mas o valor de retorno era descartado em `manual_loop.py` — nunca chegava ao JSON de avaliação nem ao banco. Corrigido: `dp_epsilon_accumulated` agora é capturado, incluído em `evaluation_payload` junto com `dp_noise_multiplier`/`dp_max_grad_norm`, e logado num resumo dedicado (`dp_summary`) ao final do treino.
+
+### Pesquisa sobre estado da arte de contabilidade de privacidade — fonte verificada
+
+A autora trouxe [Guo et al. 2024, *Scientific Reports* v.14, art. 26770](https://www.nature.com/articles/s41598-024-77428-0) como fonte para checar afirmações de uma pesquisa anterior (feita por ela em outra ferramenta) que citava um "Microsoft DP-SGD Calculator" e uma "MetricGate Moments Accountant" com uma fórmula (`Noise Multiplier = 2·B·K·μ/n_i`) não reconhecível na literatura padrão.
+
+**Verificação do artigo (fonte real, revisada por pares):**
+- Não cita McMahan et al. 2018 diretamente (usa "FedAvg" genérico); não usa a formulação clássica de ruído gaussiano (propõe método próprio, Privacy Loss Distribution + FFT); contexto é visão computacional com muitos dispositivos (MNIST/Fashion-MNIST/CIFAR10), não FL cross-silo com poucos clientes como o MOSAIC-FL — **não é um match metodológico direto**.
+- **Nem "Microsoft DP-SGD Calculator" nem "MetricGate Moments Accountant" aparecem no artigo** — reforça que esses nomes da pesquisa anterior eram provavelmente fabricados.
+- Citação útil e citável: *"MA [Moments Accountant] gives an upper bound... currently considered to be a loose upper bound"* — confirma, com fonte real, que mesmo métodos mais apertados que "composição simples" (que o MOSAIC-FL usa hoje) têm limitação reconhecida na literatura.
+- Faixa de ε usada no artigo (1 / 1,5 / 2 / 3) — referência de ordem de grandeza para a curva Acc×ε, se vier a ser calculada.
+
+**Decisão:** este paper não substitui McMahan et al. 2018 / Abadi et al. 2016 como referência do mecanismo — serve como citação de apoio na discussão de limitação da contabilidade de privacidade.
+
+### Decisão sobre a curva Acurácia×ε
+
+A autora reconsiderou: quer sim calcular a curva Acc×ε (não mais "sem a curva" como na conversa anterior), condicionado a garantir que o método de cálculo do ε esteja alinhado com o que a literatura recomenda — não só "composição simples". Dado que RDP (Rényi Differential Privacy) é o método padrão em bibliotecas de referência (Opacus, TensorFlow Privacy) e produz cotas mais apertadas que composição simples, a via de ação proposta é usar a classe de contabilidade (accountant) do Opacus como complemento — sem adotar o restante do Opacus (treino DP-SGD por amostra), só a peça de contabilidade RDP.
+
+### Contabilidade RDP implementada — `opacus.RDPAccountant` como complemento
+
+**Confirmado pela autora e implementado.** `opacus>=1.6.0` instalado e adicionado às dependências do projeto (`pyproject.toml`). O mecanismo de DP-FedAvg em si (`client.py` + `aggregation.py::apply_dp_noise`) não mudou — a mudança é só na contabilidade/prova de privacidade reportada.
+
+**Implementação:**
+- `manual_loop.py`: um `RDPAccountant()` é instanciado quando `DP_NOISE_MULTIPLIER > 0`, alimentado a cada rodada via `.step(noise_multiplier=σ, sample_rate=1.0)` — `sample_rate=1.0` porque os 2 clientes participam de toda rodada (sem subamostragem, então sem amplificação de privacidade por subamostragem, que não se aplicaria de qualquer forma a apenas 2 clientes).
+- Ao final do treino, `dp_epsilon_rdp = accountant.get_epsilon(delta=1e-5)` — mesmo δ usado por `apply_dp_noise()`, para os dois valores (`dp_epsilon_simple` e `dp_epsilon_rdp`) serem diretamente comparáveis.
+- Migration 019 (`fl_trainings_dp_epsilon`): colunas `dp_noise_multiplier`, `dp_max_grad_norm`, `dp_epsilon_simple`, `dp_epsilon_rdp` em `metrics.fl_trainings` — dá pra reconstruir a curva Acc×ε inteira via SQL direto, sem re-parsing de log ou JSONB, assim que os treinos com DP forem executados.
+
+**Validação (smoke test, σ=1,0, clip=1,0, 5 rodadas sintéticas):**
+
+| Contabilidade | ε calculado |
+|---|---|
+| Composição simples (já existia) | 24,22 |
+| RDP (opacus, novo) | **12,30** — quase 2× mais apertado |
+
+Confirmado também que, com DP desabilitado (padrão), todos os 4 campos novos ficam `None` sem quebrar nada — 545 testes passando antes e depois da mudança.
+
+**Estado para o Treinamento Real de hoje:** infraestrutura pronta para rodar a curva Acc×ε (Exp 17/18/19, σ=1,0/0,5/2,0) com contabilidade de privacidade alinhada ao padrão de literatura (RDP), reportando também a cota conservadora (composição simples) lado a lado para transparência. A decisão de quando efetivamente rodar a curva completa (multiplica o tempo de treino por 3, um por σ) fica para a autora, dado o tempo disponível antes da defesa.
+
+### Custo energético (Pendência B) resolvido — coleta real via `nvidia-smi`
+
+Motivação registrada pela autora: viabilidade de implantação real do MOSAIC-FL em ambientes com energia e água limitadas para resfriamento — o custo energético do treinamento precisa ser **mensurado**, não estimado por fora, para que a seção de viabilidade do TCC informe de forma real o que seria necessário para manter o modelo acessível nesses contextos.
+
+**Implementação:**
+- `manual_loop.py`: `_sample_gpu_power_w()` — amostra `nvidia-smi --query-gpu=power.draw` uma vez por rodada, na mesma cadência da amostragem de CPU/RAM (psutil) já existente. Retorna `None` em qualquer falha (sem GPU NVIDIA, driver ausente, timeout de 2s) — nunca interrompe o treinamento por causa da coleta.
+- Ao final: potência média e pico (W) calculados a partir das amostras; energia total estimada em Wh = potência média × duração em horas.
+- Migration 020 (`fl_trainings_gpu_energy`): colunas `gpu_avg_power_w`, `gpu_peak_power_w`, `gpu_energy_wh` em `metrics.fl_trainings`, ao lado de `peak_ram_mb`/`avg_cpu_pct` (já existentes desde a migration 015).
+
+**Validado:** sampler confirmado contra `nvidia-smi` direto (7,89W idle, bate). Smoke test de ponta a ponta: 3 rodadas sintéticas → `gpu_avg_power_w=7,44W`, `gpu_peak_power_w=7,45W`, `gpu_energy_wh=0,0019`. 545 testes passando.
+
+**Limitação assumida conscientemente, não resolvida agora:** a coleta cobre só a GPU. Medir o consumo da CPU exigiria acesso à interface RAPL/powercap do Linux (`/sys/class/powercap/intel-rapl/`), mais específica de plataforma e mais frágil — fora de escopo desta sessão. Isso é relevante justamente para o cenário que motivou o pedido: um ambiente sem GPU dedicada (só CPU) hoje não tem custo energético medido automaticamente pelo MOSAIC-FL, só estimável por fora (ex.: TDP nominal do processador × tempo). Registrado como lacuna conhecida, não como pendência imediata.
+
+**É uma estimativa por amostragem, não medição contínua** — a potência é lida uma vez por rodada (não continuamente), então picos muito curtos entre amostras podem não ser capturados. Suficiente para uma estimativa de energia total razoável, mas deve ser descrito como tal no texto de metodologia (não afirmar "medição exata").
