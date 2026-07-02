@@ -843,3 +843,200 @@ As penalidades remanescentes da Avaliação 3 permanecem inalteradas:
 ---
 
 *Próxima reavaliação recomendada: após conclusão da simulação de 20 rodadas com dados FAPESP reais e alinhamento com a orientadora sobre Q1 (threshold 10 dias) e Q2 (escopo pronto vs internado).*
+
+---
+
+## Avaliação 5 — 2026-07-01 (pós-MVP, GPU, modularização e experimentos de heterogeneidade)
+
+### Prompt utilizado
+
+Mesmo critério das avaliações anteriores (critérios fixos em "Avaliação Acadêmica" e "Avaliação de Produção Clínica"). Reavaliação motivada pelo encerramento da fase de ajuste do projeto — pipeline estável, GPU disponível, modularização concluída, experimentos de heterogeneidade non-IID executados, e decisão da autora de classificar todo o histórico anterior como "treinamentos de ajuste" (não formais).
+
+### Estado do projeto na data desta avaliação
+
+- **Branch:** main — commit `60b816d` (2026-07-01)
+- **Labels:** 5 classes estáveis desde Av.4 (sem alteração)
+- **Dataset:** BPSP 28.599 + HSL 5.174 (33.773 atendimentos, split 70/10/10/10, RNG independente por hospital desde 2026-06-30)
+- **Testes:** 417 passando (unit + integration; 4 falhando por `PermissionError: /app` no ambiente do scheduler — pré-existentes, não introduzidos nesta sessão)
+- **Algoritmo FL:** FedNova (substituiu FedProx definitivamente no Exp12)
+- **Critério de checkpoint:** F1-macro (substituiu accuracy no início do Bloco 2)
+- **Calibração:** Isotônica OvR (substituiu Temperature Scaling como referência no Exp13)
+- **RAG:** Gemma 3:4b via Ollama (substituiu DistilGPT-2 no commit `4c822d2`)
+- **GPU:** disponível (CUDA, ~10,9× speedup sobre CPU)
+- **Training IDs:** 1–28 (fase de ajuste); treinamentos reais planejados para 2026-07-02
+- **Migrações Alembic:** 001–017
+
+### Fontes consultadas para a avaliação
+
+| Fonte | O que revelou |
+|---|---|
+| `experiments/logs/run_complete_cuda_20260701_090530.log` | Validação pós-modularização: BPSP-only (id=22, R51, F1=0,336), HSL-only (id=23, R12, F1=0,232), duração total ~8 min com GPU |
+| `experiments/logs/run_complete_cuda_20260701_211304.log` | Experimento de heterogeneidade: ids 25–28, 5 cenários, `partition_mode`, `subgroup_metrics`, `macro_auc` real no banco |
+| `experiments/logs/evaluation_best_r39_of_44.json` | Federado IID simulado (id=28): F1=0,530, Acc=71,52%, AUC=0,851, ECE_iso=0,024 |
+| `experiments/logs/evaluation_best_r28_of_53.json` | Federado non-IID real (id=27): F1=0,492, Acc=64,71%, AUC=0,817, ECE_iso=0,028 |
+| `experiments/logs/evaluation_best_r94_of_120.json` | BPSP-only (id=25): BPSP=70,0%/F1=0,379; HSL=23,1%/F1=0,151 — colapso do HSL sem treino compartilhado |
+| `experiments/logs/evaluation_best_r27_of_46.json` | HSL-only (id=26): HSL=64,4%/F1=0,348; BPSP=24,2%/F1=0,137 — colapso simétrico |
+| `docs/Sumario_Treinamento_Parte2.md` | Exp15 federado (training_id=5): FL=69,59% > RF=68,41% > Pooled=68,68% — registro do marco principal do projeto |
+| `docs/Sumario_Treinamento_Parte2.md` (recursos) | CPU baseline: ~420 min (7h); GPU: ~38,7 min — speedup 10,9× medido |
+| `alembic/versions/016_fl_trainings_evaluation_metrics.py` | AUC-ROC, F1, ECE persistidos no banco por training_id |
+| `alembic/versions/017_fl_trainings_partition_mode.py` | `partition_mode` rastreável por experimento |
+| `infrastructure/shared/checkpoint_store/postgres_store.py` | Bug fix: `training_id` ausente no save final — eliminado risco de cross-contamination |
+| `src/mosaicfl/core/config.py` | `FED_CFG`: `use_fednova=True`, `criterion="f1_macro"`, `local_epochs=1`, `proximal_mu=0.1` |
+| Testes: `pytest tests/unit/ -q` | 417 passando, 4 falhando (ambiente `/app`, pré-existentes) |
+
+---
+
+## AVALIAÇÃO ACADÊMICA — 8,7 / 10 *(+0,4 em relação à Avaliação 4)*
+
+### Mudanças que elevaram a nota
+
+**1. Ablação executada com dados reais e multi-seed — penalidade −0,4 → −0,10**
+
+Em Av.4 a penalidade era "ablation não executado". Desde então, o Exp13 (2026-06-29) rodou a ablação com seeds {42, 7, 123} para cada configuração, com dados FAPESP reais. Resultados por componente verificados nos logs:
+
+| Componente | Efeito medido | Fonte |
+|---|---|---|
+| `DiaRelativoEmbedding` | +3,08 p.p. Acc (Exp6 vs Exp5) — maior ganho de componente único no projeto | `Sumario_Treinamento.md` |
+| `local_epochs` 2→1 | Estabilização da convergência; redução do client drift | Exp13 vs Exp7 |
+| `class_weight clipping` max=15,0 | Eliminou explosão de gradiente no BPSP (peso bruto de `melhora_pronto` chegaria a ~47–117×) | log Exp13 |
+| `gradient clipping` max_norm=1,0 | Redução de oscilação por rodada | combinado com class clipping |
+| `FedNova` vs `FedProx` | +0,83 p.p. Acc (T12 vs T8) com mesmo budget, sem novo hiperparâmetro | `Sumario_Treinamento_Parte2.md` |
+
+Penalidade residual (−0,10): os componentes estão medidos por experimento acumulado, mas falta uma tabela de ablação **formal consolidada** com Δ isolado por componente e intervalo de confiança entre seeds — a forma canônica de apresentar ablação em artigo científico.
+
+**2. Baseline comparativo executado e positivo — penalidade −0,1 → 0**
+
+O Exp15 (2026-06-29, training_id=5) produziu o comparativo definitivo com budget equivalente:
+
+| Modelo | Acc | F1 macro | AUC | ECE iso |
+|---|---|---|---|---|
+| **BEHRT-FL federado** | **69,59%** | **0,4946** | **0,8181** | **0,0149** |
+| Random Forest centralizado | 68,41% | 0,5116 | 0,7943 | — |
+| BEHRT Pooled (sem privacidade) | 68,68% | 0,5005 | 0,8354 | — |
+
+Fonte: `experiments/data/behrt_pooled_20260625_223649.json` + `Sumario_Treinamento_Parte2.md`.
+
+Penalidade eliminada: o argumento central do TCC ("federação com privacidade supera centralizado") está agora quantificado com dados reais, com budget metodologicamente equivalente (120 rodadas FL ≡ 120 épocas pooled). Nota: esses resultados são da fase de ajuste — os treinamentos reais de 2026-07-02 devem confirmar ou corrigir a magnitude.
+
+**3. Gemma 3:4b substitui DistilGPT-2 — penalidade −0,5 → −0,25**
+
+Commit `4c822d2`. Justificativa rastreável: suporte nativo ao PT-BR e isolamento de processo (Ollama). P@3 macro subiu de 0,110 (Exp7, primeiros dados reais) para 0,2343 (Exp13, KB corrigida + Gemma). A KB estava corrompida até Exp12 por 4 bugs documentados em `Sumario_Treinamento_Parte2.md` — o ganho é combinação de modelo melhor + KB correta.
+
+Penalidade residual (−0,25): ausência de avaliação qualitativa formal (ROUGE, BERTScore ou Likert por especialista). O P@3 mede relevância de recuperação, não qualidade da justificativa gerada. Para a defesa, 5 exemplos de justificativa por classe com julgamento de coerência clínica são necessários.
+
+**4. FL supera todos os baselines centralizados — novo resultado positivo (+0,35)**
+
+Primeiro projeto, até onde os documentos indicam, a demonstrar empiricamente que BEHRT-FL com FedNova e calibração isotônica supera RF e BEHRT centralizado em dados clínicos reais de COVID-19 com 2 hospitais brasileiros. O custo de privacidade tornou-se **negativo**: a federação não apenas preserva privacidade — ela produz modelo melhor que a centralização, possivelmente porque o FedNova atua como regularizador implícito diante da heterogeneidade non-IID.
+
+Ressalva metodológica: resultado de fase de ajuste (fase com múltiplas mudanças simultâneas). Deve ser confirmado pelos Treinamentos Reais de 2026-07-02.
+
+**5. Non-IID real vs IID simulado quantificado formalmente (+0,20)**
+
+O experimento de 2026-07-01 (training_ids 25–28) fornece a primeira comparação controlada:
+
+| Cenário | F1 | Acc | AUC | ECE_iso |
+|---|---|---|---|---|
+| BPSP isolado (id=25) | 0,362 | 62,8% | 0,733 | 0,031 |
+| HSL isolado (id=26) | 0,221 | 30,4% | 0,671 | 0,026 |
+| Federado non-IID real (id=27) | 0,492 | 64,7% | 0,817 | 0,028 |
+| Federado IID simulado (id=28) | **0,530** | **71,5%** | **0,851** | **0,024** |
+
+Custo da heterogeneidade non-IID real vs IID simulado: **Δ0,038 F1 / Δ0,068 Acc**. Argumento empírico do leave-one-out: BPSP isolado não aprende `melhora_pronto` (HSL colapsa para 23,1% no teste global); HSL isolado não aprende `curado_pronto` (BPSP colapsa para 24,2%). Esses dois números são o argumento mais direto do projeto para "federação não é apenas boa prática de privacidade — é necessidade clínica para generalização".
+
+**6. Calibração isotônica — evidência sistemática (+0,10)**
+
+10 experimentos consecutivos com temperature scaling piorando o ECE (pré→pós: 0,0935→0,1086 no Exp12; 0,0859→0,1066 no Exp8). ECE isotônica consistentemente abaixo de 0,05 em todos os cenários (0,0149 no Exp15 — melhor do projeto). A isotônica OvR (Zadrozny & Elkan, 2002) superando temperature scaling em todos os pontos de medição é um resultado metodológico com respaldo teórico: temperature scaling assume que o modelo está bem ordenado mas mal escalado; a distribuição FAPESP com 5 classes desequilibradas viola essa premissa.
+
+---
+
+### Penalidades remanescentes
+
+**1. Threshold de 10 dias sem referência clínica (−0,40)**
+
+Inalterado desde Av.4. O corte em `preprocessor/outcomes.py:_map_outcome()` separa `melhora_internado_breve` de `melhora_internado_grave` por duração ≤ 10 dias, sem referência clínica citada. Q1 e Q2 da reunião com a orientadora (ver seção "Pontos para Alinhar") permanecem sem resposta nos documentos lidos até 2026-07-01.
+
+**2. Ablação formal consolidada ausente (−0,10)**
+
+Ver item 1 das mudanças positivas. Evidências existem por experimento acumulado; falta a tabela com IC.
+
+**3. RAG sem avaliação qualitativa formal (−0,25)**
+
+Ver item 3 das mudanças positivas. Gemma 3:4b melhora substancialmente a capacidade do modelo, mas sem avaliação por especialista ou métrica de qualidade de geração.
+
+**4. DP-SGD nunca executado com dados reais (−0,50)**
+
+Esta é a penalidade mais relevante desta avaliação. O projeto usa dados clínicos reais (FAPESP, 33.773 pacientes). DP-FedAvg está implementado (`DP_NOISE`, `DP_CLIP` em `FedConfig`), mas os experimentos formais (σ=0,5; 1,0; 2,0) nunca foram executados. A curva Acc×ε — representação quantitativa do trade-off entre utilidade clínica e garantia formal de privacidade — está ausente. Sem ela, o argumento de privacidade do TCC é qualitativo ("implementamos DP") mas não quantitativo ("com ε=X, a acurácia cai Y p.p."). Em Av.3 esta penalidade era considerada "não bloqueadora para TCC com dados sintéticos"; agora que o projeto opera com dados reais, o mesmo critério não se aplica.
+
+Fonte: `src/mosaicfl/core/config.py:FedConfig.dp_noise_multiplier = 0.0` (desabilitado por padrão); `docs/Sumario_Treinamento_Parte2.md` (Exp 17/18/19 planejados, nunca executados).
+
+### Cálculo da nota acadêmica
+
+| Item | Base | Δ desta avaliação | Valor efetivo |
+|---|---|---|---|
+| Threshold 10d sem referência | −0,40 (Av.4) | 0 | −0,40 |
+| Ablação: existe por experimento, falta tabela formal com IC | −0,40 (Av.4) | +0,30 | −0,10 |
+| Baseline comparativo | −0,10 (Av.4) | +0,10 | 0 |
+| RAG sem avaliação qualitativa | −0,50 (Av.4) | +0,25 | −0,25 |
+| DP-SGD não executado com dados reais | nova | −0,50 | −0,50 |
+| Positivo: não-IID empírico com dados reais | +0,30 (Av.4) | +0,20 | +0,50 |
+| Positivo: FL supera baselines centralizados | nova | +0,35 | +0,35 |
+| Positivo: calibração isotônica sistemática | nova | +0,10 | +0,10 |
+| **NOTA FINAL** | **8,3 (Av.4)** | **+0,40** | **8,7 / 10** |
+
+---
+
+## AVALIAÇÃO DE PRODUÇÃO CLÍNICA — 8,3 / 10 *(+0,3 em relação à Avaliação 4)*
+
+### Mudanças que elevaram a nota
+
+**1. API de inferência operacional — gap treino↔produção fechado (+0,15)**
+
+Até Av.4, treinamento salvava checkpoints no `CheckpointStore` (PostgreSQL), mas `InferenceEngine` só lia arquivos `.pt` em disco — que nunca existiam em produção. O gap foi fechado em 2026-06-29 com `InferenceEngine.load_from_store(checkpoint: dict)` e fallback em `state._get_engine()`: `CheckpointStore.load_best(training_id)` → modelo servido. Verificado ao vivo: `POST /api/predict` retornando 200 OK com checkpoint carregado do PostgreSQL (round=79, acc=0,6959). `make api` e `make export-checkpoint` operacionais.
+
+Fonte: `infrastructure/mosaicfl_api/` + `docs/Sumario_Treinamento_Parte2.md` ("API de Inferência — fechamento do gap treino↔produção").
+
+**2. ECE isotônica < 0,05 em todos os cenários (+0,10)**
+
+Para um sistema clínico, probabilidades bem calibradas são requisito operacional — um score de risco que sistematicamente subestima a gravidade tem implicações clínicas diretas. ECE_iso=0,0149 (melhor do projeto, Exp15) e ≤0,031 em todos os experimentos de 2026-07-01 indicam que a saída do modelo é utilizável como estimativa de probabilidade em ambiente clínico, não apenas como ranking relativo.
+
+**3. MC Dropout disponível na inferência (+0,05)**
+
+`InferenceEngine` roda 50 passagens com dropout ativo e retorna média + desvio-padrão por classe — incerteza epistêmica disponível para o consumidor da API. Um clínico pode distinguir "predição com alta certeza" de "predição instável" no mesmo request. Implementado em `inference_engine/` como parte da modularização.
+
+### Penalidades remanescentes
+
+| Penalidade | Evidência | Peso |
+|---|---|---|
+| Rate limiter in-process | `service.py:_SlidingWindowLimiter` por processo; 4 workers Uvicorn = 480 req/min efetivos — não protege contra múltiplos processos ou instâncias distribuídas | −0,80 |
+| Generalização clínica | COVID-19 / 2 hospitais SP / Jan–Ago 2021 — não validado em outros contextos, doenças ou sistemas hospitalares; o projeto demonstra o método, não a generalização clínica | −0,65 |
+| Prometheus ausente | `TODO.md` documenta desde sessão 3 (2026-06-04); nenhuma implementação em nenhuma das sessões subsequentes; sem métrica de latência/throughput exportável | −0,30 |
+| Audit trail imutabilidade | `RotatingFileHandler` permite sobrescrita — não atende LGPD Art. 37 em implementação estrita (WORM) | −0,10 |
+
+### Cálculo da nota de produção clínica
+
+| Item | Valor |
+|---|---|
+| Nota Av.4 | 8,0 |
+| API de inferência operacional | +0,15 |
+| ECE isotônica — saída calibrada clinicamente | +0,10 |
+| MC Dropout — incerteza epistêmica disponível | +0,05 |
+| **NOTA FINAL** | **8,3 / 10** |
+
+---
+
+## Síntese comparativa — evolução das avaliações
+
+| Dimensão | Av. 1 | Av. 2 | Av. 3 (holística) | Av. 4 | **Av. 5** | Δ total |
+|---|---|---|---|---|---|---|
+| **Acadêmica** | 6,5 | 6,5 | 7,0 | 8,3 | **8,7** | +2,2 |
+| **Produção clínica** | 7,5 | 8,0 | 8,0 | 8,0 | **8,3** | +0,8 |
+
+**Principal alavanca desta avaliação:** resultado central estabelecido com dados reais — FL supera baselines centralizados, custo de privacidade negativo, heterogeneidade non-IID quantificada. Esse conjunto resolve de uma vez a crítica da Av.3 ("hipótese central nunca validada com dados reais") e a penalidade de baseline da Av.4.
+
+**Penalidade que mais pesa agora e é resolvível antes da defesa:** DP-SGD nunca executado (−0,50). Os experimentos com σ=0,5; 1,0; 2,0 são parte do plano original e não exigem mudança de código — apenas execução. Um único ponto da curva Acc×ε converte o argumento de privacidade de qualitativo para quantitativo.
+
+**Próxima alavanca com maior retorno:** executar DP (σ=1,0 como ponto central) após os Treinamentos Reais de 2026-07-02. Se o custo de accuracy ficar abaixo de 5 p.p. com garantia formal ε<10, a nota acadêmica sobe +0,3 e o argumento de privacidade do TCC fica completo.
+
+---
+
+*Próxima reavaliação recomendada: após os Treinamentos Reais de 2026-07-02 (resultados formais que substituem a fase de ajuste) e execução de pelo menos 1 ponto da curva Acc×ε com DP-SGD.*

@@ -769,4 +769,26 @@ Antes de disparar o primeiro `make training-full-cuda` da Fase de Experimentos F
 
 Achado preliminar (não formal): o cenário IID simulado (id=28) superou o non-IID real (id=27) em todas as métricas — Acc +6,81 p.p., F1 +0,038, AUC +0,033, ECE melhor, convergência mais rápida (R39 vs. R53) — primeira evidência direta e comparável de que a heterogeneidade non-IID prejudica o treinamento, com tudo mais (algoritmo, hiperparâmetros, seed) mantido idêntico entre as duas fases. A confirmar (ou refutar) com o Treinamento Real de quinta-feira.
 
-**Conclusão:** implementação da sessão de 2026-07-01 (AUC-ROC no banco + Fase 5) validada sem erros — **pronta para o Treinamento Real de 2026-07-02 (CUDA e CPU)**.
+### Pendências identificadas antes do Treinamento Real de 2026-07-02
+
+Antes de disparar o Treinamento Real de quinta-feira, dois itens foram identificados como **inclusões simples de registro no banco** que devem ser feitas para que os logs oficiais contenham as informações necessárias ao texto de defesa. Registradas aqui para que não passem despercebidas no início da sessão de 2026-07-02.
+
+#### Pendência A — ECE pré-calibração nos logs de avaliação
+
+**Problema:** os arquivos de avaliação gerados por `manual_loop.py` (ex.: `evaluation_best_r39_of_44.json`) registram `ece_isotonic` (ECE pós-calibração isotônica OvR), mas **não registram `ece_pre`** (ECE antes de qualquer calibração — saída bruta do modelo). Para o documento de metodologia, o par antes/depois é necessário para evidenciar o ganho da calibração isotônica com uma comparação direta em dado real (não depender de experimentos anteriores onde o ECE pré estava num contexto diferente).
+
+**O que fazer:** em `manual_loop.py`, no bloco de avaliação final, adicionar `"ece_pre": report_raw.ece` (ou o campo equivalente) ao dict de avaliação salvo em JSON e ao banco via `update_evaluation_metrics()`. Migration 016 já tem a coluna `ece` — verificar se aponta para o ECE pré ou pós; se for pós, renomear ou duplicar o campo para deixar inequívoco.
+
+**Impacto:** alteração de 1–3 linhas em `manual_loop.py` e/ou `orchestrator.py`; nenhuma mudança de schema (coluna já existe).
+
+#### Pendência B — Custo energético com GPU nos logs
+
+**Problema:** os logs registram `peak_ram` e `avg_cpu` (via `resource_summary`), mas **não registram consumo de energia**. `nvidia-smi` já foi executado manualmente numa sessão anterior (confirmou 74 W/285 W durante BPSP-only, ver Parte 9), mas esse valor não é capturado automaticamente nem persistido por treino. Para a seção de análise de viabilidade do TCC (custo operacional da infraestrutura federada), o consumo de energia por experimento é necessário.
+
+**O que fazer:** em `resource_summary` (provavelmente em `orchestrator.py` ou `fl_core/orchestrator.py`), adicionar captura de energia via `nvidia-smi --query-gpu=power.draw --format=csv,noheader,nounits` (coleta por amostragem durante o loop) ou via `pynvml`. Persistir a energia total estimada em Wh (potência média × duração em horas) no banco junto com `peak_ram`/`avg_cpu`. Migration 015 já tem colunas de recurso em `fl_trainings` — verificar se há espaço ali ou se é necessária uma migration 018.
+
+**Impacto:** adição de um coletor por polling durante o loop + 1–2 colunas no banco; nenhum impacto no resultado do treinamento.
+
+---
+
+**Conclusão revista:** implementação da sessão de 2026-07-01 (AUC-ROC no banco + Fase 5) validada sem erros. **As duas pendências acima (ECE pré-calibração + custo energético) devem ser resolvidas no início de 2026-07-02 antes de disparar o Treinamento Real** — são adições de registro, não mudanças de comportamento, e não exigem novo ciclo de validação funcional completa.
