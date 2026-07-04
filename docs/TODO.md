@@ -576,3 +576,9 @@ instalacao do driver placa de video - gpu
  sudo mokutil --import /var/lib/shim-signed/mok/MOK.der
 
  sudo reboot
+
+
+investigar o motivo 
+scp user@<ip>:~/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/scripts/db/seeds/hsl_seed.sql.gz scripts/db/seeds/
+ssh: connect to host 192.168.68.116 port 22: Connection refused
+scp: Connection closed
