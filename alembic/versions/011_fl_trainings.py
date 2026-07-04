@@ -9,7 +9,7 @@ load_best() filtra por training_id, eliminando cross-contamination entre runs
 (bug observado no Exp 9: load_best() retornou R91/Exp8 em vez de R33/Exp9).
 
 Revision ID: 011
-Revises: 010
+Revises: 010a
 Create Date: 2026-06-28
 """
 from typing import Sequence, Union
@@ -18,7 +18,7 @@ from alembic import op
 
 
 revision: str = '011'
-down_revision: Union[str, Sequence[str], None] = '010'
+down_revision: Union[str, Sequence[str], None] = '010a'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

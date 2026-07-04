@@ -17,12 +17,52 @@
 # lógica do Caminho A (README, seção "Rede Federada Real"), porta diferente.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# flower-superlink mora no .venv do projeto — não confiar em estar no PATH do
+# shell (o binário não é instalado globalmente por padrão).
+FLOWER_SUPERLINK_BIN="$PROJECT_ROOT/.venv/bin/flower-superlink"
+if [ ! -x "$FLOWER_SUPERLINK_BIN" ]; then
+    FLOWER_SUPERLINK_BIN="flower-superlink"   # fallback: tenta o PATH mesmo assim
+fi
+# O SuperLink dispara subprocessos internos (ex.: flower-superexec) via
+# subprocess.Popen, que resolvem o executável pelo PATH herdado — só apontar
+# para o binário do .venv não é suficiente, o .venv/bin precisa estar no PATH
+# para esses subprocessos filhos também serem encontrados.
+export PATH="$PROJECT_ROOT/.venv/bin:$PATH"
+
 : "${FL_TLS_CERT_DIR:?FL_TLS_CERT_DIR nao definido. Execute: bash scripts/gerar_certs_tls.sh}"
 
 FL_FLEET_API="${FL_FLEET_API:-0.0.0.0:9091}"
 FL_APPIO_API="${FL_APPIO_API:-0.0.0.0:9092}"
 FL_CONTROL_API="${FL_CONTROL_API:-0.0.0.0:9093}"
 FL_SUPERLINK_DB="${FL_SUPERLINK_DB:-superlink.db}"
+
+# Valida que as 3 portas estão livres antes de tentar subir — se alguma já
+# estiver em uso (ex.: uma tentativa anterior que travou), o erro do próprio
+# flower-superlink não indica o PID. Aqui sim, para o usuário decidir se mata
+# o processo (não fazemos isso automaticamente).
+_check_port_free() {
+    local addr="$1" label="$2"
+    local port="${addr##*:}"
+    local hit
+    hit="$(ss -tlnp 2>/dev/null | awk -v p=":$port" '$4 ~ p"$" {print}')"
+    if [ -n "$hit" ]; then
+        local pid
+        pid="$(echo "$hit" | grep -oP 'pid=\K[0-9]+' | head -1)"
+        echo "ERRO: porta $port ($label) já está em uso." >&2
+        echo "  $hit" >&2
+        if [ -n "$pid" ]; then
+            echo "  PID ocupando a porta: $pid" >&2
+            echo "  Para investigar: ps -p $pid -o pid,cmd" >&2
+            echo "  Para encerrar (se for um processo travado seu): kill $pid" >&2
+        fi
+        exit 1
+    fi
+}
+_check_port_free "$FL_FLEET_API"   "Fleet API"
+_check_port_free "$FL_APPIO_API"   "ServerAppIo API"
+_check_port_free "$FL_CONTROL_API" "Control API"
 
 LOCAL_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo "=================================================================="
@@ -41,7 +81,7 @@ fi
 echo "=================================================================="
 echo ""
 
-exec flower-superlink \
+exec "$FLOWER_SUPERLINK_BIN" \
     --ssl-certfile    "${FL_TLS_CERT_DIR}/server.crt" \
     --ssl-keyfile     "${FL_TLS_CERT_DIR}/server.key" \
     --ssl-ca-certfile "${FL_TLS_CERT_DIR}/ca.crt" \
