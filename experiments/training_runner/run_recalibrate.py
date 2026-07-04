@@ -69,6 +69,8 @@ def main() -> None:
         _demographics_by_client,
         _test_loader_demo,
         cal_loader,
+        _test_loader_origin,
+        _origin_labels,
     ) = prepare_dataloaders_from_db(FL_DB_URL)
     logger.info("Dados carregados — test=%d | cal=%d amostras",
                 len(test_loader.dataset), len(cal_loader.dataset))

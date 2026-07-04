@@ -1,0 +1,317 @@
+{
+  "best_round": 3,
+  "total_rounds": 23,
+  "best_f1_macro": 0.18877331231019473,
+  "best_accuracy": 0.36409346347234545,
+  "temperature": 2.4641,
+  "ece_isotonic": 0.0252,
+  "pre_calibration": {
+    "accuracy": 0.3641,
+    "macro_f1": 0.1888,
+    "macro_auc": 0.5106,
+    "per_class": {
+      "curado_pronto": {
+        "auc_roc": 0.5514,
+        "f1": 0.5594,
+        "precision": 0.5095,
+        "recall": 0.6202,
+        "support": 1598
+      },
+      "curado_internado": {
+        "auc_roc": 0.5311,
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "support": 46
+      },
+      "melhora_pronto": {
+        "auc_roc": 0.4853,
+        "f1": 0.0548,
+        "precision": 0.0488,
+        "recall": 0.0625,
+        "support": 320
+      },
+      "melhora_internado_breve": {
+        "auc_roc": 0.4327,
+        "f1": 0.2029,
+        "precision": 0.2782,
+        "recall": 0.1597,
+        "support": 1096
+      },
+      "melhora_internado_grave": {
+        "auc_roc": 0.5522,
+        "f1": 0.1268,
+        "precision": 0.1157,
+        "recall": 0.1402,
+        "support": 321
+      }
+    },
+    "calibration": {
+      "ece": 0.6265,
+      "mce": 0.631,
+      "bins": [
+        {
+          "confidence_mean": 0.5136,
+          "accuracy": 0.2857,
+          "count": 7,
+          "gap": 0.2279
+        },
+        {
+          "confidence_mean": 0.565,
+          "accuracy": 0.0,
+          "count": 10,
+          "gap": 0.565
+        },
+        {
+          "confidence_mean": 0.6219,
+          "accuracy": 0.2,
+          "count": 10,
+          "gap": 0.4219
+        },
+        {
+          "confidence_mean": 0.7058,
+          "accuracy": 0.1667,
+          "count": 18,
+          "gap": 0.5391
+        },
+        {
+          "confidence_mean": 0.768,
+          "accuracy": 0.4,
+          "count": 20,
+          "gap": 0.368
+        },
+        {
+          "confidence_mean": 0.8325,
+          "accuracy": 0.2857,
+          "count": 14,
+          "gap": 0.5468
+        },
+        {
+          "confidence_mean": 0.9048,
+          "accuracy": 0.3226,
+          "count": 31,
+          "gap": 0.5822
+        },
+        {
+          "confidence_mean": 0.9985,
+          "accuracy": 0.3675,
+          "count": 3271,
+          "gap": 0.631
+        }
+      ],
+      "temperature": 1.0,
+      "n_samples": 3381
+    },
+    "confusion_matrix": [
+      [
+        991,
+        2,
+        111,
+        377,
+        117
+      ],
+      [
+        27,
+        0,
+        8,
+        7,
+        4
+      ],
+      [
+        240,
+        2,
+        20,
+        21,
+        37
+      ],
+      [
+        516,
+        2,
+        217,
+        175,
+        186
+      ],
+      [
+        171,
+        2,
+        54,
+        49,
+        45
+      ]
+    ],
+    "n_samples": 3381,
+    "class_labels": [
+      "curado_pronto",
+      "curado_internado",
+      "melhora_pronto",
+      "melhora_internado_breve",
+      "melhora_internado_grave"
+    ]
+  },
+  "post_calibration": {
+    "accuracy": 0.3641,
+    "macro_f1": 0.1888,
+    "macro_auc": 0.5044,
+    "per_class": {
+      "curado_pronto": {
+        "auc_roc": 0.5514,
+        "f1": 0.5594,
+        "precision": 0.5095,
+        "recall": 0.6202,
+        "support": 1598
+      },
+      "curado_internado": {
+        "auc_roc": 0.4942,
+        "f1": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "support": 46
+      },
+      "melhora_pronto": {
+        "auc_roc": 0.4965,
+        "f1": 0.0548,
+        "precision": 0.0488,
+        "recall": 0.0625,
+        "support": 320
+      },
+      "melhora_internado_breve": {
+        "auc_roc": 0.4255,
+        "f1": 0.2029,
+        "precision": 0.2782,
+        "recall": 0.1597,
+        "support": 1096
+      },
+      "melhora_internado_grave": {
+        "auc_roc": 0.5545,
+        "f1": 0.1268,
+        "precision": 0.1157,
+        "recall": 0.1402,
+        "support": 321
+      }
+    },
+    "calibration": {
+      "ece": 0.6098,
+      "mce": 0.6447,
+      "bins": [
+        {
+          "confidence_mean": 0.4524,
+          "accuracy": 0.0,
+          "count": 1,
+          "gap": 0.4524
+        },
+        {
+          "confidence_mean": 0.5118,
+          "accuracy": 0.1333,
+          "count": 15,
+          "gap": 0.3784
+        },
+        {
+          "confidence_mean": 0.57,
+          "accuracy": 0.2188,
+          "count": 32,
+          "gap": 0.3513
+        },
+        {
+          "confidence_mean": 0.6253,
+          "accuracy": 0.4074,
+          "count": 27,
+          "gap": 0.2179
+        },
+        {
+          "confidence_mean": 0.7036,
+          "accuracy": 0.2188,
+          "count": 32,
+          "gap": 0.4848
+        },
+        {
+          "confidence_mean": 0.7681,
+          "accuracy": 0.3333,
+          "count": 45,
+          "gap": 0.4348
+        },
+        {
+          "confidence_mean": 0.8213,
+          "accuracy": 0.5818,
+          "count": 110,
+          "gap": 0.2395
+        },
+        {
+          "confidence_mean": 0.9069,
+          "accuracy": 0.2621,
+          "count": 103,
+          "gap": 0.6447
+        },
+        {
+          "confidence_mean": 0.9975,
+          "accuracy": 0.3641,
+          "count": 3016,
+          "gap": 0.6334
+        }
+      ],
+      "temperature": 2.464085817337036,
+      "n_samples": 3381
+    },
+    "confusion_matrix": [
+      [
+        991,
+        2,
+        111,
+        377,
+        117
+      ],
+      [
+        27,
+        0,
+        8,
+        7,
+        4
+      ],
+      [
+        240,
+        2,
+        20,
+        21,
+        37
+      ],
+      [
+        516,
+        2,
+        217,
+        175,
+        186
+      ],
+      [
+        171,
+        2,
+        54,
+        49,
+        45
+      ]
+    ],
+    "n_samples": 3381,
+    "class_labels": [
+      "curado_pronto",
+      "curado_internado",
+      "melhora_pronto",
+      "melhora_internado_breve",
+      "melhora_internado_grave"
+    ]
+  },
+  "partition_mode": "natural",
+  "subgroup_metrics": {
+    "BPSP": {
+      "n": 2862,
+      "accuracy": 0.4133473095737247,
+      "f1_macro": 0.19574570674747355
+    },
+    "HSL": {
+      "n": 519,
+      "accuracy": 0.09248554913294797,
+      "f1_macro": 0.07983540642643865
+    }
+  },
+  "dp_noise_multiplier": 2.0,
+  "dp_max_grad_norm": 1.0,
+  "dp_epsilon_simple": 55.71526051996197,
+  "dp_epsilon_rdp": 13.413703532326176
+}

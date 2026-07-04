@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de 'curado_pronto' (probabilidade 0.81) para este paciente é razoável devido à predominância de resultados anormais de basófilos normais e concentrações normais de hemoglobina corpuscular, que se assemelham ao caso similar com des",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Volume plaquetário médio NORMAL, TP/INR HIGH, Cloro, sangue NORMAL, Calcio Ionizado, sangue LOW, Concentracao de Hemoglobina Corpuscular HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.41041892766952515
+    },
+    {
+      "texto": "Desfecho: melhora_pronto. Marcadores de maior atenção: Hemoglobina Corpuscular Media NORMAL, Eosinófilos LOW, DHL HIGH, Ureia NORMAL, Basófilos NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.416524852307131
+    },
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: Concentracao de Hemoglobina Corpuscular NORMAL, Basofilos NORMAL, Creatinina NORMAL, Hemoglobina Corpuscular Media NORMAL, Leucocitos HIGH.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.42998234718985373
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.1933,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0407,
+      "curado_internado": 0.2464,
+      "melhora_pronto": 0.2802,
+      "melhora_internado_breve": 0.4367,
+      "melhora_internado_grave": 0.028
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

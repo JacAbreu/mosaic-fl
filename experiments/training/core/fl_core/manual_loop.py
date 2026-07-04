@@ -1,6 +1,7 @@
 """manual_loop.py — Loop de aprendizado federado manual (sem Ray) — sequencial, leve, didático."""
 import json
 import logging
+import os
 import random
 import time
 from collections import OrderedDict
@@ -114,13 +115,30 @@ def run_federated_learning_manual(
     """
     n_rounds    = override_num_rounds    if override_num_rounds    is not None else NUM_ROUNDS
     use_fednova = override_use_fednova   if override_use_fednova   is not None else FED_CFG.use_fednova
-    seed        = override_random_seed   if override_random_seed   is not None else FED_CFG.random_seed
+    # FL_RANDOM_SEED: réplicas com seeds diferentes para investigar se um padrão
+    # observado (ex.: relação ruído×utilidade não-monotônica na curva Acc×ε do
+    # DP-FedAvg) é real ou variância de execução única. Não afeta a partição dos
+    # dados entre clientes (dataloaders.py usa geradores próprios, fixos em RANDOM_SEED).
+    seed = override_random_seed if override_random_seed is not None else int(
+        os.environ.get("FL_RANDOM_SEED", FED_CFG.random_seed)
+    )
 
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark     = False
+
+    # FL_DETERMINISTIC=1 — Etapa 2 da investigação de não-monotonicidade da curva
+    # Acc×ε (ver docs/Sumario_Treinamento_Parte3.md). cudnn.deterministic acima só
+    # cobre convoluções; use_deterministic_algorithms força TODAS as operações a usar
+    # implementação determinística quando existe uma. warn_only=True é obrigatório —
+    # sem ele, uma operação sem versão determinística levantaria RuntimeError e
+    # pararia o treino em vez de só avisar.
+    deterministic_algorithms = os.environ.get("FL_DETERMINISTIC", "").strip() == "1"
+    if deterministic_algorithms:
+        torch.use_deterministic_algorithms(True, warn_only=True)
+        logger.info("determinismo_forcado ativo (FL_DETERMINISTIC=1, warn_only=True)")
 
     logger.info("=" * 60)
     logger.info("APRENDIZADO FEDERADO — SIMULAÇÃO MANUAL (SEM RAY)")
@@ -166,8 +184,20 @@ def run_federated_learning_manual(
 
     # Registra o treinamento antes do loop — garante 1 checkpoint por treinamento
     training_id: Optional[int] = None
-    import os
     partition_mode = os.environ.get("FL_PARTITION_MODE", "natural").strip().lower()
+
+    # "ajuste" (default) vs "treinamento_real" — precisa ser declarado explicitamente
+    # via env var. Sem isso, um dump do banco não distingue tuning/debug de resultado
+    # formal sem depender de documentação externa (ver migration 021).
+    run_classification = os.environ.get("FL_RUN_CLASSIFICATION", "ajuste").strip().lower()
+    if run_classification not in ("ajuste", "treinamento_real"):
+        logger.warning(
+            "FL_RUN_CLASSIFICATION=%r não reconhecido (esperado 'ajuste' ou 'treinamento_real') "
+            "— usando 'ajuste' para não classificar erroneamente um run como resultado formal.",
+            run_classification,
+        )
+        run_classification = "ajuste"
+
     if not sensitivity_mode:
         log_file = os.environ.get("FL_LOG_FILE", "")
         training_id = checkpoint_store.register_training(
@@ -176,9 +206,14 @@ def run_federated_learning_manual(
             n_rounds_max=n_rounds,
             checkpoint_criterion=FED_CFG.checkpoint_criterion,
             partition_mode=partition_mode,
+            run_classification=run_classification,
         )
-        logger.info("training_registered id=%d algorithm=%s criterion=%s n_rounds_max=%d partition_mode=%s",
-                    training_id, agregador, FED_CFG.checkpoint_criterion, n_rounds, partition_mode)
+        logger.info(
+            "training_registered id=%d algorithm=%s criterion=%s n_rounds_max=%d "
+            "partition_mode=%s run_classification=%s",
+            training_id, agregador, FED_CFG.checkpoint_criterion, n_rounds,
+            partition_mode, run_classification,
+        )
 
     overall_start = time.time()
 

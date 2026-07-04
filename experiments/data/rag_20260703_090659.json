@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.5654207357349521
+  },
+  "justificativa": "A previsão de \"curado_pronto\" (0.57) para este paciente é razoável considerando os resultados dos exames, especialmente o acompanhamento de Basofilos NORMAL repetidamente, que se alinha com os casos similares que apresentaram melhora e tiveram níveis normais de basófil",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_pronto. Marcadores de maior atenção: Potassio NORMAL, Linfocitos HIGH, Hemoglobina Corpuscular Media NORMAL, Hemoglobina NORMAL, Basófilos NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.404537558555603
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Potassio, sangue total NORMAL, Bilirrubina Total HIGH, Hemoglobina Corpuscular Media HIGH, Basófilos NORMAL, HCO3 venoso NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.4150443324473092
+    },
+    {
+      "texto": "Desfecho: melhora_pronto. Marcadores de maior atenção: Concentracao de Hemoglobina Corpuscular NORMAL, Basofilos NORMAL, Neutrofilos HIGH, Leucocitos HIGH, Hemoglobina NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.41543437058515487
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.2701,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0269,
+      "curado_internado": 0.0145,
+      "melhora_pronto": 0.4167,
+      "melhora_internado_breve": 0.6624,
+      "melhora_internado_grave": 0.0322
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

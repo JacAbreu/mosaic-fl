@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "Considerando os casos similares recuperados, a previsão de \"curado_pronto\" (0.81) é razoável devido à presença de múltiplos resultados normais nos marcadores chave, incluindo Basofilos e Concentração de Hemoglobina Corpuscular. Os casos anteriores com desfechos de mel",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Concentracao de Hemoglobina Corpuscular NORMAL, Basófilos NORMAL, Calcio Ionizado, sangue NORMAL, Hemoglobina NORMAL, CK NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3225337266921997
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Hemoglobina NORMAL, Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Eritrocitos NORMAL, Leucocitos HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3967918517117578
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Hemoglobina NORMAL, Creatinina NORMAL, Basofilos NORMAL, Hemoglobina Corpuscular Media NORMAL, Plaquetas HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.4063957929611206
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.2151,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0674,
+      "curado_internado": 0.1159,
+      "melhora_pronto": 0.2594,
+      "melhora_internado_breve": 0.4705,
+      "melhora_internado_grave": 0.0488
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

@@ -874,3 +874,120 @@ Motivação registrada pela autora: viabilidade de implantação real do MOSAIC-
 **Limitação assumida conscientemente, não resolvida agora:** a coleta cobre só a GPU. Medir o consumo da CPU exigiria acesso à interface RAPL/powercap do Linux (`/sys/class/powercap/intel-rapl/`), mais específica de plataforma e mais frágil — fora de escopo desta sessão. Isso é relevante justamente para o cenário que motivou o pedido: um ambiente sem GPU dedicada (só CPU) hoje não tem custo energético medido automaticamente pelo MOSAIC-FL, só estimável por fora (ex.: TDP nominal do processador × tempo). Registrado como lacuna conhecida, não como pendência imediata.
 
 **É uma estimativa por amostragem, não medição contínua** — a potência é lida uma vez por rodada (não continuamente), então picos muito curtos entre amostras podem não ser capturados. Suficiente para uma estimativa de energia total razoável, mas deve ser descrito como tal no texto de metodologia (não afirmar "medição exata").
+
+### Validação em produção (2026-07-02, treino real de validação, training_ids 29-32)
+
+Rodada de `make training-full-cuda` sem erro, ~28 min. Confirmado direto no banco: `ece_pre`/`ece` chegam distintos em todas as 4 fases FL (ex.: id=31, ece_pre=0,0229 vs. ece=0,0796); `dp_epsilon_*` corretamente `NULL` (DP não ativado neste run); energia da GPU coletada em todas as fases (2,72 / 2,44 / 15,17 / 4,55 Wh); Fase 5 (IID simulado, id=32) volta a superar a Fase 3 (non-IID real, id=31) em todas as métricas — mesmo padrão do dia anterior (Acc 72,76% vs. 66,87%, F1 0,534 vs. 0,5063, AUC 0,8456 vs. 0,8097).
+
+A autora testou explicitamente o cenário sem GPU (não só perguntou — pediu prova): `_sample_gpu_power_w()` testado com `subprocess.run` mockado para levantar `FileNotFoundError` (nvidia-smi ausente) e para retornar `returncode=1` (GPU não detectada) — os dois cenários retornam `None` sem exceção. Smoke test de treino completo com a função forçada a sempre retornar `None` confirmou que o pipeline inteiro roda até o fim sem GPU, com os 3 campos de energia ficando `NULL`.
+
+### `run_classification` — distinguir "ajuste" de "treinamento_real" dentro do próprio banco
+
+**Pergunta da autora:** como garantir que um dump do banco, analisado no futuro, não dependa só da documentação/memória externa para saber quais `training_id`s são resultado formal e quais são ajuste?
+
+**Implementado:** migration 021 — nova coluna `run_classification` (`'ajuste'` [default] | `'treinamento_real'`) em `metrics.fl_trainings`. **Backfill explícito**: todos os 32 `training_id`s existentes até esta migration foram marcados como `'ajuste'` na própria migration (não fica implícito/dependente do default). `manual_loop.py` lê `FL_RUN_CLASSIFICATION` (env var, normalizado para minúsculas) — valores diferentes de `ajuste`/`treinamento_real` disparam warning e caem em `ajuste` por segurança (nunca classifica um run como oficial por engano, ex.: erro de digitação).
+
+Makefile: variável `FL_RUN_CLASSIFICATION ?= ajuste` propagada para os 6 alvos de treino relevantes — `training-bpsp-only`, `training-hsl-only`, `training-iid-contrast[-cuda]`, `training-full` (CPU) e `training-full-cuda` (GPU). Mesmo mecanismo para os dois devices — a classificação é ortogonal a CPU/GPU:
+
+```bash
+FL_RUN_CLASSIFICATION=treinamento_real make training-full        # CPU
+FL_RUN_CLASSIFICATION=treinamento_real make training-full-cuda   # GPU
+```
+
+**Validado:** backfill confirmado (32/32 `ajuste`); smoke test cobrindo valor válido, valor válido em caixa alta (normalização), valor com erro de digitação (cai em `ajuste` com warning) e variável não definida (default `ajuste`) — os 4 cenários se comportam como esperado. 545 testes passando. Dry-run do Makefile confirmou a variável chegando em todos os 6 alvos, incluindo CPU e GPU igualmente.
+
+**Escopo não coberto, sinalizado:** `run_classification` só existe em `metrics.fl_trainings` (treinos FL). A tabela `metrics.fl_metrics` (onde ficam os resultados do baseline RF/BEHRT Pooled, via `metrics_store`) não recebeu o mesmo campo — decisão pendente se vale estender lá também.
+
+---
+
+## Primeiro `FL_RUN_CLASSIFICATION=treinamento_real` executado — bug de regressão encontrado e corrigido
+
+**O que aconteceu:** a autora executou `FL_RUN_CLASSIFICATION=treinamento_real make training-full-cuda` (training_ids 33-36). As 5 fases rodaram sem erro aparente no log (`TREINAMENTO_COMPLETO status=ok`), mas a validação dos resultados revelou que a **Fase 4/5 (BEHRT Pooled baseline) não produziu nenhum dado** — nenhuma menção a "epoch" no log inteiro, nenhum `experiments/data/behrt_pooled_*.json` novo criado.
+
+**Causa raiz:** regressão introduzida na sessão de 2026-07-01, na implementação da Fase 5 (Experimento 3). `prepare_dataloaders_from_db()` passou de um retorno de 7 valores para 9 (`test_loader_origin`, `origin_labels` adicionados). Só a chamada em `orchestrator.py` foi atualizada na época — **4 outros pontos de chamada direta da função, em scripts que não passam pelo orchestrator, ficaram com a contagem de desempacotamento errada**: `run_behrt_pooled.py` (7 valores esperados), `run_recalibrate.py` (7), `run_bootstrap_ci.py` (6), `run_seed_sensitivity.py` (6). Cada um levantaria `ValueError: too many values to unpack` ao ser executado — o que não apareceu no log porque o traceback de uma exceção não tratada vai para o stderr do processo, não para o arquivo de log via `logging` (só é visível no terminal onde o `make` rodou, que eu não tenho acesso).
+
+**Por que passou despercebido na sessão anterior:** a suíte de 545 testes não cobre nenhum desses 4 scripts (não há testes unitários para `run_*.py` em `training_runner/` que exercitem a chamada real a `prepare_dataloaders_from_db`) — só o caminho via `orchestrator.py` foi smoke-testado. Confirmado nesta sessão: a autora também revisou o código na hora e não pegou.
+
+**Correção:** os 4 arquivos corrigidos para desempacotar os 9 valores (com `_test_loader_origin`/`_origin_labels` descartados onde não usados). Bônus: a correção em `run_seed_sensitivity.py` também resolveu um bug pré-existente, anterior a esta sessão — `cal_loader` estava mapeado para a posição errada (recebia `test_loader_demo`, nunca o `cal_loader` real).
+
+**Validado:** sintaxe OK nos 4 arquivos; 545 testes continuam passando; chamada real a `prepare_dataloaders_from_db()` testada contra o banco de produção (não só sintético) — desempacotamento em 9 valores confirmado sem erro, dados carregados corretamente (2 clientes, 3.381 teste, 3.376 cal).
+
+**Reclassificação:** training_ids 33-36 (o run com a Fase 4 quebrada) voltaram de `run_classification='treinamento_real'` para `'ajuste'` via UPDATE direto — o próprio mecanismo criado horas antes serviu exatamente para este caso, sem precisar reconstruir o que aconteceu a partir de memória/documentação externa.
+
+**Próximo passo:** re-executar `FL_RUN_CLASSIFICATION=treinamento_real make training-full-cuda` com o bug corrigido — este será o Treinamento Real de fato.
+
+---
+
+## Treinamento Real 1 (GPU, ids 37-40) e Treinamento Real 2 (CPU, ids 41-44) concluídos — `docs/Sumario_Treinamento_Parte3.md` criado
+
+Re-execução do GPU (ids 37-40) completou sem erro nas 5 fases, incluindo a Fase 4/5 (BEHRT Pooled) desta vez. No dia seguinte (2026-07-02/03), o par de CPU (`FL_RUN_CLASSIFICATION=treinamento_real make training-full`, ids 41-44) também completou sem erro, ~9h53min.
+
+Resultado completo (tabelas, per-class F1/AUC, leave-one-out, custo de privacidade, comparação formal CPU×GPU) registrado em `docs/Sumario_Treinamento_Parte3.md` — primeiro documento da série de Treinamentos Reais. Destaques: Experimento 3 fechado formalmente (IID supera non-IID pela 3ª vez seguida); `curado_internado` teve F1 não-zero pela primeira vez no projeto (id=39, F1=0,04, amostra pequena); custo de privacidade modesto e sem direção clara (Federado entre Pooled e RF); qualidade equivalente entre CPU e GPU, speedup ~10-32× por fase.
+
+## `training-dp-curve`/`training-dp-curve-cuda` criados — e bug de device encontrado no primeiro uso real
+
+Para a curva Acc×ε (Exp 17/18/19), decisão de escopo (2026-07-03, registrada em `docs/TODO.md`): rodar só a fase Federada (não o pipeline completo de 5 fases — DP-FedAvg protege privacidade entre clientes, e BPSP-only/HSL-only são cliente único, Pooled/RF nem passa por FL) e em GPU (qualidade já confirmada equivalente à CPU, ~10× mais rápido, relevante para 3 execuções). Alvos criados no Makefile.
+
+**Bug encontrado no primeiro uso real:** `FL_RUN_CLASSIFICATION=treinamento_real make training-dp-curve-cuda` — as 3 execuções (σ=1,0/0,5/2,0) quebraram todas no mesmo ponto, logo após a Rodada 1: `RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!`, em `aggregation.py:94` (`apply_dp_noise`). Causa: `torch.normal(0.0, noise_std, size=global_state[key].shape)` cria o tensor de ruído sem `device=` — nasce em CPU por padrão, enquanto `global_state[key]` está em CUDA. **Esta era a primeira vez que a combinação DP + GPU foi exercitada de verdade** — mesmo padrão dos 4 bugs de device encontrados na sessão de 2026-06-30 (FedNova/checkpoint), sempre em código que só roda quando `FL_DEVICE=cuda` é combinado com uma feature específica ainda não testada nesse device.
+
+**Correção:** adicionado `device=global_state[key].device` à chamada de `torch.normal()`. **Validado contra CUDA real** (não só leitura de código) — reproduzido o cenário exato (tensor em `cuda:0` passado para `apply_dp_noise`) e confirmado que o resultado permanece em `cuda:0` sem exceção. 545 testes continuam passando.
+
+**Limpeza:** as 3 tentativas falhas geraram registros órfãos em `fl_trainings` (ids 45-47, `run_classification='treinamento_real'` mas sem nenhuma métrica — quebraram antes de `complete_training()`). Reclassificados para `'ajuste'` via UPDATE direto, mesmo padrão usado para os ids 33-36.
+
+**Próximo passo:** re-executar `FL_RUN_CLASSIFICATION=treinamento_real make training-dp-curve-cuda` com o bug corrigido.
+
+---
+
+## Curva Acc×ε obtida (ids 48-50) — resultado negativo (custo de privacidade severo) e investigação da não-monotonicidade
+
+Curva executada com sucesso: σ=0,5→Acc=43,12%/F1=0,1924, σ=1,0→Acc=31,17%/F1=0,0991, σ=2,0→Acc=36,79%/F1=0,2069 (baseline sem DP: Acc≈67%/F1≈0,51). Resultado registrado integralmente em `docs/Sumario_Treinamento_Parte3.md`, incluindo a leitura honesta de que o DP-FedAvg não atinge bom trade-off privacidade×utilidade nesta configuração — por pedido explícito da autora, resultados negativos são reportados com o mesmo rigor de positivos (ver memória `feedback_resultados_negativos`).
+
+Achado colateral: a relação ruído×utilidade não é monotônica (σ=1,0 pior que σ=2,0, apesar de ter menos ruído). A autora pediu investigação formal, seguindo método científico: registrar o que foi tentado inicialmente, o que foi tentado para investigar, e se funcionou ou não — nesta ordem, decidida pela autora: (1) réplicas com seeds diferentes primeiro, (2) `torch.use_deterministic_algorithms` depois, apenas se necessário.
+
+**Investigação 1 — réplicas com seeds diferentes (em andamento).** Mudança de código: `manual_loop.py` passou a ler `FL_RANDOM_SEED` (env var, default mantém `FED_CFG.random_seed=42` — sem mudança de comportamento quando não usada), alcançando o parâmetro `override_random_seed` que já existia na função mas não era exposto via Makefile/env var. `import os` promovido para nível de módulo (estava sendo importado localmente, tarde demais para o novo uso). A partição dos dados entre clientes **não muda** entre réplicas — `dataloaders.py` usa geradores próprios, fixos em `RANDOM_SEED`, não afetados por `FL_RANDOM_SEED`; só variam inicialização de pesos do modelo e os sorteios de ruído do DP (`apply_dp_noise` usa o RNG global do PyTorch, afetado por `torch.manual_seed`). Validado: smoke test confirmou `FL_RANDOM_SEED=42/43/99` propagando corretamente até o log do treino, e ausência da variável preservando o default 42 (sem regressão). 545 testes passando.
+
+Novo alvo `training-dp-curve-replicas-cuda`: 3 σ × 3 seeds (42/43/44) = 9 execuções. `FL_RUN_CLASSIFICATION` default `ajuste` (é investigação de robustez de um resultado já reportado, não um resultado novo).
+
+**Investigação 2 — `torch.use_deterministic_algorithms`: ainda não implementada**, planejada para depois da Investigação 1, conforme a ordem pedida pela autora.
+
+---
+
+## Etapa 1 concluída (réplicas com seeds) — σ=1,0 confirmado como pior em 5/5 execuções; Etapa 2 implementada
+
+**Etapa 1a (não-intencional, ids 51-53):** repetição exata da curva original (seed=42) — F1 divergiu em todos os 3 σ, e o nº de rodadas até convergência mudou em σ=2,0 (23→28). Primeira evidência direta de não-determinismo de GPU mesmo com `cudnn.deterministic=True` e seed fixa.
+
+**Etapa 1b (réplicas de propósito, ids 54-62):** 9 execuções, 3 seeds (42/43/44) × 3 σ, sem erro. σ=1,0 foi o pior das 3 seeds testadas, sem exceção (F1 médio 0,1191 vs. σ=0,5=0,1839 e σ=2,0=0,1795). Combinado com a Etapa 1a: **5 execuções independentes, todas com σ=1,0 como pior ponto** — deixa de ser plausível como ruído de execução única. Causa não identificada (hipótese não-testada, não afirmada como fato). Registrado integralmente em `docs/Sumario_Treinamento_Parte3.md`.
+
+**Etapa 2 — `torch.use_deterministic_algorithms` implementado.** `manual_loop.py` passou a ler `FL_DETERMINISTIC=1` (env var) e, se ativa, chama `torch.use_deterministic_algorithms(True, warn_only=True)` logo após configurar seed/cudnn. `warn_only=True` é obrigatório — sem ele, uma operação sem implementação determinística lançaria `RuntimeError` e pararia o treino em vez de só avisar. Validado: smoke test confirmou `torch.are_deterministic_algorithms_enabled()` alternando corretamente entre `True`/`False` conforme a variável; sem a variável, comportamento idêntico ao anterior (sem regressão). 545 testes passando.
+
+Novo alvo `training-dp-curve-deterministic-cuda`: reexecuta os mesmos 3 σ, **mesma seed=42 da curva original** (não seeds novas), com `FL_DETERMINISTIC=1` — objetivo é saber se a curva original (ids 48-50) já era reprodutível bit-a-bit sob essas condições, ou se ainda diverge mesmo com determinismo forçado.
+
+---
+
+## Rede Federada Real via SuperLink (Caminho B) — corrigida e validada de ponta a ponta (2026-07-04)
+
+A autora pediu para deixar funcional o "Caminho B" (arquitetura de produção Flower — `flower-superlink`/`ServerApp`/`SuperNode`, distinta do "Caminho A" legado `fl-server`/`fl-client` já documentado no README) antes de testar o cenário real desktop+notebook, para não precisar ajustar no meio do caminho. Decisão explícita: os dois caminhos podem coexistir (portas diferentes), sem necessidade de escolher um.
+
+**Investigação prévia (agente Explore)** confirmou que a infraestrutura de código e documentação para desktop+notebook já existia (README, `docs/ambiente_simulacao.md` com hardware real da autora), mas identificou um risco: `infrastructure/shared/tls.py` exige `FL_TLS_CERT_DIR` obrigatoriamente, sem estar configurado por padrão.
+
+**4 bugs reais encontrados e corrigidos, todos validados com execução de verdade (não só leitura de código):**
+
+1. **`scripts/gerar_certs_tls.sh`** — ao gerar certificado com o IP do desktop como `SERVER_CN`, o SAN entrava como `DNS:<ip>` em vez de `IP:<ip>`. TLS distingue os dois tipos de entrada na validação — clientes conectando via IP literal exigem SAN do tipo `IP:`. Corrigido com detecção automática (regex IPv4) escolhendo `IP:` ou `DNS:` conforme o valor passado. Validado gerando certificado real e inspecionando com `openssl x509 -text` — confirmado `IP Address:192.168.1.100` (teste) em vez de `DNS:192.168.1.100`.
+
+2. **`scripts/iniciar_cliente_fl.sh`** — `--node-config "client-id=X,data-source=Y"` usava vírgula como separador; o parser do flwr exige espaço (`'key1="v1" key2="v2"'`). Erro reproduzido: `click.exceptions.ClickException: The provided configuration string is in an invalid format`. Corrigido. **Mesmo bug também encontrado no README** (seção "Infraestrutura de Produção"), corrigido lá também.
+
+3. **`scripts/iniciar_servidor_fl.sh`** — não expunha `--control-api-address` explicitamente (dependia do default do flwr, que por coincidência batia com `pyproject.toml`) nem imprimia o IP local — adicionado, no mesmo padrão do `run_federated_real.py` (Caminho A).
+
+4. **`pyproject.toml`** `[tool.flwr.federations.production]` — `address = "superlink:9093"` era um placeholder de hostname inexistente (provavelmente pensado para um nome de serviço Docker Compose); trocado para `localhost:9093` (assume que `flwr run . production` roda na mesma máquina que o SuperLink, i.e., o desktop). Faltava `root-certificates` — sem isso, com `insecure=false`, a validação TLS tentaria achar a CA autoassinada na cadeia de confiança do sistema e falharia sempre. Faltava também a chave `default = "production"` sob `[tool.flwr.federations]` — exigida pela migração de configuração do flwr 1.30 (ver achado abaixo), sem a qual `flwr run` falha com "doesn't declare a default federation" mesmo passando o nome da federação explicitamente.
+
+**Validação end-to-end (não só sintaxe):** subiu um SuperLink real localmente, gerou certificado com o IP real da máquina de teste, conectou um SuperNode via esse IP (não `localhost`) — confirmado nos logs `[Fleet.ActivateNode]` e `[Fleet.PullMessages]`, provando handshake TLS bem-sucedido via rede. Em seguida, `flwr run . production` completou com sucesso ("🎊 Successfully started run..."). Nenhum registro órfão criado em `metrics.fl_trainings` (confirmado via query). Certificados de teste (com IP e chaves privadas da sessão de teste, não os reais da autora) removidos ao final. 545 testes continuam passando.
+
+**Achado importante para o cenário real (desktop + notebook):** o flwr 1.30.0 instalado **migra automaticamente** a configuração `[tool.flwr.federations.production]` de `pyproject.toml` para um arquivo **local por máquina/usuário**, `~/.flwr/config.toml`, na primeira vez que `flwr run`/`make server-app` é executado. Esse arquivo:
+- Não é versionado pelo git (fica fora do repositório, em `~/.flwr/`).
+- Grava o caminho do certificado como **caminho absoluto**, resolvido no momento da migração.
+- Precisa ser gerado (rodando `make server-app` uma vez) em **cada máquina** que for submeter treinamentos — normalmente só o desktop, se a convenção de sempre submeter de lá for seguida.
+- `pyproject.toml` fica com as seções antigas comentadas automaticamente pelo próprio flwr, como referência — não é um bug, é o comportamento pretendido da migração, mas precisa ser documentado para não confundir quem olhar o arquivo depois.
+
+**Documentação:** nova seção completa no `README.md` — "Rede Federada Real via SuperLink (Desktop + Notebook) — Caminho B" — espelhando o estilo/passo-a-passo já usado na seção do Caminho A, incluindo a ressalva do `~/.flwr/config.toml` e uma tabela comparativa Caminho A vs. B. Índice do README atualizado (16 itens agora, numeração de itens finais também corrigida).
+
+**Próximo passo:** a autora fará o teste real nas duas máquinas físicas (desktop + notebook), seguindo a nova seção do README.

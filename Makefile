@@ -36,7 +36,9 @@ BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
 .PHONY: setup ollama-setup ollama-check \
         test test-integration test-e2e test-all test-cov experiment training training-full \
         training-full-cuda training-bpsp-only training-hsl-only \
-        training-iid-contrast training-iid-contrast-cuda clean \
+        training-iid-contrast training-iid-contrast-cuda \
+        training-dp-curve training-dp-curve-cuda training-dp-curve-replicas-cuda \
+        training-dp-curve-deterministic-cuda clean \
         superlink server-app supernode sim test-pipeline behrt-pooled recalibrate \
         bootstrap-ci seed-sensitivity \
         db-up db-down db-wait fl-server fl-client fl-check \
@@ -136,18 +138,23 @@ seed-sensitivity:
 	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) experiments/training_runner/run_seed_sensitivity.py \
 		--rounds $(ROUNDS) --seeds $(SEEDS)
 
+## Classifica o(s) treinamento(s) no banco: "ajuste" (default — NÃO citar como
+## resultado final) ou "treinamento_real" (resultado formal para o TCC).
+## Uso: FL_RUN_CLASSIFICATION=treinamento_real make training-full-cuda
+FL_RUN_CLASSIFICATION ?= ajuste
+
 ## Treinamento federado com apenas clientes BPSP (leave-one-client-out).
 ## Test/cal sempre no set global (BPSP+HSL) para comparação justa. Requer FL_DB_URL.
 training-bpsp-only:
 	@LOG="experiments/logs/training_bpsp_only_$$(date +%Y%m%d_%H%M%S).log"; \
-	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LOG_FILE="$$LOG" \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" \
 	$(PYTHON) experiments/training_runner/run_training.py
 
 ## Treinamento federado com apenas clientes HSL (leave-one-client-out).
 ## Test/cal sempre no set global (BPSP+HSL) para comparação justa. Requer FL_DB_URL.
 training-hsl-only:
 	@LOG="experiments/logs/training_hsl_only_$$(date +%Y%m%d_%H%M%S).log"; \
-	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LOG_FILE="$$LOG" \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" \
 	$(PYTHON) experiments/training_runner/run_training.py
 
 ## Treinamento federado com partição IID simulada (pool BPSP+HSL embaralhado,
@@ -155,19 +162,20 @@ training-hsl-only:
 ## vs. IID simulado, mesmo algoritmo/hiperparâmetros/seed. Requer FL_DB_URL.
 training-iid-contrast:
 	@LOG="experiments/logs/training_iid_contrast_$$(date +%Y%m%d_%H%M%S).log"; \
-	FL_ENV=production FL_PARTITION_MODE=iid_simulado FL_LOG_FILE="$$LOG" \
+	FL_ENV=production FL_PARTITION_MODE=iid_simulado FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" \
 	$(PYTHON) experiments/training_runner/run_training.py
 
 ## Mesma coisa, forçando GPU.
 training-iid-contrast-cuda:
 	@LOG="experiments/logs/training_iid_contrast_cuda_$$(date +%Y%m%d_%H%M%S).log"; \
-	FL_ENV=production FL_DEVICE=cuda FL_PARTITION_MODE=iid_simulado FL_LOG_FILE="$$LOG" \
+	FL_ENV=production FL_DEVICE=cuda FL_PARTITION_MODE=iid_simulado FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" \
 	$(PYTHON) experiments/training_runner/run_training.py
 
 ## Pipeline completo: BPSP-only → HSL-only → federado (BPSP+HSL) → pooled baseline → IID simulado (contraste).
 ## Sem parametrização externa — env vars definidas internamente.
 ## Requer FL_DB_URL, dados de ambos os hospitais no banco e Ollama rodando com gemma3:4b.
 ## Para trocar o modelo LLM: FL_LLM_MODEL=outro-modelo make training-full
+## Para marcar como resultado oficial: FL_RUN_CLASSIFICATION=treinamento_real make training-full
 FL_LLM_BACKEND ?= ollama
 FL_LLM_MODEL   ?= gemma3:4b
 FL_DP_NOISE    ?= 0.0   # σ do ruído DP (0.0 = DP desabilitado)
@@ -176,31 +184,93 @@ FL_DP_CLIP     ?= 1.0   # S = norma máxima do update do cliente
 training-full:
 	@LOG="experiments/logs/run_complete_$$(date +%Y%m%d_%H%M%S).log"; \
 	echo "=== 1/5 training-bpsp-only ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
 	echo "=== 2/5 training-hsl-only ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	FL_ENV=production FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
 	echo "=== 3/5 training-federated (BPSP+HSL, non-IID real) ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	FL_ENV=production FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
 	echo "=== 4/5 behrt-pooled baseline ===" | tee -a "$$LOG"; \
 	FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_behrt_pooled.py; \
 	echo "=== 5/5 training-federated (IID simulado — contraste Experimento 3) ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_PARTITION_MODE=iid_simulado FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py
+	FL_ENV=production FL_PARTITION_MODE=iid_simulado FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py
 
 ## Pipeline completo (mesmas 5 fases de training-full), forçando execução na GPU via FL_DEVICE=cuda.
 ## Requer FL_DB_URL, dados de ambos os hospitais no banco, Ollama rodando com gemma3:4b e CUDA disponível
 ## (validar antes com: .venv/bin/python -c "import torch; print(torch.cuda.is_available())").
+## Para marcar como resultado oficial: FL_RUN_CLASSIFICATION=treinamento_real make training-full-cuda
 training-full-cuda:
 	@LOG="experiments/logs/run_complete_cuda_$$(date +%Y%m%d_%H%M%S).log"; \
 	echo "=== 1/5 training-bpsp-only (cuda) ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_DEVICE=cuda FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	FL_ENV=production FL_DEVICE=cuda FL_INCLUDE_HOSPITALS=BPSP FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
 	echo "=== 2/5 training-hsl-only (cuda) ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_DEVICE=cuda FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	FL_ENV=production FL_DEVICE=cuda FL_INCLUDE_HOSPITALS=HSL FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
 	echo "=== 3/5 training-federated (BPSP+HSL, non-IID real, cuda) ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_DEVICE=cuda FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	FL_ENV=production FL_DEVICE=cuda FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
 	echo "=== 4/5 behrt-pooled baseline (cuda) ===" | tee -a "$$LOG"; \
 	FL_DEVICE=cuda FL_DB_URL="$(FL_DB_URL)" FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_behrt_pooled.py; \
 	echo "=== 5/5 training-federated (IID simulado — contraste Experimento 3, cuda) ===" | tee -a "$$LOG"; \
-	FL_ENV=production FL_DEVICE=cuda FL_PARTITION_MODE=iid_simulado FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py
+	FL_ENV=production FL_DEVICE=cuda FL_PARTITION_MODE=iid_simulado FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_DP_NOISE=$(FL_DP_NOISE) FL_DP_CLIP=$(FL_DP_CLIP) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py
+
+## Curva Acurácia × ε (DP-FedAvg, Exp 17/18/19): roda só a fase Federada
+## (BPSP+HSL, non-IID real) — onde a privacidade client-level do DP-FedAvg de
+## fato se aplica. BPSP-only/HSL-only são cliente único (sem agregação entre
+## clientes) e o Pooled/RF não passam por FL — não fazem parte desta curva.
+## 3 execuções, σ=1,0/0,5/2,0, S=1,0 fixo (mesmos valores do plano original em
+## docs/TODO.md). Cada σ gera log e training_id próprios, todos marcados com
+## partition_mode=natural e dp_noise_multiplier preenchido.
+## Consultar depois com:
+##   SELECT id, dp_noise_multiplier, dp_epsilon_simple, dp_epsilon_rdp,
+##          best_accuracy, macro_f1 FROM metrics.fl_trainings
+##   WHERE dp_noise_multiplier IS NOT NULL ORDER BY id;
+training-dp-curve:
+	@for SIGMA in 1.0 0.5 2.0; do \
+		LOG="experiments/logs/dp_curve_sigma$${SIGMA}_$$(date +%Y%m%d_%H%M%S).log"; \
+		echo "=== DP curve sigma=$$SIGMA (S=1.0) ===" | tee -a "$$LOG"; \
+		FL_ENV=production FL_DP_NOISE=$$SIGMA FL_DP_CLIP=1.0 FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	done
+
+## Mesma coisa, forçando GPU — recomendado: qualidade já confirmada equivalente
+## entre devices (ver docs/Sumario_Treinamento_Parte3.md), e ~10x mais rápido
+## por execução — relevante aqui porque são 3 execuções, não 1.
+training-dp-curve-cuda:
+	@for SIGMA in 1.0 0.5 2.0; do \
+		LOG="experiments/logs/dp_curve_sigma$${SIGMA}_cuda_$$(date +%Y%m%d_%H%M%S).log"; \
+		echo "=== DP curve sigma=$$SIGMA (S=1.0, cuda) ===" | tee -a "$$LOG"; \
+		FL_ENV=production FL_DEVICE=cuda FL_DP_NOISE=$$SIGMA FL_DP_CLIP=1.0 FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	done
+
+## Investigação (2026-07-03): a curva original (training-dp-curve-cuda, ids
+## 48-50) teve relação ruído×utilidade NÃO monotônica (σ=1,0 pior que σ=2,0,
+## ver docs/Sumario_Treinamento_Parte3.md). Hipótese: variância de execução
+## única, não efeito real do ruído. Roda cada σ com 3 seeds (42 — a mesma da
+## curva original — mais 43 e 44) para ver se o padrão se mantém ou é
+## específico da seed=42. Data continua idêntica entre réplicas (dataloaders.py
+## usa geradores fixos em RANDOM_SEED, não afetados por FL_RANDOM_SEED) — só
+## variam inicialização de pesos e sorteios de ruído do DP.
+## Default FL_RUN_CLASSIFICATION=ajuste (investigação de robustez, não resultado
+## novo) — sobrescrever explicitamente se as réplicas forem citadas como dado formal.
+training-dp-curve-replicas-cuda:
+	@for SIGMA in 1.0 0.5 2.0; do \
+		for SEED in 42 43 44; do \
+			LOG="experiments/logs/dp_replica_sigma$${SIGMA}_seed$${SEED}_$$(date +%Y%m%d_%H%M%S).log"; \
+			echo "=== DP replica sigma=$$SIGMA seed=$$SEED (cuda) ===" | tee -a "$$LOG"; \
+			FL_ENV=production FL_DEVICE=cuda FL_DP_NOISE=$$SIGMA FL_DP_CLIP=1.0 FL_RANDOM_SEED=$$SEED FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+		done; \
+	done
+
+## Etapa 2 da investigação de não-monotonicidade (após Etapa 1 — réplicas com
+## seeds diferentes — confirmar que σ=1,0 é consistentemente o pior ponto).
+## Reexecuta os mesmos 3 σ, MESMA seed=42 da curva original (ids 48-50), com
+## torch.use_deterministic_algorithms(True, warn_only=True) ativo. Objetivo:
+## saber se a curva original já era reprodutível bit-a-bit (resultado bate com
+## ids 48-50) ou se ainda há não-determinismo de GPU não coberto por
+## cudnn.deterministic=True sozinho (resultado diverge).
+training-dp-curve-deterministic-cuda:
+	@for SIGMA in 1.0 0.5 2.0; do \
+		LOG="experiments/logs/dp_deterministic_sigma$${SIGMA}_$$(date +%Y%m%d_%H%M%S).log"; \
+		echo "=== DP deterministic sigma=$$SIGMA seed=42 (cuda) ===" | tee -a "$$LOG"; \
+		FL_ENV=production FL_DEVICE=cuda FL_DP_NOISE=$$SIGMA FL_DP_CLIP=1.0 FL_DETERMINISTIC=1 FL_LLM_BACKEND=$(FL_LLM_BACKEND) FL_LLM_MODEL=$(FL_LLM_MODEL) FL_RUN_CLASSIFICATION=$(FL_RUN_CLASSIFICATION) FL_LOG_FILE="$$LOG" $(PYTHON) experiments/training_runner/run_training.py; \
+	done
 
 # ── Banco de dados (PostgreSQL via Docker) ────────────────────────────────────
 

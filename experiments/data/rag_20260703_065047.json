@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"curado_pronto\" (probabilidade 0.81) para este paciente é razoável considerando a ausência de alterações significativas nos exames, especialmente a normalidade dos basófilos e da concentração de hemoglobina corpuscular.  Os casos similares com desfechos",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_pronto. Marcadores de maior atenção: Bilirrubina Total HIGH, DHL - IFCC NORMAL, Cloro, sangue HIGH, Eritrocitos HIGH, Concentracao de Hemoglobina Corpuscular NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.41820343841334706
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Fosforo LOW, Concentracao de Hemoglobina Corpuscular HIGH, DHL NORMAL, Basófilos NORMAL, Amilase NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.4210755228996277
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Concentracao de Hemoglobina Corpuscular NORMAL, DHL - IFCC HIGH, Eritrocitos HIGH, Volume plaquetario medio LOW, DHL - IFCC NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.428570951734241
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.2286,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.2021,
+      "curado_internado": 0.1377,
+      "melhora_pronto": 0.074,
+      "melhora_internado_breve": 0.3203,
+      "melhora_internado_grave": 0.215
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

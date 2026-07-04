@@ -1,0 +1,222 @@
+{
+  "best_round": 1,
+  "total_rounds": 1,
+  "best_f1_macro": 0.23948939948939948,
+  "best_accuracy": 0.23333333333333334,
+  "temperature": 1.4867,
+  "ece_isotonic": 0.3458,
+  "pre_calibration": {
+    "accuracy": 0.2333,
+    "macro_f1": 0.2395,
+    "macro_auc": 0.5555,
+    "per_class": {
+      "curado_pronto": {
+        "auc_roc": 0.625,
+        "f1": 0.2,
+        "precision": 0.1429,
+        "recall": 0.3333,
+        "support": 6
+      },
+      "curado_internado": {
+        "auc_roc": 0.544,
+        "f1": 0.2857,
+        "precision": 0.5,
+        "recall": 0.2,
+        "support": 5
+      },
+      "melhora_pronto": {
+        "auc_roc": 0.4845,
+        "f1": 0.1818,
+        "precision": 0.25,
+        "recall": 0.1429,
+        "support": 7
+      },
+      "melhora_internado_breve": {
+        "auc_roc": 0.5568,
+        "f1": 0.3077,
+        "precision": 0.4,
+        "recall": 0.25,
+        "support": 8
+      },
+      "melhora_internado_grave": {
+        "auc_roc": 0.5673,
+        "f1": 0.2222,
+        "precision": 0.2,
+        "recall": 0.25,
+        "support": 4
+      }
+    },
+    "calibration": {
+      "ece": 0.0881,
+      "mce": 0.3967,
+      "bins": [
+        {
+          "confidence_mean": 0.2389,
+          "accuracy": 0.1852,
+          "count": 27,
+          "gap": 0.0538
+        },
+        {
+          "confidence_mean": 0.2699,
+          "accuracy": 0.6667,
+          "count": 3,
+          "gap": 0.3967
+        }
+      ],
+      "temperature": 1.0,
+      "n_samples": 30
+    },
+    "confusion_matrix": [
+      [
+        2,
+        0,
+        1,
+        2,
+        1
+      ],
+      [
+        4,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        1,
+        0,
+        2
+      ],
+      [
+        3,
+        1,
+        1,
+        2,
+        1
+      ],
+      [
+        1,
+        0,
+        1,
+        1,
+        1
+      ]
+    ],
+    "n_samples": 30,
+    "class_labels": [
+      "curado_pronto",
+      "curado_internado",
+      "melhora_pronto",
+      "melhora_internado_breve",
+      "melhora_internado_grave"
+    ]
+  },
+  "post_calibration": {
+    "accuracy": 0.2333,
+    "macro_f1": 0.2395,
+    "macro_auc": 0.5541,
+    "per_class": {
+      "curado_pronto": {
+        "auc_roc": 0.6181,
+        "f1": 0.2,
+        "precision": 0.1429,
+        "recall": 0.3333,
+        "support": 6
+      },
+      "curado_internado": {
+        "auc_roc": 0.544,
+        "f1": 0.2857,
+        "precision": 0.5,
+        "recall": 0.2,
+        "support": 5
+      },
+      "melhora_pronto": {
+        "auc_roc": 0.4845,
+        "f1": 0.1818,
+        "precision": 0.25,
+        "recall": 0.1429,
+        "support": 7
+      },
+      "melhora_internado_breve": {
+        "auc_roc": 0.5568,
+        "f1": 0.3077,
+        "precision": 0.4,
+        "recall": 0.25,
+        "support": 8
+      },
+      "melhora_internado_grave": {
+        "auc_roc": 0.5673,
+        "f1": 0.2222,
+        "precision": 0.2,
+        "recall": 0.25,
+        "support": 4
+      }
+    },
+    "calibration": {
+      "ece": 0.0054,
+      "mce": 0.0054,
+      "bins": [
+        {
+          "confidence_mean": 0.228,
+          "accuracy": 0.2333,
+          "count": 30,
+          "gap": 0.0054
+        }
+      ],
+      "temperature": 1.4867185354232788,
+      "n_samples": 30
+    },
+    "confusion_matrix": [
+      [
+        2,
+        0,
+        1,
+        2,
+        1
+      ],
+      [
+        4,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        1,
+        0,
+        2
+      ],
+      [
+        3,
+        1,
+        1,
+        2,
+        1
+      ],
+      [
+        1,
+        0,
+        1,
+        1,
+        1
+      ]
+    ],
+    "n_samples": 30,
+    "class_labels": [
+      "curado_pronto",
+      "curado_internado",
+      "melhora_pronto",
+      "melhora_internado_breve",
+      "melhora_internado_grave"
+    ]
+  },
+  "partition_mode": "natural",
+  "subgroup_metrics": null,
+  "dp_noise_multiplier": 0.0,
+  "dp_max_grad_norm": 1.0,
+  "dp_epsilon_simple": null,
+  "dp_epsilon_rdp": null
+}

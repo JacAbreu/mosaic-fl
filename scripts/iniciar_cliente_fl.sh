@@ -24,6 +24,6 @@ FL_MAX_RETRIES="${FL_MAX_RETRIES:-20}"
 exec flower-supernode \
     --root-certificates "${FL_TLS_CERT_DIR}/ca.crt" \
     --superlink "${FL_SUPERLINK_ADDRESS}" \
-    --node-config "client-id=${FL_CLIENT_ID},data-source=${FL_DATA_SOURCE}" \
+    --node-config "client-id=\"${FL_CLIENT_ID}\" data-source=\"${FL_DATA_SOURCE}\"" \
     --max-retries "${FL_MAX_RETRIES}" \
     "$@"

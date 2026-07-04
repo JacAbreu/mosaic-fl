@@ -1673,3 +1673,9 @@ Nesta sessão, `src/mosaicfl/core/*`, `experiments/*` e a maior parte de `infras
 **Leitura:** mesma faixa de valores e mesmo padrão estrutural em todas as fases (convergência em BPSP/HSL, não-convergência em Federado, RAG funcionando nas 3 fases sem erro de device, checkpoint guloso funcionando). Os números exatos diferem — esperado, mesma causa já documentada na seção de reprodutibilidade CPU↔GPU acima (RNGs distintos por device + não-associatividade de ponto flutuante em GPU), não indica regressão da modularização. **Conclusão: refactoring validado, sem alteração de comportamento.**
 
 Resultado desta validação (se relevante) será anotado abaixo apenas como confirmação de "roda sem erro" — não como dado comparável.
+
+
+Quando for rodar os Treinamentos Reais de verdade, é só:                                                           
+  FL_RUN_CLASSIFICATION=treinamento_real make training-full-cuda
+  # ou, se for em CPU:
+  FL_RUN_CLASSIFICATION=treinamento_real make training-full

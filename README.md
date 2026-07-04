@@ -56,14 +56,15 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 5. [Testes](#testes)
 6. [Rodando Localmente](#rodando-localmente)
 7. [Rede Federada Real (Desktop + Notebook)](#rede-federada-real-desktop--notebook) — ([hardware detalhado](docs/ambiente_simulacao.md))
-8. [Padrões de Interoperabilidade (FHIR R4 + LOINC)](#padrões-de-interoperabilidade-fhir-r4--loinc)
-9. [Infraestrutura de Produção (SuperLink)](#infraestrutura-de-produção-superlink)
-10. [Docker](#docker)
-11. [Kubernetes (Helm)](#kubernetes-helm)
-12. [Experimentos](#experimentos)
-13. [Solução de Problemas](#solução-de-problemas)
-14. [Uso de Inteligência Artificial](#uso-de-inteligência-artificial)
-15. [Referências](#referências)
+8. [Rede Federada Real via SuperLink (Desktop + Notebook) — Caminho B](#rede-federada-real-via-superlink-desktop--notebook--caminho-b)
+9. [Padrões de Interoperabilidade (FHIR R4 + LOINC)](#padrões-de-interoperabilidade-fhir-r4--loinc)
+10. [Infraestrutura de Produção (SuperLink)](#infraestrutura-de-produção-superlink)
+11. [Docker](#docker)
+12. [Kubernetes (Helm)](#kubernetes-helm)
+13. [Experimentos](#experimentos)
+14. [Solução de Problemas](#solução-de-problemas)
+15. [Uso de Inteligência Artificial](#uso-de-inteligência-artificial)
+16. [Referências](#referências)
 
 > **Documentação detalhada do pipeline:** [`docs/FLUXO_APRENDIZADO_FEDERADO.md`](docs/FLUXO_APRENDIZADO_FEDERADO.md) — SQL → tokenização → BEHRT → ClinicalPath, com diagramas Mermaid.
 > **Avaliação do projeto:** [`AVALIACAO_PROJETO.md`](AVALIACAO_PROJETO.md) — avaliações acadêmica e de produção clínica com histórico de evolução.
@@ -815,6 +816,137 @@ Com desktop + notebook: servidor pronto → notebook conecta → round 1 começa
 
 ---
 
+## Rede Federada Real via SuperLink (Desktop + Notebook) — Caminho B
+
+O modo acima (`fl-server`/`fl-client`) usa a API legada do Flower (sockets diretos,
+`fl.server.start_server`/`fl.client.start_client`). Este segundo caminho usa a
+arquitetura de produção do Flower — `flower-superlink` + `ServerApp`/`ClientApp` — e
+é o mais próximo do que um deploy real (cross-silo) usaria. **Os dois caminhos podem
+coexistir na mesma máquina** — usam faixas de porta diferentes (8080/8081 vs.
+9091-9093 + health próprio) — não é necessário escolher um em detrimento do outro.
+Detalhes gerais de cada componente (SuperLink/ServerApp/SuperNode) estão em
+["Infraestrutura de Produção (SuperLink)"](#infraestrutura-de-produção-superlink).
+Para um passo a passo completo com banco do servidor separado (sem afetar bancos
+já existentes), ver [`docs/Tutorial_Rede_Federada_Real_Desktop_Notebook.md`](docs/Tutorial_Rede_Federada_Real_Desktop_Notebook.md).
+esta seção cobre especificamente o cenário desktop+notebook em rede local.
+
+```
+Desktop (SuperLink + BPSP)                    Notebook (SuperNode + HSL)
+┌───────────────────────────────┐             ┌───────────────────────────┐
+│ flower-superlink               │◄───────────►│ flower-supernode          │
+│  Fleet API      :9091 ─────────┼── LAN/Wi-Fi ┤  (conecta na Fleet API)   │
+│  ServerAppIo API :9092 (interno)│             │  Dados HSL (local)       │
+│  Control API    :9093 (flwr run)│             └───────────────────────────┘
+│  Dados BPSP (local)             │
+└───────────────────────────────┘
+```
+
+### 1. Gerar certificados TLS com o IP real do desktop
+
+TLS é **obrigatório** neste caminho (os scripts `iniciar_servidor_fl.sh`/`iniciar_cliente_fl.sh`
+falham cedo, com mensagem clara, se `FL_TLS_CERT_DIR` não estiver definido).
+
+```bash
+# No desktop, descubra seu IP:
+hostname -I
+
+# Gere os certificados JÁ com esse IP como segundo argumento:
+bash scripts/gerar_certs_tls.sh certs 192.168.1.100   # troque pelo IP real do seu desktop
+export FL_TLS_CERT_DIR="$(pwd)/certs"
+```
+
+> **Importante:** o IP precisa ser passado na geração do certificado para entrar como
+> `IP:` no Subject Alternative Name (SAN) — não como `DNS:`. Sem isso, a validação TLS
+> falha ao conectar via IP real (só funcionaria via `localhost`). O script detecta
+> automaticamente se o valor passado é um IPv4 e usa o tipo de SAN correto.
+
+### 2. Copiar `ca.crt` para o notebook
+
+```bash
+scp certs/ca.crt usuario@IP_NOTEBOOK:~/mosaic-fl/certs/ca.crt
+# ou via pendrive/git — só o ca.crt precisa ir; ca.key e server.key nunca saem do desktop
+```
+
+### 3. Iniciar o SuperLink (desktop)
+
+```bash
+make superlink
+```
+
+Imprime o IP local e o comando pronto para colar no notebook.
+
+### 4. Liberar a porta no firewall do desktop
+
+```bash
+sudo ufw allow 9091/tcp   # Fleet API — é só o que o SuperNode do notebook precisa alcançar
+sudo ufw reload
+```
+
+A Control API (9093) e a ServerAppIo API (9092) não precisam ficar expostas para fora
+da máquina se você sempre submeter os treinamentos (`make server-app`) a partir do
+próprio desktop — convenção recomendada e assumida no restante desta seção.
+
+### 5. Iniciar o SuperNode (notebook)
+
+```bash
+export FL_TLS_CERT_DIR=~/mosaic-fl/certs   # só precisa conter ca.crt
+make supernode FL_CLIENT_ID=HSL FL_SUPERLINK_ADDRESS=IP_DO_DESKTOP:9091 FL_DATA_SOURCE=sgbd
+```
+
+### 6. Submeter o treinamento (a partir do desktop)
+
+```bash
+make server-app
+```
+
+### Atenção — migração automática de configuração (flwr ≥1.30)
+
+A versão do flwr usada neste projeto (1.30.0) migra automaticamente a seção
+`[tool.flwr.federations.production]` do `pyproject.toml` para um arquivo **local da
+máquina**, `~/.flwr/config.toml`, na primeira vez que `make server-app` (`flwr run`) roda.
+
+- **Esse arquivo não é versionado pelo git** — vive em `~/.flwr/`, por usuário/máquina.
+- Guarda o caminho do certificado como **caminho absoluto**, resolvido no momento da migração.
+- Precisa existir corretamente em **cada máquina** que for rodar `make server-app`
+  (normalmente só o desktop, seguindo a convenção da seção anterior).
+
+Depois da primeira execução, confira o resultado:
+```bash
+cat ~/.flwr/config.toml
+```
+Deve aparecer algo como:
+```toml
+[superlink.production]
+address = "localhost:9093"
+root-certificates = "/caminho/absoluto/para/mosaic-fl/certs/ca.crt"
+insecure = false
+```
+Se precisar reconfigurar em outra máquina/usuário, rode `make server-app` uma vez lá —
+a migração acontece automaticamente a partir do `pyproject.toml` (mantido no repositório
+como referência comentada, após a primeira migração).
+
+### Variáveis configuráveis (Caminho B)
+
+| Variável | Desktop (SuperLink) | Notebook (SuperNode) | Padrão |
+|---|---|---|---|
+| `FL_TLS_CERT_DIR` | dir com `ca.crt`+`server.crt`+`server.key` | dir com só `ca.crt` | obrigatório, sem default |
+| `FL_FLEET_API` | endereço da Fleet API | — | `0.0.0.0:9091` |
+| `FL_APPIO_API` | endereço da ServerApp I/O API | — | `0.0.0.0:9092` |
+| `FL_CONTROL_API` | endereço da Control API | — | `0.0.0.0:9093` |
+| `FL_SUPERLINK_ADDRESS` | — | `IP_DESKTOP:9091` | `localhost:9091` |
+| `FL_CLIENT_ID` | — | ID do hospital (`HSL`) | `hospital_dev` |
+| `FL_DATA_SOURCE` | — | `simulated` \| `sgbd` \| `csv` | `simulated` |
+
+### Caminho A vs. Caminho B — qual usar
+
+| | Caminho A (`fl-server`/`fl-client`) | Caminho B (`superlink`/`supernode`) |
+|---|---|---|
+| Arquitetura Flower | Legada (sockets diretos) | Produção (`ServerApp`/`ClientApp` via SuperLink) |
+| TLS | Obrigatório no código; passos originais não mencionavam | Obrigatório e documentado desde o início |
+| Uso recomendado | Testes rápidos, depuração | Mais próximo do "mundo real" — recomendado para os Treinamentos Reais |
+
+---
+
 ## Padrões de Interoperabilidade (FHIR R4 + LOINC)
 
 ### Princípio fundamental — as probabilidades pertencem ao quadro clínico, não ao indivíduo
@@ -1154,11 +1286,12 @@ FL_CLIENT_ID=hospital_1 \
 FL_DATA_SOURCE=sgbd \
 bash scripts/iniciar_cliente_fl.sh
 
-# Direto
+# Direto (--node-config usa espaço como separador, não vírgula — o parser do
+# flwr rejeita "chave1=valor1,chave2=valor2")
 flower-supernode \
     --root-certificates /certs/ca.crt \
     --superlink 52.67.123.45:9091 \
-    --node-config "client-id=hospital_1,data-source=sgbd" \
+    --node-config 'client-id="hospital_1" data-source="sgbd"' \
     --max-retries 20
 ```
 

@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"curado_pronto\" com alta probabilidade (0.81) para este paciente é razoável considerando os casos similares recuperados que frequentemente apresentam desfechos de melhora e internação breve. A presença consistente de Basofilos NORMAL, juntamente com a Concentração de Hem",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Hemoglobina Corpuscular Media HIGH, Bilirrubina Total HIGH, Albumina LOW, Tempo de Protrombina NORMAL, Basófilos NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.38596566831860846
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Hemoglobina Corpuscular Media NORMAL, VCM LOW, Fibrinogenio NORMAL, Calcio Ionizavel NORMAL, Uréia NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.40498292446136475
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Fosforo LOW, Concentracao de Hemoglobina Corpuscular HIGH, DHL NORMAL, Basófilos NORMAL, Amilase NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.4210755228996277
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.2279,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0063,
+      "curado_internado": 0.1449,
+      "melhora_pronto": 0.1042,
+      "melhora_internado_breve": 0.6496,
+      "melhora_internado_grave": 0.027
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

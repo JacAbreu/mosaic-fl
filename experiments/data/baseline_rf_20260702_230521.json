@@ -1,0 +1,67 @@
+{
+  "opcao_a_centralizado": {
+    "accuracy": 0.6726,
+    "macro_f1": 0.5158,
+    "macro_auc": 0.8073,
+    "ece": 0.0676,
+    "per_class_auc": {
+      "curado_pronto": 0.8851,
+      "curado_internado": 0.6136,
+      "melhora_pronto": 0.9754,
+      "melhora_internado_breve": 0.7646,
+      "melhora_internado_grave": 0.7978
+    },
+    "n_train": 23640,
+    "descricao": "RF treinado em pool de todos os clientes (centralizado)"
+  },
+  "opcao_b_por_hospital": {
+    "per_client": {
+      "0": {
+        "accuracy": 0.6708,
+        "macro_f1": 0.513,
+        "macro_auc": 0.8046,
+        "ece": 0.0714,
+        "per_class_auc": {
+          "curado_pronto": 0.877,
+          "curado_internado": 0.6294,
+          "melhora_pronto": 0.9758,
+          "melhora_internado_breve": 0.7467,
+          "melhora_internado_grave": 0.7943
+        },
+        "n_train": 11820,
+        "n_classes_local": 5
+      },
+      "1": {
+        "accuracy": 0.6794,
+        "macro_f1": 0.5158,
+        "macro_auc": 0.8003,
+        "ece": 0.0685,
+        "per_class_auc": {
+          "curado_pronto": 0.8826,
+          "curado_internado": 0.5864,
+          "melhora_pronto": 0.9719,
+          "melhora_internado_breve": 0.769,
+          "melhora_internado_grave": 0.7918
+        },
+        "n_train": 11820,
+        "n_classes_local": 5
+      }
+    },
+    "descricao": "RF independente por hospital — sem compartilhamento de dados"
+  },
+  "meta": {
+    "vocab_size": 10000,
+    "n_test": 3381,
+    "class_labels": [
+      "curado_pronto",
+      "curado_internado",
+      "melhora_pronto",
+      "melhora_internado_breve",
+      "melhora_internado_grave"
+    ],
+    "rf_params": {
+      "n_estimators": 200,
+      "class_weight": "balanced"
+    }
+  }
+}

@@ -75,6 +75,8 @@ def main() -> None:
         demographics_by_client,
         test_loader_demo,
         cal_loader,
+        _test_loader_origin,
+        _origin_labels,
     ) = prepare_dataloaders_from_db(FL_DB_URL)
 
     logger.info("[2/3] BEHRT pooled baseline (pool BPSP+HSL)...")

@@ -1,0 +1,61 @@
+{
+  "ablation_A_sem_demo": {
+    "accuracy": 0.575,
+    "std_accuracy": 0.0,
+    "macro_f1": 0.3851,
+    "std_macro_f1": 0.0,
+    "demo_dim": 0,
+    "n_epochs": 10,
+    "n_seeds": 1,
+    "seeds_detail": [
+      {
+        "accuracy": 0.575,
+        "macro_f1": 0.3851,
+        "macro_auc": 0.805,
+        "ece": 0.1004,
+        "descricao": "SimplifiedBEHRT sem demográficos (baseline)",
+        "seed": 42,
+        "demo_dim": 0,
+        "n_epochs": 10
+      }
+    ],
+    "descricao": "SimplifiedBEHRT sem demográficos (baseline)"
+  },
+  "ablation_B_late_fusion": {
+    "accuracy": 0.6551,
+    "std_accuracy": 0.0,
+    "macro_f1": 0.4406,
+    "std_macro_f1": 0.0,
+    "demo_dim": 2,
+    "n_epochs": 10,
+    "n_seeds": 1,
+    "seeds_detail": [
+      {
+        "accuracy": 0.6551,
+        "macro_f1": 0.4406,
+        "loss": 0.9396,
+        "descricao": "SimplifiedBEHRT + late fusion demográfica (dados reais FAPESP)",
+        "seed": 42,
+        "demo_dim": 2,
+        "n_epochs": 10
+      }
+    ],
+    "descricao": "SimplifiedBEHRT + late fusion demográfica (dados reais FAPESP)"
+  },
+  "delta_B_minus_A": {
+    "accuracy": 0.0801,
+    "macro_f1": 0.0555
+  },
+  "meta": {
+    "fonte_demo": "real_fapesp",
+    "n_epochs": 10,
+    "random_seed": 42,
+    "seeds": [
+      42
+    ],
+    "demo_features": [
+      "age_norm (birth_year / ref_year=2021)",
+      "sex_binary (M=1, F=0)"
+    ]
+  }
+}

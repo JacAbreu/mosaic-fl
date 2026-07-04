@@ -1,0 +1,11 @@
+{
+  "status": "running",
+  "last_round": 0,
+  "convergence_history": [],
+  "converged_round": null,
+  "last_metrics": {},
+  "last_checkpoint": null,
+  "timed_out_rounds": [],
+  "started_at": "2026-07-04T13:21:34.852289",
+  "updated_at": "2026-07-04T13:21:34.852294"
+}

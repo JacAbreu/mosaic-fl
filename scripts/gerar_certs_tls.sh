@@ -56,10 +56,18 @@ openssl req -newkey rsa:4096 \
   -subj "/C=$COUNTRY/ST=$STATE/L=$CITY/O=$ORG/CN=$SERVER_CN" \
   2>/dev/null
 
-# SAN (Subject Alternative Name) — necessário para que clientes modernos aceitem
+# SAN (Subject Alternative Name) — necessário para que clientes modernos aceitem.
+# Se SERVER_CN for um endereço IPv4 literal (ex.: 192.168.1.100), precisa entrar
+# como "IP:", não "DNS:" — a validação TLS de clientes gRPC distingue os dois tipos
+# de entrada, e rejeita a conexão se o IP usado para conectar só existir como DNS SAN.
+if [[ "$SERVER_CN" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+  SERVER_CN_SAN="IP:$SERVER_CN"
+else
+  SERVER_CN_SAN="DNS:$SERVER_CN"
+fi
 cat > "$OUT_DIR/server_ext.cnf" <<EOF
 [SAN]
-subjectAltName=IP:127.0.0.1,DNS:localhost,DNS:$SERVER_CN
+subjectAltName=IP:127.0.0.1,DNS:localhost,$SERVER_CN_SAN
 EOF
 
 # ── 3. Assinar certificado do servidor com a CA ───────────────────────────────

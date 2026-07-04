@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "Considerando os casos similares recuperados, a predição de \"curado_pronto\" (com probabilidade alta) para este paciente é razoável devido à constância dos resultados normais em todos os marcadores chave, incluindo Basofilos e Concentração de Hemoglobina Corpuscular.  Os",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Basofilos NORMAL, Lactato, sangue NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Ferritina NORMAL, Albumina NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3900960502057088
+    },
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: Basofilos NORMAL, Lactato, sangue NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Linfócitos HIGH, VCM NORMAL.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.40925657749176025
+    },
+    {
+      "texto": "Desfecho: melhora_internado_grave. Marcadores de maior atenção: Glicose NORMAL, Volume plaquetário médio NORMAL, Calcio Ionizavel NORMAL, Sódio NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL.",
+      "metadata": {
+        "desfecho": "melhora_internado_grave",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.4146606922149658
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.2697,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0876,
+      "curado_internado": 0.1884,
+      "melhora_pronto": 0.0177,
+      "melhora_internado_breve": 0.688,
+      "melhora_internado_grave": 0.0114
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

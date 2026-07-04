@@ -205,7 +205,7 @@ def main():
         sys.exit(1)
 
     logger.info("[1/4] Carregando dados do banco...")
-    _, test_loader, _, _, _, _ = prepare_dataloaders_from_db(FL_DB_URL)
+    _, test_loader, _, _, _, _, _, _, _ = prepare_dataloaders_from_db(FL_DB_URL)
     n_test = len(test_loader.dataset)
     logger.info(f"  Conjunto de teste: {n_test} amostras")
 

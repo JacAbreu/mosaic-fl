@@ -39,6 +39,33 @@ DP-FedAvg implementado (McMahan et al. 2018) em `client.py` + `fl_core.py`. Resu
 
   Após os três experimentos: construir tabela Acc × ε para o TCC (custo de privacidade com DP formal).
 
+#### Decisão de escopo e execução (2026-07-03) — atualiza o plano acima, não o substitui
+
+O plano original (acima) previa rodar `make training-full` (pipeline completo de 5 fases) três vezes, uma por σ. Reavaliado em 2026-07-03, com duas mudanças, cada uma com justificativa própria:
+
+1. **Escopo reduzido — só a fase Federada, não o pipeline completo.** O DP-FedAvg protege privacidade em nível de *cliente* (o que exige agregação entre múltiplos clientes). BPSP-only e HSL-only são cenários de cliente único (leave-one-out) — não há agregação entre clientes ali, então a garantia de privacidade do DP-FedAvg não se aplica de forma significativa. O Pooled/RF (fase 4) nem passa pelo pipeline FL. Rodar essas fases com DP habilitado gastaria tempo sem gerar dado relevante para a curva Acc×ε. **Decisão:** rodar só a fase Federada (BPSP+HSL, non-IID real) para cada σ.
+
+2. **Device: GPU, não CPU.** A comparação formal CPU×GPU do Treinamento Real (`docs/Sumario_Treinamento_Parte3.md`, ids 37-44) já confirmou qualidade equivalente entre os dois devices (diferenças pequenas, sem direção sistemática). Como o objetivo da curva Acc×ε é comparar **níveis de ruído entre si**, não comparar devices, não há motivo científico para escolher o mais lento. GPU é ~10× mais rápido por execução — relevante porque são 3 execuções, não 1 (~36 min GPU vs. ~6h12min CPU, estimado a partir da fase Federada dos Treinamentos Reais 1 e 2).
+
+**Comandos atualizados** (substituem os `make training-full` acima — mesmos σ/S, escopo e device diferentes):
+
+```bash
+# Recomendado — GPU, só a fase Federada, 3 execuções (σ=1,0/0,5/2,0) em um comando:
+FL_RUN_CLASSIFICATION=treinamento_real make training-dp-curve-cuda
+
+# Alternativa CPU, se necessário por algum motivo:
+FL_RUN_CLASSIFICATION=treinamento_real make training-dp-curve
+```
+
+Cada execução grava `dp_noise_multiplier`, `dp_epsilon_simple` (composição gaussiana simples) e `dp_epsilon_rdp` (Rényi DP via `opacus.RDPAccountant`, cota mais apertada — ver `docs/Linha_do_Tempo_MOSAIC-FL.md`, sessão de 2026-07-02) diretamente em `metrics.fl_trainings`, consultável por SQL sem depender do log:
+
+```sql
+SELECT id, dp_noise_multiplier, dp_epsilon_simple, dp_epsilon_rdp, best_accuracy, macro_f1
+FROM metrics.fl_trainings WHERE dp_noise_multiplier IS NOT NULL ORDER BY id;
+```
+
+Resultado deve ser registrado como continuação do Treinamento Real em `docs/Sumario_Treinamento_Parte3.md`, não em `Sumario_Treinamento_Parte2.md` (histórico de ajuste).
+
 ### Validação RAG — gemma3:4b
 
 - [ ] **Validar qualidade das justificativas do gemma3:4b**

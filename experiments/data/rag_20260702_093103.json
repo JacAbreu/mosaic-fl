@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "melhora_internado_grave",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"melhora interna grave\" (probabilidade 0.81) para este paciente, apesar dos resultados anormais em Basofilos e Hemoglobina Corporal, é justificada pela forte presença de Neutrófilos elevados observada em casos similares com desfechos de \"curado pronto\".",
+  "fontes": [
+    {
+      "texto": "Desfecho: curado_pronto. Marcadores de maior atenção: Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Neutrofilos HIGH, Hemoglobina NORMAL, Plaquetas HIGH.",
+      "metadata": {
+        "desfecho": "curado_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3785117268562317
+    },
+    {
+      "texto": "Desfecho: curado_pronto. Marcadores de maior atenção: Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Neutrofilos HIGH, Hemoglobina NORMAL, Plaquetas HIGH.",
+      "metadata": {
+        "desfecho": "curado_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3785117268562317
+    },
+    {
+      "texto": "Desfecho: curado_pronto. Marcadores de maior atenção: Basofilos NORMAL, Concentracao de Hemoglobina Corpuscular NORMAL, Neutrofilos HIGH, Hemoglobina NORMAL, Plaquetas HIGH.",
+      "metadata": {
+        "desfecho": "curado_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3785117268562317
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.4049,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.5772,
+      "curado_internado": 0.0519,
+      "melhora_pronto": 0.1896,
+      "melhora_internado_breve": 0.3491,
+      "melhora_internado_grave": 0.0574
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

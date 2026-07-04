@@ -73,14 +73,45 @@ proximal-mu           = 1.0
 min-clients           = 2
 round-timeout-seconds = 300
 
-# Federação local para desenvolvimento (sem SuperLink externo)
-[tool.flwr.federations.local-sim]
-options.num-supernodes = 3
+# "default": exigido pela migração de config legada do flwr >=1.30 (ver
+# scripts/iniciar_servidor_fl.sh / docs) — sem isso, "flwr run . production" falha com
+# "doesn't declare a default federation", mesmo passando o nome explicitamente.
 
-# Federação de produção (requer flower-superlink rodando)
-[tool.flwr.federations.production]
-address = "superlink:9093"
-insecure = false
+#######################################################################
+# CONFIGURATION MIGRATION NOTICE:
+#
+# What was previously called "federation config" for SuperLink
+# connections in pyproject.toml has been renamed and moved.
+#
+# These settings are now **SuperLink connection configuration**
+# and are defined in the Flower configuration file.
+#
+# The entries below are commented out intentionally and are kept
+# only as a migration reference.
+#
+# Docs: https://flower.ai/docs/framework/ref-flower-configuration.html
+#######################################################################
+
+# [tool.flwr.federations]
+# default = "production"
+
+# # Federação local para desenvolvimento (sem SuperLink externo)
+# [tool.flwr.federations.local-sim]
+# options.num-supernodes = 3
+
+# # Federação de produção (requer flower-superlink rodando, "make superlink").
+# # address = Control API do SuperLink — "localhost:9093" assume que "flwr run . production"
+# # é executado NA MESMA máquina que roda o SuperLink (o desktop). Para submeter de outra
+# # máquina (ex.: notebook), sobrescreva sem editar este arquivo:
+# #   flwr run . production --federation-config 'address="<IP_DO_DESKTOP>:9093"'
+# # root-certificates: exigido porque insecure=false — sem isso, a validação TLS falha
+# # tentando achar a CA autoassinada do MOSAIC-FL na cadeia de confiança do sistema.
+# # Caminho relativo ao diretório onde "flwr run" é executado (raiz do projeto);
+# # gerar com: bash scripts/gerar_certs_tls.sh (default: ./certs/ca.crt).
+# [tool.flwr.federations.production]
+# address = "localhost:9093"
+# insecure = false
+# root-certificates = "certs/ca.crt"
 
 [tool.black]
 line-length = 100

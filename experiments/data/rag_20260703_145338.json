@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A previsão de \"curado_pronto\" para este paciente é razoável devido à ausência de marcadores de alerta significativos e à presença de resultados normais em exames chave como Hemoglobina, CHCM e Basófilos.  Considerando os casos similares onde o desfecho foi",
+  "fontes": [
+    {
+      "texto": "Desfecho: curado_pronto. Marcadores de maior atenção: Bastonetes HIGH, Hemoglobina Corpuscular Media NORMAL, Gama-GT HIGH, Concentracao de Hemoglobina Corpuscular NORMAL, Bilirrubina Total NORMAL.",
+      "metadata": {
+        "desfecho": "curado_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3888313041724286
+    },
+    {
+      "texto": "Desfecho: melhora_pronto. Marcadores de maior atenção: Hemoglobina HIGH, Sódio NORMAL, Cloro, sangue NORMAL, Sodio NORMAL, Concentracao de Hemoglobina Corpuscular HIGH.",
+      "metadata": {
+        "desfecho": "melhora_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.42325147528955087
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Hemoglobina NORMAL, CHCM NORMAL, Basófilos NORMAL, Neutrofilos HIGH, Linfocitos HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.4310867190361023
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.3301,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.4195,
+      "curado_internado": 0.0145,
+      "melhora_pronto": 0.2385,
+      "melhora_internado_breve": 0.3333,
+      "melhora_internado_grave": 0.0104
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

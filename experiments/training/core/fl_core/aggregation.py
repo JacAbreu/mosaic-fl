@@ -90,7 +90,9 @@ def apply_dp_noise(
     noise_std = noise_multiplier * max_grad_norm / max(n_clients, 1)
     with torch.no_grad():
         for key in global_state:
-            noise = torch.normal(0.0, noise_std, size=global_state[key].shape)
+            noise = torch.normal(
+                0.0, noise_std, size=global_state[key].shape, device=global_state[key].device
+            )
             global_state[key] = (global_state[key].float() + noise).to(global_state[key].dtype)
 
     eps_per_round = math.sqrt(2 * math.log(1.25 / delta)) / noise_multiplier

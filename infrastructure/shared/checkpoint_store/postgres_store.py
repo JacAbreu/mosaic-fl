@@ -26,14 +26,15 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         n_rounds_max: int = 120,
         checkpoint_criterion: str = "f1_macro",
         partition_mode: str = "natural",
+        run_classification: str = "ajuste",
     ) -> int:
         import sqlalchemy as sa
         with self._engine.begin() as conn:
             row = conn.execute(
                 sa.text(
                     "INSERT INTO metrics.fl_trainings "
-                    "(algorithm, log_file, n_rounds_max, checkpoint_criterion, partition_mode) "
-                    "VALUES (:algorithm, :log_file, :n_rounds_max, :checkpoint_criterion, :partition_mode) "
+                    "(algorithm, log_file, n_rounds_max, checkpoint_criterion, partition_mode, run_classification) "
+                    "VALUES (:algorithm, :log_file, :n_rounds_max, :checkpoint_criterion, :partition_mode, :run_classification) "
                     "RETURNING id"
                 ),
                 {
@@ -42,11 +43,14 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "n_rounds_max":         n_rounds_max,
                     "checkpoint_criterion": checkpoint_criterion,
                     "partition_mode":       partition_mode,
+                    "run_classification":   run_classification,
                 },
             ).fetchone()
         training_id = row[0]
-        logger.info("training_registered_postgres id=%d algorithm=%s criterion=%s partition_mode=%s",
-                    training_id, algorithm, checkpoint_criterion, partition_mode)
+        logger.info(
+            "training_registered_postgres id=%d algorithm=%s criterion=%s partition_mode=%s run_classification=%s",
+            training_id, algorithm, checkpoint_criterion, partition_mode, run_classification,
+        )
         return training_id
 
     def complete_training(

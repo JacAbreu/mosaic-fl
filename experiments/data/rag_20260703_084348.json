@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.8057707193831535
+  },
+  "justificativa": "A predição de \"curado_pronto\" (com probabilidade alta) para este paciente é razoável considerando os casos similares recuperados. A presença de múltiplos valores de Basofilos NORMAL, juntamente com Concentração de Hemoglobina Corpuscular NORMAL, sugere uma resposta inflamatória control",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Concentracao de Hemoglobina Corpuscular NORMAL, Basófilos NORMAL, Calcio Ionizado, sangue NORMAL, Hemoglobina NORMAL, Creatinina HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3606251263245853
+    },
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: RDW HIGH, Concentracao de Hemoglobina Corpuscular NORMAL, Basofilos NORMAL, Hemoglobina Corpuscular Media NORMAL, Bilirrubina Direta NORMAL.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.372625313557702
+    },
+    {
+      "texto": "Desfecho: curado_internado. Marcadores de maior atenção: Hemoglobina Corpuscular Media HIGH, Hemoglobina Corpuscular Media LOW, Basófilos NORMAL, CHCM NORMAL, Fosfatase Alcalina NORMAL.",
+      "metadata": {
+        "desfecho": "curado_internado",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.3966033818362117
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.1746,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.0234,
+      "curado_internado": 0.3043,
+      "melhora_pronto": 0.0385,
+      "melhora_internado_breve": 0.458,
+      "melhora_internado_grave": 0.0768
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

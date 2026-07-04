@@ -15,8 +15,14 @@ class CheckpointStore(ABC):
         n_rounds_max: int = 120,
         checkpoint_criterion: str = "f1_macro",
         partition_mode: str = "natural",
+        run_classification: str = "ajuste",
     ) -> int:
         """Registra um novo treinamento antes do loop FL. Retorna training_id.
+
+        run_classification: "ajuste" (default — tuning/debugging/validação, NÃO
+        citar como resultado final) ou "treinamento_real" (resultado formal para
+        o texto de defesa). Precisa ser declarado explicitamente via
+        FL_RUN_CLASSIFICATION — nunca fica ambíguo/dependente de doc externo.
 
         partition_mode: "natural" (hospital real = cliente) ou "iid_simulado"
         (pool embaralhado — Experimento 3 / fase 5, contraste non-IID vs. IID)."""

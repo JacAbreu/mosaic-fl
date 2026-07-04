@@ -195,7 +195,11 @@ def main():
         sys.exit(1)
 
     logger.info("[1] Carregando dados do banco (uma única vez)...")
-    client_loaders, test_loader, vocab, total, _, cal_loader = prepare_dataloaders_from_db(FL_DB_URL)
+    (
+        client_loaders, test_loader, vocab, total,
+        _demographics_by_client, _test_loader_demo, cal_loader,
+        _test_loader_origin, _origin_labels,
+    ) = prepare_dataloaders_from_db(FL_DB_URL)
     logger.info(f"  Split fixo (RANDOM_SEED=42) | {total} treino | {len(test_loader.dataset)} teste")
 
     summaries = []

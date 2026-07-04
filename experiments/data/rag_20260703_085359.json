@@ -1,0 +1,53 @@
+{
+  "predicao": {
+    "diagnostico": "curado_pronto",
+    "probabilidade": 0.7134143517017975
+  },
+  "justificativa": "A previsão de \"curado_pronto\" (com probabilidade 0.71) para este paciente é razoável devido à ausência de anormalidades significativas nos exames, refletindo o desfecho observado em casos similares com resultados normais de hemoglobina, creatinina e magnés",
+  "fontes": [
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Hemoglobina NORMAL, Creatinina NORMAL, Hemoglobina Corpuscular Media NORMAL, Basofilos NORMAL, Linfocitos HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.40517137019804783
+    },
+    {
+      "texto": "Desfecho: melhora_internado_breve. Marcadores de maior atenção: Concentracao de Hemoglobina Corpuscular NORMAL, Basofilos NORMAL, Creatinina NORMAL, Plaquetas HIGH, Leucocitos HIGH.",
+      "metadata": {
+        "desfecho": "melhora_internado_breve",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.40758929207388706
+    },
+    {
+      "texto": "Desfecho: curado_pronto. Marcadores de maior atenção: Hemoglobina NORMAL, Magnésio NORMAL, CK NORMAL, Gama-GT NORMAL, Glicose NORMAL.",
+      "metadata": {
+        "desfecho": "curado_pronto",
+        "faixa_etaria": "adulto",
+        "categoria": "geral"
+      },
+      "distancia": 0.42730345888754384
+    }
+  ],
+  "alucinacao_detectada": false,
+  "confiavel": true,
+  "llm_backend": "ollama",
+  "llm_model_used": "gemma3:4b",
+  "llm_was_fallback": false,
+  "precision_metrics": {
+    "precision_at_3": 0.2904,
+    "per_class_precision_at_3": {
+      "curado_pronto": 0.2017,
+      "curado_internado": 0.1087,
+      "melhora_pronto": 0.326,
+      "melhora_internado_breve": 0.493,
+      "melhora_internado_grave": 0.0312
+    },
+    "k": 3,
+    "n_queries": 3381
+  }
+}

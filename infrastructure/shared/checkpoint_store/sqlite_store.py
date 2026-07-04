@@ -38,9 +38,11 @@ class SQLiteCheckpointStore(CheckpointStore):
         n_rounds_max: int = 120,
         checkpoint_criterion: str = "f1_macro",
         partition_mode: str = "natural",
+        run_classification: str = "ajuste",
     ) -> int:
-        # fl_trainings do SQLite não tem coluna partition_mode (mesma lacuna já
-        # existente para checkpoint_criterion/métricas de recurso nesta classe).
+        # fl_trainings do SQLite não tem coluna partition_mode/run_classification
+        # (mesma lacuna já existente para checkpoint_criterion/métricas de recurso
+        # nesta classe).
         started_at = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self._db_path) as conn:
             cur = conn.execute(
@@ -49,8 +51,11 @@ class SQLiteCheckpointStore(CheckpointStore):
                 (algorithm, log_file, n_rounds_max, started_at),
             )
             training_id = cur.lastrowid
-        logger.info("training_registered_sqlite id=%d algorithm=%s criterion=%s partition_mode=%s (não persistido)",
-                    training_id, algorithm, checkpoint_criterion, partition_mode)
+        logger.info(
+            "training_registered_sqlite id=%d algorithm=%s criterion=%s partition_mode=%s "
+            "run_classification=%s (não persistido)",
+            training_id, algorithm, checkpoint_criterion, partition_mode, run_classification,
+        )
         return training_id
 
     def complete_training(
