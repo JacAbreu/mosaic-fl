@@ -210,3 +210,62 @@ Qualquer erro nos logs de qualquer uma das duas máquinas, copie a mensagem e tr
 próxima conversa — cada passo deste tutorial já foi validado individualmente (ver
 `docs/Linha_do_Tempo_MOSAIC-FL.md`, seção "Rede Federada Real via SuperLink (Caminho B)"),
 mas a combinação real entre duas máquinas físicas ainda não tinha sido testada até agora.
+
+
+Logs cliente durante a validação:
+
+make supernode FL_CLIENT_ID=HSL FL_SUPERLINK_ADDRESS=192.168.68.116:9091 FL_DATA_SOURCE=sgbd
+FL_TLS_CERT_DIR=/home/jacabreu/studies/usp/tcc/simulacao-cliente-federado/certs \
+FL_CLIENT_ID=HSL \
+FL_DATA_SOURCE=sgbd \
+FL_SUPERLINK_ADDRESS=192.168.68.116:9091 \
+bash scripts/iniciar_cliente_fl.sh
+INFO :      Starting Flower SuperNode
+INFO :      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+INFO :      SuperNode ID: 908162020209674566
+INFO :      Starting Flower SuperExec
+INFO :      
+INFO :      [RUN 7945113081761369056]
+INFO :      Receiving: get_parameters message (ID: 7530dd3e64090b99d2fd3b3cd700fd278f3a9ae2a9b8ee14344a09eef1552ebd)
+INFO :      Received successfully
+INFO :      Start `flwr-clientapp` process
+Successfully installed mosaicfl to /home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.366a23ab.
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 0.0s — 0 linhas
+ERROR :     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.366a23ab/infrastructure/mosaicfl_client/runner/supernode.py", line 45, in _client_fn
+    _loader_cache[cache_key] = _split_loader(source.load())
+                                             ^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.366a23ab/infrastructure/mosaicfl_client/datasource/sgbd.py", line 106, in load
+    sequences, labels, vocab = pipeline.build(vocab=standard_vocab)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/src/mosaicfl/core/preprocessor/sequence_pipeline.py", line 183, in build
+    df = self._load_dataframe()
+         ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/src/mosaicfl/core/preprocessor/sequence_pipeline.py", line 291, in _load_dataframe
+    raise RuntimeError(
+RuntimeError: Nenhum registro retornado. Verifique connection_string e o schema do banco.
+INFO :      
+INFO :      [RUN 7945113081761369056]
+INFO :      Sending: get_parameters message (ID: e022156e2097c6f3cddd10dbca7930715f73d686996a8ebd9469738f664f8ee1)
+INFO :      
+INFO :      Sent successfully
+
+
+
