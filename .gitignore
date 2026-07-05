@@ -310,3 +310,10 @@ email_*.md
 
 # Checkpoints exportados (gerados por make export-checkpoint — não versionar binários grandes)
 checkpoints/*.pt
+
+# =============================================================================
+# SuperLink (Caminho B) — banco SQLite de estado runtime, gerado a cada execução
+# =============================================================================
+superlink.db
+superlink.db-shm
+superlink.db-wal

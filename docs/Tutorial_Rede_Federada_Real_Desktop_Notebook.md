@@ -77,6 +77,10 @@ FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5433/mosaicfl" make superl
 Isso imprime o IP local e o comando pronto para colar no notebook. **Deixe rodando** —
 é o processo que fica de pé durante todo o treinamento.
 
+> **Log em arquivo:** além de aparecer no terminal, o log é gravado em
+> `experiments/logs/superlink_<timestamp>.log` (caminho exato impresso ao subir).
+> Sobrescreva com `FL_LOG_FILE=/caminho/seu.log` se preferir.
+
 ---
 
 ## Parte 2 — Notebook (Cliente, HSL)
@@ -129,6 +133,9 @@ make supernode FL_CLIENT_ID=HSL FL_SUPERLINK_ADDRESS=<IP_DO_DESKTOP>:9091 FL_DAT
 ```
 
 O log deve mostrar o SuperNode conectado e aguardando rodadas — deixe rodando.
+
+> **Log em arquivo:** gravado em `experiments/logs/supernode_<client-id>_<timestamp>.log`
+> (caminho exato impresso ao subir). Sobrescreva com `FL_LOG_FILE=/caminho/seu.log`.
 
 ---
 

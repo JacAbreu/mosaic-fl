@@ -7,6 +7,8 @@
 #   FL_APPIO_API      Endereco da ServerApp I/O API — uso interno do SuperLink (default: 0.0.0.0:9092)
 #   FL_CONTROL_API    Endereco da Control API — "flwr run" submete rodadas aqui (default: 0.0.0.0:9093)
 #   FL_SUPERLINK_DB   Caminho do banco SQLite de estado (default: superlink.db)
+#   FL_LOG_FILE       Caminho do arquivo de log (default: experiments/logs/superlink_<timestamp>.log).
+#                      flower-superlink grava nativamente aqui — a saída também continua no terminal.
 #
 # Uso:
 #   FL_TLS_CERT_DIR=/certs bash scripts/iniciar_servidor_fl.sh
@@ -37,6 +39,8 @@ FL_FLEET_API="${FL_FLEET_API:-0.0.0.0:9091}"
 FL_APPIO_API="${FL_APPIO_API:-0.0.0.0:9092}"
 FL_CONTROL_API="${FL_CONTROL_API:-0.0.0.0:9093}"
 FL_SUPERLINK_DB="${FL_SUPERLINK_DB:-superlink.db}"
+mkdir -p "$PROJECT_ROOT/experiments/logs"
+FL_LOG_FILE="${FL_LOG_FILE:-$PROJECT_ROOT/experiments/logs/superlink_$(date +%Y%m%d_%H%M%S).log}"
 
 # Valida que as 3 portas estão livres antes de tentar subir — se alguma já
 # estiver em uso (ex.: uma tentativa anterior que travou), o erro do próprio
@@ -78,6 +82,7 @@ if [ -n "${LOCAL_IP:-}" ]; then
     echo "  gerado com este IP como segundo argumento, ex.:"
     echo "    bash scripts/gerar_certs_tls.sh certs ${LOCAL_IP}"
 fi
+echo "  Log gravado em: ${FL_LOG_FILE}"
 echo "=================================================================="
 echo ""
 
@@ -89,4 +94,5 @@ exec "$FLOWER_SUPERLINK_BIN" \
     --fleet-api-address "${FL_FLEET_API}" \
     --serverappio-api-address "${FL_APPIO_API}" \
     --control-api-address "${FL_CONTROL_API}" \
+    --log-file "${FL_LOG_FILE}" \
     "$@"

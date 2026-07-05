@@ -351,6 +351,14 @@ superlink:
 	FL_TLS_CERT_DIR=$(FL_TLS_CERT_DIR) bash scripts/iniciar_servidor_fl.sh
 
 # Dispara ServerApp num SuperLink já em execução (requer flwr run e pyproject.toml).
+# root-certificates é lido de ~/.flwr/config.toml (migrado automaticamente pelo
+# flwr na primeira execução), NÃO de FL_TLS_CERT_DIR — tentativa de passar
+# root-certificates via --federation-config falha nesta versão do flwr (1.30.0)
+# com "Unknown simulation config field(s): root_certificates", aparentemente por
+# essa flag esperar o schema de simulação, não o de SuperLink (revertido em
+# 2026-07-05 após causar regressão real — ver docs/Linha_do_Tempo_MOSAIC-FL.md).
+# Se você mover FL_TLS_CERT_DIR de lugar, atualize manualmente o caminho em
+# ~/.flwr/config.toml (seção [superlink.production], chave root-certificates).
 server-app:
 	$(FLWR) run . production
 

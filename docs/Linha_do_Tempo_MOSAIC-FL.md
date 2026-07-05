@@ -1076,4 +1076,41 @@ Depois da correção do heredoc acima, a autora rodou `make server-db-reset` (du
 
 **Corrigido:** nova variável `FL_DB_CONTAINER ?= mosaicfl-db` no Makefile; os 4 alvos agora usam `$(FL_DB_CONTAINER)` em vez do nome fixo. Uso: `make server-db-reset FL_DB_CONTAINER=mosaicfl-db-bpsp`. Validado com `make -n` nos dois cenários (com e sem override) — comando gerado aponta pro container certo em cada caso. Tutorial atualizado com aviso explícito sobre esse risco e o comando correto com a variável. 545 testes passando.
 
-**Pendente (ação da autora, não executada por mim — ela pediu para conduzir os passos do tutorial pessoalmente):** recarregar `bpsp_seed.sql.gz` + `hsl_seed.sql.gz` no `mosaicfl-db` principal para restaurar os dados clínicos brutos.
+**Pendente (ação da autora, não executada por mim — ela pediu para conduzir os passos do tutorial pessoalmente):** recarregar `bpsp_seed.sql.gz` + `hsl_seed.sql.gz` no `mosaicfl-db` principal para restaurar os dados clínicos brutos. Decisão da autora: por ora, recarregar só BPSP.
+
+---
+
+## `~/.flwr/config.toml` com caminho de certificado desatualizado — `make server-app` falhou após mover `certs/`
+
+A autora moveu `certs/` para fora do diretório do projeto (`.../tcc/certs`, um nível acima de `mosaic-fl/`) — mudança legítima, já validada anteriormente para `superlink`/`supernode` (que leem `FL_TLS_CERT_DIR` diretamente). Mas `make server-app` (`flwr run . production`) falhou: `Failed to read certificate file '.../mosaic-fl/certs/ca.crt'` — o caminho **antigo**, de antes da mudança.
+
+**Causa:** `~/.flwr/config.toml` (migrado automaticamente pelo flwr na primeira execução, ver seção anterior) guarda `root-certificates` como caminho **absoluto e estático**, fixado no momento da migração — não é recalculado depois, mesmo que `FL_TLS_CERT_DIR` mude.
+
+**Correção imediata:** editado `~/.flwr/config.toml` diretamente, atualizando o caminho para o novo local.
+
+**Correção estrutural, sugerida pela autora** ("melhor o root-certificates receber a variável de ambiente, e se estiver vazia usar esse valor"): confirmado que o flwr **não suporta interpolação de variável de ambiente dentro do TOML** (sem `expandvars`/`getenv` no parser do `flwr.cli`) — não dá pra simplesmente escrever `$FL_TLS_CERT_DIR` dentro do arquivo. Implementado o equivalente via `flwr run --federation-config`: `server-app` passou a rodar `$(FLWR) run . production --federation-config 'root-certificates="$(FL_TLS_CERT_DIR)/ca.crt"'`.
+
+**Regressão real, encontrada pela autora ao rodar de verdade:** essa mudança quebrou `make server-app` com `Unknown simulation config field(s): root_certificates` — reproduzido de forma isolada (`flwr run . production --federation-config 'root-certificates="..."'` direto, fora do Makefile, mesmo erro). A causa: `--federation-config` nesta versão do flwr (1.30.0) parece validar o override contra o schema de **simulação** (`SimulationConfig`, que não tem campo `root_certificates`) independentemente da federação ser `production` (SuperLink real) ou `local-sim` — não é uma peculiaridade de sintaxe do comando, é uma limitação/bug do `flwr run --federation-config` para federações não-simulação nesta versão.
+
+**Corrigido (revertido):** `server-app` voltou a `$(FLWR) run . production`, sem `--federation-config`. O caminho do certificado continua vindo de `~/.flwr/config.toml` (já corrigido manualmente para o novo local de `FL_TLS_CERT_DIR` na correção anterior) — não há solução via CLI válida nesta versão do flwr para tornar isso dinâmico; documentado no comentário do Makefile que, se `FL_TLS_CERT_DIR` mudar de lugar novamente, `~/.flwr/config.toml` precisa ser atualizado manualmente (seção `[superlink.production]`, chave `root-certificates`). Validado com `make -n` e 545 testes passando; execução real (fora de escopo pra eu rodar — é o passo final do tutorial) deixada para a autora confirmar.
+
+---
+
+## `make server-app` confirmado funcionando — Caminho B validado de ponta a ponta pela autora, nas duas máquinas físicas reais
+
+A autora rodou `make server-app` após a correção acima: `🎊 Successfully started run 7945113081761369056`. Isto fecha o ciclo completo do Caminho B (SuperLink no desktop + SuperNode no notebook + submissão do ServerApp) **testado de fato nas duas máquinas físicas dela**, não em ambiente isolado de validação — a rede federada real (desktop = servidor/BPSP, notebook = cliente/HSL) está operacional.
+
+Todos os bugs corrigidos ao longo do processo (2026-07-04/05), do primeiro pedido "instalação dos módulos" até este ponto: TLS SAN IP vs. DNS, `--node-config` com separador errado, `--control-api-address` faltando, PATH do `.venv` (binário principal e subprocessos internos do flwr), checagem de porta ocupada com PID, `migrate.sh` sobrescrevendo `FL_DB_URL`, migration `010a_fl_checkpoints` (tabela nunca criada em migration nenhuma), SSH ausente no desktop, bug `ref_low`/`ref_high` na exportação do seed, `server-db-reset`/`client-db-reset` com heredoc quebrado e depois com nome de container fixo, e o `~/.flwr/config.toml` com caminho de certificado desatualizado. Cada um encontrado ao rodar de verdade, não hipoteticamente — nenhum ficou sem correção e validação.
+
+**Achado ao avaliar os logs desta execução real:** a submissão de treino via ServerApp (`infrastructure/mosaicfl_server/strategy/core.py`) chama `checkpoint_store.save()` sem nunca chamar `register_training()` — diferente do Caminho A (`manual_loop.py`), que grava tudo em `metrics.fl_trainings` com `run_classification`/`dp_epsilon`/etc. O Caminho B só grava em `metrics.fl_checkpoints`, com `training_id=NULL` — instrumentação mais simples, sem o rastreamento rico construído ao longo do projeto. Config também é mais enxuta (`pyproject.toml`: 10 rounds, 1 época local, FedProx μ=1,0) — não comparável aos Treinamentos Reais (120 rounds, FedNova). Registrado como característica conhecida do Caminho B, não como bug.
+
+---
+
+## Log em arquivo para SuperLink e SuperNode (a pedido da autora)
+
+A autora pediu um arquivo de log persistente para acompanhar o que acontece no Caminho B, em vez de depender só da saída ao vivo no terminal (como já existe no Caminho A via `FL_LOG_FILE`).
+
+- **`scripts/iniciar_servidor_fl.sh`**: `flower-superlink` tem `--log-file` nativo — adicionada a variável `FL_LOG_FILE` (default `experiments/logs/superlink_<timestamp>.log`), passada diretamente à flag.
+- **`scripts/iniciar_cliente_fl.sh`**: `flower-supernode` **não tem** `--log-file` (confirmado em `--help`) — implementado via `tee` (`... 2>&1 | tee "$FL_LOG_FILE"`), que grava no arquivo e mantém a saída ao vivo no terminal. Como `tee` exige um pipe, o `exec` foi removido desse ponto do script (necessário para o shell continuar gerenciando o pipe).
+
+**Validado de verdade** (não só sintaxe): subiu um SuperLink de teste com `FL_LOG_FILE`, confirmado arquivo criado e populado com o log real do `flower-superlink`; conectou um SuperNode de teste nesse SuperLink, confirmado arquivo de log do cliente criado via `tee`, com o mesmo conteúdo que apareceria no terminal. Testes de processo limpos ao final. 545 testes passando. Tutorial atualizado com nota sobre onde encontrar os logs em cada uma das duas máquinas.
