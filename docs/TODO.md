@@ -303,6 +303,21 @@ Resultado deve ser registrado como continuação do Treinamento Real em `docs/Su
 
   **O que fazer:** armazenar `key_version` junto com cada hash no banco. Na rotação, re-hash os registros existentes com a nova chave mantendo o `key_version` antigo como fallback temporário.
 
+### Bug investigado: `ref_low NOT NULL` vs seed com NULL (2026-07-04)
+
+- [ ] **Regenerar `hsl_seed.sql.gz` (e futuramente `bpsp_seed.sql.gz`) com `ref_low`/`ref_high` preenchidos como `0.0` quando ausentes — ou aplicar migration 018 no banco do notebook**
+
+  **Erro:** `make client-load-hsl` falha com `null value in column "ref_low" of relation "_hyper_2_46_chunk" violates not-null constraint` na carga de `metrics.exam_records`.
+
+  **Causa raiz:** dois contratos incompatíveis:
+  - Schema (`init.sql`, migration 001): `ref_low REAL NOT NULL DEFAULT 0.0` — convenção: `0.0` = sem referência.
+  - Seed generators (`generate_hsl_seed.py:400`, `generate_bpsp_seed.py:389`): `rl if rl != 0.0 else None` — convenção nova: `NULL` = sem referência, `0.0` = limite inferior genuíno. Esses scripts escrevem `\N` no COPY stream quando o intervalo de referência está ausente.
+  - `COPY FROM stdin` **não aplica** o `DEFAULT 0.0` para `\N` — bate diretamente no `NOT NULL` e rejeita.
+
+  **Resolução escolhida:** corrigir na origem (banco do desktop, onde há acesso aos dados originais) — regenerar os seeds com `ref_low`/`ref_high` como `0.0` quando ausentes, alinhando com a convenção do schema atual. Alternativa se a convenção NULL for preferida: aplicar migration `018_exam_records_nullable_refs` (DROP NOT NULL nas 4 colunas) antes de carregar.
+
+  **Arquivos envolvidos:** `scripts/db/generate_hsl_seed.py:400-401`, `scripts/db/generate_bpsp_seed.py:389-390`, `scripts/db/init.sql:86-89`, `alembic/versions/001_initial_schema.py:73-76`.
+
 ### Resolvidos
 
 - [x] ~~**Temperature scaling pós-treinamento**~~ — substituído por isotônica OvR (ECE 0,0149 no Exp 15)
@@ -578,7 +593,3 @@ instalacao do driver placa de video - gpu
  sudo reboot
 
 
-investigar o motivo 
-scp user@<ip>:~/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/scripts/db/seeds/hsl_seed.sql.gz scripts/db/seeds/
-ssh: connect to host 192.168.68.116 port 22: Connection refused
-scp: Connection closed
