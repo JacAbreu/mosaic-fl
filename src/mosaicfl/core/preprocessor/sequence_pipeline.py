@@ -69,10 +69,12 @@ Uso::
     pipeline = SequencePipeline(
         connection_string="postgresql://user:pass@localhost:5432/mosaicfl"
     )
-    sequences, labels, vocab = pipeline.build()
-    # sequences: torch.LongTensor (n_pacientes, max_seq_len)
-    # labels:    torch.LongTensor (n_pacientes,) — classes 0..4
-    # vocab:     Dict[str, int] para reutilizar em inferência e no RAG
+    sequences, labels, vocab, demographics, dia_relativos = pipeline.build()
+    # sequences:     torch.LongTensor (n_pacientes, max_seq_len)
+    # labels:        torch.LongTensor (n_pacientes,) — classes 0..4
+    # vocab:         Dict[str, int] para reutilizar em inferência e no RAG
+    # demographics:  torch.FloatTensor (n_pacientes, 2) — age_norm, sex_bin (late fusion)
+    # dia_relativos: torch.LongTensor (n_pacientes, max_seq_len) — para DiaRelativoEmbedding
 """
 import logging
 import time

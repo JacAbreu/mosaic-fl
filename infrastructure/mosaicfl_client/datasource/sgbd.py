@@ -103,7 +103,11 @@ class SGBDDataSource(DataSource):
             max_seq_len=self.seq_len,
             max_vocab_size=len(standard_vocab) if standard_vocab else self.vocab_size,
         )
-        sequences, labels, vocab = pipeline.build(vocab=standard_vocab)
+        # build() retorna 5 valores (sequences, labels, vocab, demographics, dia_relativos) —
+        # demographics/dia_relativos ainda não são usados neste datasource (são Optional em
+        # SimplifiedBEHRT.forward(), então descartá-los aqui é seguro, só não usa as features
+        # de late fusion demográfica/DiaRelativoEmbedding neste caminho específico).
+        sequences, labels, vocab, _demographics, _dia_relativos = pipeline.build(vocab=standard_vocab)
         self.vocab = vocab
         self._n_sequences = len(sequences)
 

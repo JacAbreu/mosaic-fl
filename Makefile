@@ -419,6 +419,9 @@ client-load-hsl:
 	  docker exec -i $(FL_DB_CONTAINER) \
 	    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
 	@echo "Seed HSL carregado com sucesso."
+	@echo "Calculando referências canônicas e preenchendo classification (backfill)..."
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/compute_analyte_references.py
+	@echo "Backfill concluído — banco pronto para o treinamento federado."
 
 ## Sequência completa para o notebook cliente:
 ##   1. Sobe o banco Docker
@@ -478,6 +481,9 @@ server-load-bpsp:
 	  docker exec -i $(FL_DB_CONTAINER) \
 	    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
 	@echo "Seed BPSP carregado com sucesso."
+	@echo "Calculando referências canônicas e preenchendo classification (backfill)..."
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/compute_analyte_references.py
+	@echo "Backfill concluído."
 
 ## Sequência completa para o servidor desktop:
 ##   1. Sobe o banco Docker (se não estiver rodando)

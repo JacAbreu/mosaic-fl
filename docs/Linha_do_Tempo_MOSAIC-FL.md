@@ -1114,3 +1114,29 @@ A autora pediu um arquivo de log persistente para acompanhar o que acontece no C
 - **`scripts/iniciar_cliente_fl.sh`**: `flower-supernode` **não tem** `--log-file` (confirmado em `--help`) — implementado via `tee` (`... 2>&1 | tee "$FL_LOG_FILE"`), que grava no arquivo e mantém a saída ao vivo no terminal. Como `tee` exige um pipe, o `exec` foi removido desse ponto do script (necessário para o shell continuar gerenciando o pipe).
 
 **Validado de verdade** (não só sintaxe): subiu um SuperLink de teste com `FL_LOG_FILE`, confirmado arquivo criado e populado com o log real do `flower-superlink`; conectou um SuperNode de teste nesse SuperLink, confirmado arquivo de log do cliente criado via `tee`, com o mesmo conteúdo que apareceria no terminal. Testes de processo limpos ao final. 545 testes passando. Tutorial atualizado com nota sobre onde encontrar os logs em cada uma das duas máquinas.
+
+---
+
+## Causa raiz real do "Nenhum registro retornado" — `classification` nunca foi preenchida no notebook
+
+Depois de descartar hipóteses mais simples (dados ausentes, `FL_DB_URL` com dialeto errado — `postgres://` em vez de `postgresql://`, também corrigido durante o processo), o erro `RuntimeError: Nenhum registro retornado. Verifique connection_string e o schema do banco.` persistiu mesmo com dados confirmadamente carregados no notebook.
+
+**Causa raiz:** a query principal do `SequencePipeline` (`src/mosaicfl/core/preprocessor/sequence_pipeline.py`, `_SQL_ATENDIMENTOS`) exige `e.classification IS NOT NULL` no `WHERE`. Os geradores de seed (`generate_hsl_seed.py`/`generate_bpsp_seed.py`) **gravam `classification` propositalmente como `NULL`** — comentário no próprio código já dizia "backfill posterior" — porque calcular a classificação exige `knowledge.analyte_references` (referências canônicas por analito), que só pode ser computada depois que os dados de pelo menos um hospital já estão no banco. Existe um script dedicado pra isso, `scripts/compute_analyte_references.py` (`backfill_classifications()`), mas **o tutorial nunca mencionava executá-lo** — por isso a consulta sempre retornava 0 linhas, mesmo com todos os dados brutos presentes.
+
+**Verificado que o servidor (Caminho B, `infrastructure/mosaicfl_server/`) não precisa deste backfill** — a estratégia do ServerApp só agrega pesos dos clientes, nunca chama `SequencePipeline` diretamente. O passo é necessário só do lado do cliente (notebook).
+
+**Corrigido:** nova seção no tutorial, "2.4b Backfill de `classification`" — `python scripts/compute_analyte_references.py` com `FL_DB_URL` apontando pro banco do notebook, logo após `make client-load-hsl`. Recalcula as referências canônicas com base nos hospitais presentes naquele banco (só HSL, no caso) e preenche `classification`/`canonical_ref_low`/`canonical_ref_high` em `metrics.exam_records`.
+
+**Automatizado a pedido da autora:** "isso tem que ser incluído no script de inicialização do client" — decisão de onde exatamente colocar: não em `iniciar_cliente_fl.sh` (roda a cada conexão/reconexão do SuperNode, e o backfill é uma operação de banco relativamente cara — rodar a cada reconexão seria desperdício, especialmente dado quantas vezes a autora reconectou durante esta mesma sessão de depuração). Em vez disso, adicionado ao **`make client-load-hsl`** (Makefile) — roda uma vez por carga de seed, não por conexão. Mesma correção espelhada em `make server-load-bpsp`, já que `generate_bpsp_seed.py` tem o mesmo comportamento. Tutorial atualizado para refletir que o passo agora é automático. Validado com `make -n` nos dois alvos e 545 testes passando.
+
+---
+
+## Segundo bug real de call site desatualizado — `SequencePipeline.build()` retorna 5 valores, `sgbd.py` desempacotava só 3
+
+Depois do backfill, a carga de tensores avançou bem mais (progresso visível no log: "tensores: 5,174/5,174 (100%)", "concluído em 5.0s total"), mas quebrou com `ValueError: too many values to unpack (expected 3)` em `infrastructure/mosaicfl_client/datasource/sgbd.py:106`.
+
+**Causa raiz:** `SequencePipeline.build()` (`src/mosaicfl/core/preprocessor/sequence_pipeline.py`) retorna, de fato, **5 valores** — `sequences, labels, vocab, demographics, dia_relativos` (confirmado no `return` real da função, linha ~209-221) — parte das features de late fusion demográfica e `DiaRelativoEmbedding` implementadas em sessões anteriores do projeto. A docstring do módulo e o `sgbd.py` (o datasource usado pelo `SuperNode` real, Caminho B) nunca foram atualizados para esse novo retorno — **este call site nunca tinha sido exercitado de ponta a ponta antes**, porque todo o histórico de Treinamentos Reais usou o caminho de simulação (`experiments/training/core/dataloaders.py`), não este datasource de produção. Mesmo padrão do bug de `prepare_dataloaders_from_db` (7→9 valores) encontrado em 2026-07-01/02 — ver `feedback_grep_todos_call_sites`.
+
+**Corrigido:** `sgbd.py` agora desempacota os 5 valores (`_demographics`/`_dia_relativos` descartados por ora — ambos são `Optional[torch.Tensor] = None` em `SimplifiedBEHRT.forward()`, então isso é seguro; só significa que este datasource ainda não aproveita late fusion demográfica/DiaRelativoEmbedding, registrado como limitação conhecida, não como bug). Docstring de `sequence_pipeline.py` também corrigida (exemplo de uso estava desatualizado).
+
+**Validado contra dado real** (não só sintaxe): instanciado `SGBDDataSource` diretamente contra o `mosaicfl-db` principal (hospital_id='BPSP', depois de rodar o backfill nesse banco também — havia sido resetado no incidente do `server-db-reset` e recarregado com o seed novo, que também deixa `classification` NULL) — `DataLoader` construído com sucesso, 28.599 sequências, batch com shapes corretos `[16, 128]`/`[16]`. 545 testes passando.

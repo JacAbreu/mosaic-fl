@@ -114,8 +114,15 @@ passo 1.3):
 
 ```bash
 scp usuario@IP_DESKTOP:~/mosaic-fl/scripts/db/seeds/hsl_seed.sql.gz scripts/db/seeds/
+export FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5432/mosaicfl"
 make client-load-hsl
 ```
+
+> **`client-load-hsl` já inclui o backfill de `classification`** (o seed deixa essa coluna
+> propositalmente `NULL` — ver comentário em `scripts/db/generate_hsl_seed.py` — e a consulta
+> que carrega os dados no treino exige `classification IS NOT NULL`). O alvo roda
+> `scripts/compute_analyte_references.py` automaticamente logo após a carga, usando o
+> `FL_DB_URL` exportado acima — não precisa de passo manual separado.
 
 ### 2.5 Copiar o certificado CA do desktop
 
