@@ -1,0 +1,58 @@
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 1333436259267456774
+[92mINFO [0m:      Starting Flower SuperExec
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15916596327989868130]
+[92mINFO [0m:      Receiving: get_parameters message (ID: c5a61138e0df7db4f0994f084c44362c8d3a4a3d232b2a1d51a0c49b87a25e4d)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+Successfully installed mosaicfl to /home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.93e9a5b6.
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.2s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.2s — 467 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 5.0s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.93e9a5b6/infrastructure/mosaicfl_client/runner/supernode.py", line 45, in _client_fn
+    _loader_cache[cache_key] = _split_loader(source.load())
+                                             ^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.93e9a5b6/infrastructure/mosaicfl_client/datasource/sgbd.py", line 106, in load
+    sequences, labels, vocab = pipeline.build(vocab=standard_vocab)
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: too many values to unpack (expected 3)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15916596327989868130]
+[92mINFO [0m:      Sending: get_parameters message (ID: 7de4ae496460313099bb63a2698d12978a18edb7851a1ed705dc5e06ce69dac8)
+[92mINFO [0m:      Sent successfully
