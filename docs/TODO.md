@@ -593,3 +593,59 @@ instalacao do driver placa de video - gpu
  sudo reboot
 
 
+scp jacabreu@192.168.68.116:~/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/scripts/db/seeds/hsl_seed.sql.gz scripts/db/seeds/
+
+
+
+/home/jacabreu/studies/usp/tcc/mosaic-fl/scripts/gerar_certs_tls.sh
+
+export FL_TLS_CERT_DIR="/home/jacabreu/studies/usp/tcc/simulacao-cliente-federado/certs"
+
+echo $FL_TLS_CERT_DIR
+
+export HSL_SEED="/home/jacabreu/studies/usp/tcc/simulacao-cliente-federado/hsl_seed.sql.gz"
+
+
+
+make client-migrate
+FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5432/mosaicfl" bash scripts/db/migrate.sh upgrade head
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 001, initial_schema
+INFO  [alembic.runtime.migration] Running upgrade 001 -> 002, extend_patients
+INFO  [alembic.runtime.migration] Running upgrade 002 -> 003, create_attendances
+INFO  [alembic.runtime.migration] Running upgrade 003 -> 004, extend_exam_records
+INFO  [alembic.runtime.migration] Running upgrade 004 -> 005, create_clinical_outcomes
+INFO  [alembic.runtime.migration] Running upgrade 005 -> 006, extend_patients_attendances
+INFO  [alembic.runtime.migration] Running upgrade 006 -> 007, add_diagnosis_to_attendances
+INFO  [alembic.runtime.migration] Running upgrade 007 -> 008, term_dictionary
+INFO  [alembic.runtime.migration] Running upgrade 008 -> 009, analyte_references
+INFO  [alembic.runtime.migration] Running upgrade 009 -> 010, simulation_node_config
+INFO  [alembic.runtime.migration] Running upgrade 010 -> 010a, fl_checkpoints — cria a tabela base, nunca antes registrada em migration alguma
+INFO  [alembic.runtime.migration] Running upgrade 010a -> 011, fl_trainings
+INFO  [alembic.runtime.migration] Running upgrade 011 -> 012, evaluation_json — persiste avaliação completa do melhor checkpoint no banco
+INFO  [alembic.runtime.migration] Running upgrade 012 -> 013, fl_round_history — histórico de métricas por rodada de cada treinamento federado
+INFO  [alembic.runtime.migration] Running upgrade 013 -> 014, fl_trainings — adiciona checkpoint_criterion
+INFO  [alembic.runtime.migration] Running upgrade 014 -> 015, fl_trainings — adiciona métricas de recurso computacional
+INFO  [alembic.runtime.migration] Running upgrade 015 -> 016, fl_trainings — adiciona macro_auc, macro_f1, ece pós-calibração
+INFO  [alembic.runtime.migration] Running upgrade 016 -> 017, fl_trainings — adiciona partition_mode
+INFO  [alembic.runtime.migration] Running upgrade 017 -> 018, fl_trainings — adiciona ece_pre
+INFO  [alembic.runtime.migration] Running upgrade 018 -> 019, fl_trainings — adiciona métricas de Differential Privacy (DP-FedAvg)
+INFO  [alembic.runtime.migration] Running upgrade 019 -> 020, fl_trainings — adiciona consumo de energia da GPU
+INFO  [alembic.runtime.migration] Running upgrade 020 -> 021, fl_trainings — adiciona run_classification (ajuste vs. treinamento_real)
+make client-load-hsl
+Carregando hsl_seed.sql.gz no banco...
+zcat "hsl_seed.sql.gz" | \
+  docker exec -i mosaicfl-db \
+    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
+SET
+SET
+COPY 8971
+COPY 42691
+COPY 42598
+ERROR:  null value in column "ref_low" of relation "_hyper_2_46_chunk" violates not-null constraint
+DETAIL:  Failing row contains (1, 769E89D426E84A4797EF495608A0429E, 17_ALFA_HIDROXIPROG, 2020-11-26, 35, IN, null, null, Recepção do Centro Diagnóstico, 17 Alfa Hidroxiprogesterona, 35, ng/dL, 261F2494FE76CC0F74C9A7A5A841C404, null, null, null).
+CONTEXT:  COPY exam_records, line 1: "769E89D426E84A4797EF495608A0429E,17_ALFA_HIDROXIPROG,2020-11-26,35.0,IN,\N,\N,Recepção do Centro D..."
+make: *** [Makefile:398: client-load-hsl] Error 3
+
+
