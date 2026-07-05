@@ -48,3 +48,6 @@ RuntimeError: Nenhum registro retornado. Verifique connection_string e o schema 
 [92mINFO [0m:      Sending: get_parameters message (ID: 108fdfc5021c7217bd4d01da573749556a21a85c4cfc46b6437a904dbf6a6142)
 [92mINFO [0m:      Sent successfully
 [92mINFO [0m:      
+[92mINFO [0m:      SuperNode terminated gracefully.
+[93mWARNING [0m:   Connection attempt failed, retrying in 0.79 seconds
+[92mINFO [0m:      SuperExec terminated gracefully.
