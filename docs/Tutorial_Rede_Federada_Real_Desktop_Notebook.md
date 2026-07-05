@@ -151,6 +151,47 @@ cat ~/.flwr/config.toml
 
 ---
 
+## Recarregar um seed já carregado (ex.: depois de regenerá-lo por uma correção)
+
+Se você regenerar `bpsp_seed.sql.gz`/`hsl_seed.sql.gz` (por exemplo, após uma correção no
+gerador) e o banco de destino **já tiver dados de uma carga anterior**, recarregar direto
+falha assim:
+
+```
+ERROR:  duplicate key value violates unique constraint "patients_pkey"
+DETAIL:  Key (patient_id)=(...) already exists.
+```
+
+É preciso truncar as tabelas antes de recarregar. `metrics.exam_records` e
+`metrics.clinical_outcomes` **não** são apagadas automaticamente por `TRUNCATE
+clinical.patients CASCADE` — não têm chave estrangeira para `patients`, então precisam
+ser truncadas explicitamente.
+
+**Atenção — nome do container:** `make server-db-reset`/`server-load-bpsp`/`client-db-reset`/
+`client-load-hsl` sempre operam no container `mosaicfl-db` (o nome padrão do
+`docker-compose.db.yml`) **a menos que você sobrescreva `FL_DB_CONTAINER` explicitamente**.
+Este tutorial (Parte 1, passo 1.1) usa um container com nome customizado, `mosaicfl-db-bpsp`,
+para não afetar o `mosaicfl-db` original. **Rodar `make server-db-reset` sem `FL_DB_CONTAINER`
+trunca o container errado** (o `mosaicfl-db` principal, com os dados de outros treinos) —
+já aconteceu uma vez nesta sessão. Sempre inclua a variável neste cenário:
+
+**No desktop** (servidor — container customizado `mosaicfl-db-bpsp`):
+
+```bash
+make server-db-reset FL_DB_CONTAINER=mosaicfl-db-bpsp
+gunzip -c scripts/db/seeds/bpsp_seed.sql.gz | \
+  docker exec -i mosaicfl-db-bpsp psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
+```
+
+**No notebook** (cliente — usa o container padrão `mosaicfl-db`, não precisa de override):
+
+```bash
+make client-db-reset
+make client-load-hsl
+```
+
+---
+
 ## Checklist rápido
 
 - [ ] Desktop: `mosaicfl-db-bpsp` rodando na porta 5433, migrations aplicadas, seed BPSP carregado

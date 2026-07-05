@@ -33,6 +33,15 @@ FL_DATA_DIR      ?= $(HOME)/studies/usp/mba-bigdata-art-int/tcc/data/Dados/Covid
 HSL_SEED         ?= scripts/db/seeds/hsl_seed.sql.gz
 BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
 
+# Nome do container Postgres alvo dos alvos server-db-reset/server-load-bpsp/
+# client-db-reset/client-load-hsl. Default = container do docker-compose.db.yml
+# padrão. Se você criou um container separado (nome customizado, ex.:
+# mosaicfl-db-bpsp — ver docs/Tutorial_Rede_Federada_Real_Desktop_Notebook.md),
+# sobrescreva explicitamente: make server-db-reset FL_DB_CONTAINER=mosaicfl-db-bpsp
+# — sem isso, esses alvos sempre operam no container padrão, mesmo que você
+# pretenda atingir outro (risco real: truncar o banco errado).
+FL_DB_CONTAINER  ?= mosaicfl-db
+
 .PHONY: setup ollama-setup ollama-check \
         test test-integration test-e2e test-all test-cov experiment training training-full \
         training-full-cuda training-bpsp-only training-hsl-only \
@@ -42,7 +51,7 @@ BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
         superlink server-app supernode sim test-pipeline behrt-pooled recalibrate \
         bootstrap-ci seed-sensitivity \
         db-up db-down db-wait fl-server fl-client fl-check \
-        client-generate-seed client-db-up client-migrate client-load-hsl client-setup \
+        client-generate-seed client-db-up client-migrate client-load-hsl client-setup client-db-reset \
         server-generate-seed server-db-reset server-load-bpsp server-setup \
         api export-checkpoint
 
@@ -397,9 +406,9 @@ client-load-hsl:
 	  (echo "ERRO: $(HSL_SEED) não encontrado." \
 	       "Gere no desktop com 'make client-generate-seed' e transfira para este equipamento." \
 	   && exit 1)
-	@echo "Carregando $(HSL_SEED) no banco..."
+	@echo "Carregando $(HSL_SEED) no banco ($(FL_DB_CONTAINER))..."
 	zcat "$(HSL_SEED)" | \
-	  docker exec -i mosaicfl-db \
+	  docker exec -i $(FL_DB_CONTAINER) \
 	    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
 	@echo "Seed HSL carregado com sucesso."
 
@@ -435,13 +444,20 @@ server-generate-seed:
 		$(if $(FL_DB_URL),--db-url "$(FL_DB_URL)",)
 
 ## Apaga todos os dados clínicos do banco do servidor (preserva schema e migrations).
-## Use antes de recarregar com um novo hospital.
+## Use antes de recarregar com um novo hospital, ou para recarregar o mesmo seed
+## após regenerá-lo (ex.: depois de uma correção no gerador) — sem isso, a carga
+## falha com "duplicate key value violates unique constraint" (patients_pkey).
 server-db-reset:
-	@echo "Apagando dados clínicos do banco do servidor..."
-	docker exec -i mosaicfl-db psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1 <<'SQL'
-	TRUNCATE clinical.patients CASCADE;
-	TRUNCATE metrics.risk_history;
-	SQL
+	@echo "Apagando dados clínicos do banco do servidor ($(FL_DB_CONTAINER))..."
+	docker exec -i $(FL_DB_CONTAINER) psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1 -c "TRUNCATE clinical.patients CASCADE; TRUNCATE metrics.clinical_outcomes; TRUNCATE metrics.exam_records; TRUNCATE metrics.risk_history;"
+	@echo "Banco resetado. Schema e migrations preservados."
+
+## Apaga todos os dados clínicos do banco do cliente (preserva schema e migrations).
+## Equivalente ao server-db-reset, para o notebook. Mesma justificativa: use antes
+## de recarregar um seed regenerado.
+client-db-reset:
+	@echo "Apagando dados clínicos do banco do cliente ($(FL_DB_CONTAINER))..."
+	docker exec -i $(FL_DB_CONTAINER) psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1 -c "TRUNCATE clinical.patients CASCADE; TRUNCATE metrics.clinical_outcomes; TRUNCATE metrics.exam_records; TRUNCATE metrics.risk_history;"
 	@echo "Banco resetado. Schema e migrations preservados."
 
 ## Carrega o seed BPSP no banco do servidor.
@@ -449,9 +465,9 @@ server-load-bpsp:
 	@test -f "$(BPSP_SEED)" || \
 	  (echo "ERRO: $(BPSP_SEED) não encontrado. Execute 'make server-generate-seed' primeiro." \
 	   && exit 1)
-	@echo "Carregando $(BPSP_SEED) no banco..."
+	@echo "Carregando $(BPSP_SEED) no banco ($(FL_DB_CONTAINER))..."
 	zcat "$(BPSP_SEED)" | \
-	  docker exec -i mosaicfl-db \
+	  docker exec -i $(FL_DB_CONTAINER) \
 	    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
 	@echo "Seed BPSP carregado com sucesso."
 

@@ -303,20 +303,17 @@ Resultado deve ser registrado como continuação do Treinamento Real em `docs/Su
 
   **O que fazer:** armazenar `key_version` junto com cada hash no banco. Na rotação, re-hash os registros existentes com a nova chave mantendo o `key_version` antigo como fallback temporário.
 
-### Bug investigado: `ref_low NOT NULL` vs seed com NULL (2026-07-04)
+### Bug `ref_low NOT NULL` vs seed com NULL (2026-07-04) — RESOLVIDO
 
-- [ ] **Regenerar `hsl_seed.sql.gz` (e futuramente `bpsp_seed.sql.gz`) com `ref_low`/`ref_high` preenchidos como `0.0` quando ausentes — ou aplicar migration 018 no banco do notebook**
+- [x] ~~**`hsl_seed.sql.gz`/`bpsp_seed.sql.gz` regenerados com `ref_low`/`ref_high` como `0.0` quando ausentes**~~
 
-  **Erro:** `make client-load-hsl` falha com `null value in column "ref_low" of relation "_hyper_2_46_chunk" violates not-null constraint` na carga de `metrics.exam_records`.
+  **Erro original:** `make client-load-hsl` falhava com `null value in column "ref_low" of relation "_hyper_2_46_chunk" violates not-null constraint` na carga de `metrics.exam_records`.
 
-  **Causa raiz:** dois contratos incompatíveis:
-  - Schema (`init.sql`, migration 001): `ref_low REAL NOT NULL DEFAULT 0.0` — convenção: `0.0` = sem referência.
-  - Seed generators (`generate_hsl_seed.py:400`, `generate_bpsp_seed.py:389`): `rl if rl != 0.0 else None` — convenção nova: `NULL` = sem referência, `0.0` = limite inferior genuíno. Esses scripts escrevem `\N` no COPY stream quando o intervalo de referência está ausente.
-  - `COPY FROM stdin` **não aplica** o `DEFAULT 0.0` para `\N` — bate diretamente no `NOT NULL` e rejeita.
+  **Causa raiz confirmada** (validada contra `integration/fapesp/exams_extract/bulk_load.py`, o pipeline que de fato populou o `mosaicfl-db` original — não é hipótese, é comparação direta de código): `generate_hsl_seed.py`/`generate_bpsp_seed.py` (criados num único commit — `6f11f28` — especificamente para o cenário desktop+notebook, **nunca exercitados de ponta a ponta contra um `COPY` real até 2026-07-04**) adicionavam uma conversão `rl if rl != 0.0 else None` que o `bulk_load.py` nunca fez. O schema (`NOT NULL DEFAULT 0.0`) sempre usou `0.0` como sentinela de "sem faixa de referência" — confirmado no banco original: 15.328.640 de 36.819.675 linhas com `ref_low=0.0`, zero com `NULL`. **Os dados do HSL/BPSP nunca estiveram corrompidos** — era só um bug de codificação na exportação do seed, não um problema de integridade dos dados.
 
-  **Resolução escolhida:** corrigir na origem (banco do desktop, onde há acesso aos dados originais) — regenerar os seeds com `ref_low`/`ref_high` como `0.0` quando ausentes, alinhando com a convenção do schema atual. Alternativa se a convenção NULL for preferida: aplicar migration `018_exam_records_nullable_refs` (DROP NOT NULL nas 4 colunas) antes de carregar.
+  **Correção:** removida a conversão `0.0→None` nos dois geradores (`scripts/db/generate_hsl_seed.py`, `scripts/db/generate_bpsp_seed.py`) — agora gravam `ref_low`/`ref_high` direto, igual ao `bulk_load.py`. **Nenhuma migration foi necessária** — a nota anterior deste item citava uma migration `018_exam_records_nullable_refs` que **nunca existiu** neste repositório (migration 018 real é sobre `ece_pre`/DP, sem relação); a autora corretamente suspeitou dessa análise (de outra sessão, sem acesso completo ao repo) e interrompeu antes de aplicar uma migration desnecessária a partir do notebook, sem visão do schema canônico.
 
-  **Arquivos envolvidos:** `scripts/db/generate_hsl_seed.py:400-401`, `scripts/db/generate_bpsp_seed.py:389-390`, `scripts/db/init.sql:86-89`, `alembic/versions/001_initial_schema.py:73-76`.
+  **Validado:** seeds regenerados no banco 5433; carga completa testada num banco Postgres descartável, do zero (`COPY 1346802` linhas de `metrics.exam_records` do HSL, sem erro). 545 testes passando.
 
 ### Resolvidos
 
@@ -584,68 +581,4 @@ O que aconteceu conforme esperado:
   - Inversão FL vs Pooled: no Bloco 1 T15 o FL superava o Pooled; agora o Pooled supera em 3,61 p.p. Split corrigido é mais honesto.
   - Critério F1 macro fez diferença real: R77 (F1=0,4905) vs o que seria R58 por accuracy (Acc=68,15%, F1=0,4819) — escolhemos um modelo 2,25 p.p. menos acurado mas 0,0086 mais
   equilibrado entre classes.
-
-instalacao do driver placa de video - gpu
-! sudo mokutil --list-new; echo ---; sudo efibootmgr -v; echo ---; ls /boot/efi/EFI/ /boot/efi/EFI/*/; echo ---; dpkg -l | grep shim
-
- sudo mokutil --import /var/lib/shim-signed/mok/MOK.der
-
- sudo reboot
-
-
-scp jacabreu@192.168.68.116:~/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/scripts/db/seeds/hsl_seed.sql.gz scripts/db/seeds/
-
-
-
-/home/jacabreu/studies/usp/tcc/mosaic-fl/scripts/gerar_certs_tls.sh
-
-export FL_TLS_CERT_DIR="/home/jacabreu/studies/usp/tcc/simulacao-cliente-federado/certs"
-
-echo $FL_TLS_CERT_DIR
-
-export HSL_SEED="/home/jacabreu/studies/usp/tcc/simulacao-cliente-federado/hsl_seed.sql.gz"
-
-
-
-make client-migrate
-FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5432/mosaicfl" bash scripts/db/migrate.sh upgrade head
-INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-INFO  [alembic.runtime.migration] Will assume transactional DDL.
-INFO  [alembic.runtime.migration] Running upgrade  -> 001, initial_schema
-INFO  [alembic.runtime.migration] Running upgrade 001 -> 002, extend_patients
-INFO  [alembic.runtime.migration] Running upgrade 002 -> 003, create_attendances
-INFO  [alembic.runtime.migration] Running upgrade 003 -> 004, extend_exam_records
-INFO  [alembic.runtime.migration] Running upgrade 004 -> 005, create_clinical_outcomes
-INFO  [alembic.runtime.migration] Running upgrade 005 -> 006, extend_patients_attendances
-INFO  [alembic.runtime.migration] Running upgrade 006 -> 007, add_diagnosis_to_attendances
-INFO  [alembic.runtime.migration] Running upgrade 007 -> 008, term_dictionary
-INFO  [alembic.runtime.migration] Running upgrade 008 -> 009, analyte_references
-INFO  [alembic.runtime.migration] Running upgrade 009 -> 010, simulation_node_config
-INFO  [alembic.runtime.migration] Running upgrade 010 -> 010a, fl_checkpoints — cria a tabela base, nunca antes registrada em migration alguma
-INFO  [alembic.runtime.migration] Running upgrade 010a -> 011, fl_trainings
-INFO  [alembic.runtime.migration] Running upgrade 011 -> 012, evaluation_json — persiste avaliação completa do melhor checkpoint no banco
-INFO  [alembic.runtime.migration] Running upgrade 012 -> 013, fl_round_history — histórico de métricas por rodada de cada treinamento federado
-INFO  [alembic.runtime.migration] Running upgrade 013 -> 014, fl_trainings — adiciona checkpoint_criterion
-INFO  [alembic.runtime.migration] Running upgrade 014 -> 015, fl_trainings — adiciona métricas de recurso computacional
-INFO  [alembic.runtime.migration] Running upgrade 015 -> 016, fl_trainings — adiciona macro_auc, macro_f1, ece pós-calibração
-INFO  [alembic.runtime.migration] Running upgrade 016 -> 017, fl_trainings — adiciona partition_mode
-INFO  [alembic.runtime.migration] Running upgrade 017 -> 018, fl_trainings — adiciona ece_pre
-INFO  [alembic.runtime.migration] Running upgrade 018 -> 019, fl_trainings — adiciona métricas de Differential Privacy (DP-FedAvg)
-INFO  [alembic.runtime.migration] Running upgrade 019 -> 020, fl_trainings — adiciona consumo de energia da GPU
-INFO  [alembic.runtime.migration] Running upgrade 020 -> 021, fl_trainings — adiciona run_classification (ajuste vs. treinamento_real)
-make client-load-hsl
-Carregando hsl_seed.sql.gz no banco...
-zcat "hsl_seed.sql.gz" | \
-  docker exec -i mosaicfl-db \
-    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
-SET
-SET
-COPY 8971
-COPY 42691
-COPY 42598
-ERROR:  null value in column "ref_low" of relation "_hyper_2_46_chunk" violates not-null constraint
-DETAIL:  Failing row contains (1, 769E89D426E84A4797EF495608A0429E, 17_ALFA_HIDROXIPROG, 2020-11-26, 35, IN, null, null, Recepção do Centro Diagnóstico, 17 Alfa Hidroxiprogesterona, 35, ng/dL, 261F2494FE76CC0F74C9A7A5A841C404, null, null, null).
-CONTEXT:  COPY exam_records, line 1: "769E89D426E84A4797EF495608A0429E,17_ALFA_HIDROXIPROG,2020-11-26,35.0,IN,\N,\N,Recepção do Centro D..."
-make: *** [Makefile:398: client-load-hsl] Error 3
-
 

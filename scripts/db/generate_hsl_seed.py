@@ -397,8 +397,8 @@ def generate_exams(
 
                 out.write(_csv_write([
                     pid, can, d.isoformat(), v, ph,
-                    rl if rl != 0.0 else None,
-                    rh if rh != 0.0 else None,
+                    rl, rh,  # 0.0 = sem faixa de referência (mesma convenção do bulk_load.py
+                             # e do schema NOT NULL DEFAULT 0.0 — nunca converter para None aqui)
                     ori, eg_val, rt.strip() or None, u,
                     ai_val,
                     None, None, None,  # canonical_ref_low/high, classification — backfill posterior

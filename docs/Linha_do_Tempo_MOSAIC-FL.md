@@ -991,3 +991,89 @@ A autora pediu para deixar funcional o "Caminho B" (arquitetura de produção Fl
 **Documentação:** nova seção completa no `README.md` — "Rede Federada Real via SuperLink (Desktop + Notebook) — Caminho B" — espelhando o estilo/passo-a-passo já usado na seção do Caminho A, incluindo a ressalva do `~/.flwr/config.toml` e uma tabela comparativa Caminho A vs. B. Índice do README atualizado (16 itens agora, numeração de itens finais também corrigida).
 
 **Próximo passo:** a autora fará o teste real nas duas máquinas físicas (desktop + notebook), seguindo a nova seção do README.
+
+---
+
+## Instalação real (desktop + notebook) — 2 achados adicionais, ambos corrigidos
+
+Ao começar a instalação de verdade (novo `docker-compose.db.yml`, tutorial dedicado criado em `docs/Tutorial_Rede_Federada_Real_Desktop_Notebook.md`), surgiram 2 problemas reais durante a execução, não previstos na investigação anterior:
+
+### 1. `scripts/db/migrate.sh` sobrescrevia `FL_DB_URL` exportado manualmente
+
+Ao migrar um segundo banco (`mosaicfl-db-bpsp`, porta 5433, criado à parte do `mosaicfl-db` original pra não afetar os dados combinados dos Treinamentos Reais), a autora exportou `FL_DB_URL` apontando pra 5433 antes de rodar `bash scripts/db/migrate.sh upgrade head` — mas o script sourcia o `.env` (que tem `FL_DB_URL` fixo em 5432) **incondicionalmente**, sobrescrevendo o valor exportado. A migration rodou (sem erro visível) contra o banco errado (5432, já em head — no-op silencioso), deixando o banco novo (5433) sem nenhuma migration aplicada.
+
+**Corrigido:** `migrate.sh` agora salva o valor de `FL_DB_URL` antes de sourcing `.env`, e só o restaura depois se não estava vazio — ou seja, `.env` continua fornecendo o default quando nada foi exportado, mas nunca mais sobrescreve um valor exportado explicitamente. Validado com os dois cenários (com e sem export prévio) isoladamente.
+
+### 2. `metrics.fl_checkpoints` nunca foi criada em nenhuma migration nem em `init.sql`
+
+Ao rodar `alembic upgrade head` do zero no banco novo (5433, depois da correção acima), a migration 011 quebrou com `relation "metrics.fl_checkpoints" does not exist` — essa tabela, usada por praticamente todo o projeto (checkpoint_store, avaliação, etc.), **nunca foi criada em código algum do repositório**: nem em `init.sql`, nem em nenhuma migration do Alembic, nem nos scripts `.sql` legados em `scripts/db/`. Ela só existe no banco original (`mosaicfl-db`) por ter sido criada manualmente antes do histórico de migrations existir — um gap de infraestrutura que só se manifesta ao tentar inicializar um banco genuinamente novo, algo que nunca tinha sido feito antes desta sessão (todo o histórico do projeto rodou sempre sobre o mesmo `mosaicfl-db`, incrementalmente).
+
+**Corrigido:** nova migration `alembic/versions/010a_fl_checkpoints.py`, inserida na cadeia entre 010 e 011 (`011_fl_trainings.py` teve seu `down_revision` atualizado de `'010'` para `'010a'`), recriando a tabela-base a partir do `\d metrics.fl_checkpoints` do banco original (colunas `id, round, accuracy, loss, model_bytes, sha256, vocab_size, created_at` — `training_id` e `evaluation_json` continuam sendo adicionados pelas migrations 011/012, sem alteração).
+
+**Validado:** `alembic upgrade head` do zero no banco 5433 completou toda a cadeia (001 → 010 → 010a → 011 → ... → 021) sem erro; schema final de `metrics.fl_checkpoints` comparado coluna a coluna com o banco original — idêntico. Banco original (5432) confirmado **não afetado** — rodar `upgrade head` lá foi um no-op (já estava em head), sem tocar nos dados dos Treinamentos Reais. 545 testes continuam passando.
+
+**Por que isso importa além do caso imediato:** este era um gap real de "bootstrap from scratch" que só foi descoberto porque a autora precisou, pela primeira vez no projeto, inicializar um banco genuinamente vazio — reforça o padrão já registrado de que alguns bugs só aparecem quando uma combinação específica (aqui, "banco vazio + `alembic upgrade head`") é exercitada de verdade pela primeira vez.
+
+### 3. `scripts/iniciar_servidor_fl.sh`/`iniciar_cliente_fl.sh` dependiam do PATH do shell para achar `flower-superlink`/`flower-supernode`
+
+Ao rodar `make superlink` (depois de mover `certs/` para fora do diretório do projeto, a pedido da autora), o script quebrou com `exec: flower-superlink: not found` — os binários vivem em `.venv/bin/` (instalados só nesse ambiente virtual do projeto), mas os scripts chamavam `flower-superlink`/`flower-supernode` sem caminho, confiando que estariam no `PATH` do shell — diferente do padrão já usado no restante do Makefile (`PYTHON := .venv/bin/python`, `FLWR := .venv/bin/flwr`, sempre com caminho explícito).
+
+**Corrigido:** os dois scripts agora resolvem `$PROJECT_ROOT/.venv/bin/flower-superlink` / `.../flower-supernode` explicitamente (com fallback pro PATH se o binário do `.venv` não existir, por segurança). Validado isolando o ambiente (`env -i` com PATH mínimo, sem `.venv/bin`) — confirmado que o binário é encontrado e o script chega a tentar iniciar o SuperLink de verdade (só falhou depois, num certificado de teste inexistente de propósito). 545 testes passando.
+
+**Continuação do mesmo bug — camada mais funda:** mesmo com o binário resolvido corretamente, `make superlink` ainda quebrou, agora com `FileNotFoundError: flower-superexec` — o próprio `flower-superlink`, ao subir, dispara um **subprocesso interno** (`flower-superexec`, visto também nos testes anteriores desta sessão) via `subprocess.Popen`, que resolve o executável pelo `PATH` **herdado do processo pai** — apontar só o binário principal para o caminho absoluto do `.venv` não é suficiente, porque isso não altera o `PATH` que os filhos internos do flwr enxergam.
+
+**Corrigido:** os dois scripts agora também fazem `export PATH="$PROJECT_ROOT/.venv/bin:$PATH"` antes de `exec`, garantindo que qualquer subprocesso que o flwr disparar internamente (SuperExec, ou outros no futuro) também encontre os binários certos. Revalidado com o mesmo teste de ambiente isolado — log mostrou `Starting Flower SuperExec` sem erro. 545 testes passando.
+
+### 4. Validação da checagem de porta ocupada, com PID (a pedido da autora)
+
+Ao investigar processos travados numa porta, a autora pediu explicitamente: **não matar processos automaticamente** — em vez disso, colocar a validação diretamente no script, indicando o PID pra decisão humana. Implementado `_check_port_free()` em `iniciar_servidor_fl.sh` (3 portas: Fleet/ServerAppIo/Control) e `iniciar_cliente_fl.sh` (ClientAppIo API, `FL_CLIENTAPPIO_API`, default `0.0.0.0:9094`) — se qualquer porta já estiver em uso, imprime a linha do `ss -tlnp`, o PID, e sugestões de comando (`ps -p PID`, `kill PID`), sem executar nada sozinho. Validado com um processo de teste real preso na porta 9091 — a mensagem apontou o PID correto.
+
+### 5. SuperLink rodando de verdade no desktop — confirmado pela autora
+
+Depois dos 4 ajustes acima, `FL_DB_URL=...5433 make superlink` completou sem erro: as 3 APIs (Control, ServerAppIo, Fleet) e o SuperExec subiram corretamente. Terminal deixado rodando para a Parte 2 do tutorial (notebook).
+
+---
+
+## SSH ausente no desktop — bloqueava a transferência do seed HSL
+
+Ao tentar `scp` o `hsl_seed.sql.gz` do desktop para o notebook, a autora recebeu `Connection refused` na porta 22 — `openssh-server` nunca esteve instalado no desktop (`systemctl status ssh` retornava "Unit ssh.service could not be found"). Resolvido com `sudo apt install openssh-server && sudo systemctl enable --now ssh`. Descoberto também que o `ufw` (firewall) **nunca esteve ativo** nesta máquina (`sudo ufw reload` retornou "Firewall not enabled") — confirma que o erro original era só ausência do serviço SSH, não bloqueio de firewall, e que os passos de firewall do tutorial não eram estritamente necessários neste ambiente específico (mas continuam corretos como boa prática caso o `ufw` seja ativado no futuro).
+
+---
+
+## Bug real na exportação do seed — `ref_low`/`ref_high` NULL vs. NOT NULL — investigado a fundo, não só aceito de uma nota de outra sessão
+
+Ao carregar o `hsl_seed.sql.gz` no notebook, `make client-load-hsl` falhou com `null value in column "ref_low" ... violates not-null constraint`. O `docs/TODO.md` já tinha uma nota sobre isso (de uma sessão anterior, possivelmente de um Claude rodando no notebook da autora, sem acesso completo ao repositório), com uma análise correta na causa mas citando uma migration (`018_exam_records_nullable_refs`) que **não existe neste projeto** (migration 018 real é sobre `ece_pre`). **A autora corretamente suspeitou da análise** — ela mesma interrompeu a outra sessão antes de aplicar uma migration a partir do notebook sem acesso ao schema canônico, e pediu para eu validar a fundo antes de qualquer ação.
+
+**Investigação (não aceitei a nota do TODO como fato, per `feedback_verificar_docs_ia_externa`):** comparei `generate_hsl_seed.py`/`generate_bpsp_seed.py` (scripts novos, criados num único commit `6f11f28`, especificamente para o cenário desktop+notebook) contra `integration/fapesp/exams_extract/bulk_load.py` (o pipeline que de fato populou o `mosaicfl-db` original). Confirmado: `bulk_load.py` nunca converte `0.0→None`; os scripts novos adicionavam essa conversão (`rl if rl != 0.0 else None`), nunca antes exercitada contra um `COPY` real. Confirmado também no banco original: 15.328.640 de 36.819.675 linhas com `ref_low=0.0`, **zero com NULL** — prova de que a convenção sempre foi `0.0 = sem referência`, nunca `NULL`.
+
+**Conclusão, comunicada explicitamente à autora que estava receosa:** os dados do HSL/BPSP **nunca estiveram corrompidos** — é um bug de codificação isolado nos scripts de exportação do seed, introduzido numa feature nova nunca testada de ponta a ponta, não um problema de integridade dos dados reais.
+
+**Corrigido:** removida a conversão `0.0→None` nos dois geradores — agora escrevem o valor direto, igual ao `bulk_load.py`. **Nenhuma migration necessária.** Validado com carga completa num banco Postgres descartável, do zero: `COPY 1346802` linhas de `metrics.exam_records` do HSL, sem erro. 545 testes passando. `docs/TODO.md` atualizado, item marcado como resolvido com a causa raiz correta documentada (substitui a nota anterior, que citava a migration inexistente).
+
+---
+
+## `server-db-reset` incompleto — descoberto ao recarregar o seed BPSP corrigido (2026-07-05)
+
+Ao tentar recarregar `bpsp_seed.sql.gz` (já regenerado com a correção `ref_low`/`ref_high` do dia anterior) no banco `mosaicfl-db-bpsp`, que já tinha dados da carga anterior (com o bug), a carga falhou com `duplicate key value violates unique constraint "patients_pkey"` — esperado, já que a carga é um `COPY`/`INSERT`, não um upsert.
+
+A autora pediu para documentar no tutorial como truncar as tabelas antes de recarregar. Ao investigar a forma correta, achado que **`make server-db-reset` (Makefile) já existia mas estava incompleto**: truncava só `clinical.patients CASCADE` (que cascateia só para `clinical.attendances`, via FK) e `metrics.risk_history` — nunca truncava `metrics.exam_records` nem `metrics.clinical_outcomes`, que não têm FK para `patients` e por isso não são apagadas pelo CASCADE. Ou seja: mesmo usando o alvo "certo" do Makefile como pretendido, uma recarga acumularia dados duplicados nessas duas tabelas (as que o seed mais popula).
+
+**Corrigido:** `server-db-reset` agora trunca as 4 tabelas corretamente. Criado `client-db-reset`, simétrico, para o lado do notebook (não existia antes). Ambos adicionados ao `.PHONY`. Documentado no tutorial (`docs/Tutorial_Rede_Federada_Real_Desktop_Notebook.md`, nova seção "Recarregar um seed já carregado") — inclui o comando direto para o cenário do tutorial (container `mosaicfl-db-bpsp`, nome customizado, que não usa o alvo padrão do Makefile) e o comando via `make client-db-reset` para o notebook (container padrão). 545 testes passando.
+
+**Segundo bug, encontrado ao rodar de verdade (não só `make -n`):** `make server-db-reset` quebrou com `/bin/sh: 1: TRUNCATE: not found` — o heredoc multi-linha (`<<'SQL' ... SQL`) usado no alvo original (e copiado para o novo `client-db-reset`) não funciona sob o comportamento padrão do Make: cada linha de uma recipe roda em uma invocação de shell **separada** a menos que `.ONESHELL:` esteja declarado (confirmado: não está, neste Makefile) — então as linhas `TRUNCATE ...;` viravam comandos de shell isolados, tentando executar "TRUNCATE" como um programa. `make -n` (dry-run) não pega esse tipo de erro porque só imprime o texto da recipe, sem executar de verdade.
+
+**Corrigido:** os dois alvos reescritos para uma única linha de recipe, passando todos os `TRUNCATE` via `-c "..."` direto ao `psql` (sem heredoc). Validado de verdade contra o container real `mosaicfl-db-bpsp` (não só sintaticamente) — 4x `TRUNCATE TABLE` confirmado, sem erro — e a carga do `bpsp_seed.sql.gz` corrigido completada com sucesso na sequência (39.000 pacientes, 217.990 atendimentos, 217.156 desfechos, 5.838.999 exames — bate exatamente com o log de geração do seed). 545 testes passando.
+
+---
+
+## Incidente: `make server-db-reset` truncou o container errado — dados clínicos do `mosaicfl-db` principal apagados
+
+Depois da correção do heredoc acima, a autora rodou `make server-db-reset` (duas vezes) pretendendo resetar o `mosaicfl-db-bpsp` (container customizado do tutorial) — mas o alvo tem o nome do container **fixo** (`mosaicfl-db`, hardcoded) em 4 lugares no Makefile (`server-db-reset`, `client-db-reset`, `server-load-bpsp`, `client-load-hsl`). Resultado: os dados clínicos (`clinical.patients`, `clinical.attendances`, `metrics.clinical_outcomes`, `metrics.exam_records`, `metrics.risk_history`) do `mosaicfl-db` **principal** (o mesmo banco usado em todos os Treinamentos Reais) foram truncados por engano.
+
+**Avaliação do dano, verificada diretamente no banco (não presumida):** `metrics.fl_trainings` (65 registros) e `metrics.fl_checkpoints` (97 registros) — os RESULTADOS de todos os treinamentos, incluindo Treinamento Real 1/2/3 e a curva Acc×ε — **confirmados intactos**, são tabelas separadas, não tocadas pelo TRUNCATE. Só os dados clínicos brutos (usados para gerar treinos futuros, não os já concluídos) foram apagados — **recuperável**, já que `bpsp_seed.sql.gz`/`hsl_seed.sql.gz` (os mesmos regenerados no dia anterior, já com a correção `ref_low`/`ref_high`) cobrem exatamente esse dado e podem ser recarregados no `mosaicfl-db` principal.
+
+**Causa raiz:** os 4 alvos citados nunca tiveram o nome do container parametrizado — sempre assumiram o único container padrão do `docker-compose.db.yml`. O cenário deste tutorial (container `mosaicfl-db-bpsp`, separado, criado especificamente para não afetar o `mosaicfl-db` original) nunca foi contemplado nesses alvos — primeira vez que o projeto tem 2 containers Postgres simultâneos na mesma máquina.
+
+**Corrigido:** nova variável `FL_DB_CONTAINER ?= mosaicfl-db` no Makefile; os 4 alvos agora usam `$(FL_DB_CONTAINER)` em vez do nome fixo. Uso: `make server-db-reset FL_DB_CONTAINER=mosaicfl-db-bpsp`. Validado com `make -n` nos dois cenários (com e sem override) — comando gerado aponta pro container certo em cada caso. Tutorial atualizado com aviso explícito sobre esse risco e o comando correto com a variável. 545 testes passando.
+
+**Pendente (ação da autora, não executada por mim — ela pediu para conduzir os passos do tutorial pessoalmente):** recarregar `bpsp_seed.sql.gz` + `hsl_seed.sql.gz` no `mosaicfl-db` principal para restaurar os dados clínicos brutos.
