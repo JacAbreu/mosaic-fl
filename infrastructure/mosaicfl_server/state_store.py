@@ -27,6 +27,12 @@ _VALID_STATUSES = {"pending", "running", "completed", "interrupted"}
 @dataclass
 class TrainingState:
     status: TrainingStatus = "pending"
+    # Identifica a que "flwr run" este estado pertence — sem isso, um novo run
+    # (run_id diferente) restaura convergência/checkpoint de um run anterior
+    # não relacionado, mesmo que ele tenha falhado (ex: accuracy=0.0 sempre,
+    # falsamente detectado como "convergido"). None = estado de formato antigo,
+    # sem run_id gravado (trata como não-restaurável).
+    run_id: Optional[int] = None
     last_round: int = 0
     # Histórico completo de accuracy — suficiente para restaurar ConvergenceTracker
     convergence_history: List[float] = field(default_factory=list)

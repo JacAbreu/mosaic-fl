@@ -103,15 +103,17 @@ class SGBDDataSource(DataSource):
             max_seq_len=self.seq_len,
             max_vocab_size=len(standard_vocab) if standard_vocab else self.vocab_size,
         )
-        # build() retorna 5 valores (sequences, labels, vocab, demographics, dia_relativos) —
-        # demographics/dia_relativos ainda não são usados neste datasource (são Optional em
-        # SimplifiedBEHRT.forward(), então descartá-los aqui é seguro, só não usa as features
-        # de late fusion demográfica/DiaRelativoEmbedding neste caminho específico).
-        sequences, labels, vocab, _demographics, _dia_relativos = pipeline.build(vocab=standard_vocab)
+        # build() retorna 5 valores (sequences, labels, vocab, demographics, dia_relativos).
+        # FedProxClient.fit()/evaluate() (src/mosaicfl/core/client.py) iteram o loader como
+        # (batch_x, batch_y, batch_dia) — 3 elementos, dia_relativo obrigatório (usado em
+        # model(batch_x, dia_relativo=batch_dia)) — por isso precisa estar no TensorDataset.
+        # demographics fica de fora: é usado só pela ablation study (late fusion), que tem seu
+        # próprio client/loop de treino separado — não o FedProxClient usado neste datasource.
+        sequences, labels, vocab, _demographics, dia_relativos = pipeline.build(vocab=standard_vocab)
         self.vocab = vocab
         self._n_sequences = len(sequences)
 
-        dataset = TensorDataset(sequences, labels)
+        dataset = TensorDataset(sequences, labels, dia_relativos)
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
         logger.info(
             "[SGBD] DataLoader pronto: %d sequências, %d batches, vocab_size=%d",

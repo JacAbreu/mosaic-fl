@@ -73,6 +73,12 @@ proximal-mu           = 1.0
 min-clients           = 2
 round-timeout-seconds = 300
 
+# "ajuste" (default) ou "treinamento_real" — mesma semântica do FL_RUN_CLASSIFICATION
+# do Caminho A (manual_loop.py). Precisa ser declarado explicitamente antes de um
+# resultado formal — sem isso, um dump do banco não distingue tuning/debug de resultado
+# citável na defesa.
+run-classification    = "ajuste"
+
 # "default": exigido pela migração de config legada do flwr >=1.30 (ver
 # scripts/iniciar_servidor_fl.sh / docs) — sem isso, "flwr run . production" falha com
 # "doesn't declare a default federation", mesmo passando o nome explicitamente.

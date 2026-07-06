@@ -1140,3 +1140,36 @@ Depois do backfill, a carga de tensores avançou bem mais (progresso visível no
 **Corrigido:** `sgbd.py` agora desempacota os 5 valores (`_demographics`/`_dia_relativos` descartados por ora — ambos são `Optional[torch.Tensor] = None` em `SimplifiedBEHRT.forward()`, então isso é seguro; só significa que este datasource ainda não aproveita late fusion demográfica/DiaRelativoEmbedding, registrado como limitação conhecida, não como bug). Docstring de `sequence_pipeline.py` também corrigida (exemplo de uso estava desatualizado).
 
 **Validado contra dado real** (não só sintaxe): instanciado `SGBDDataSource` diretamente contra o `mosaicfl-db` principal (hospital_id='BPSP', depois de rodar o backfill nesse banco também — havia sido resetado no incidente do `server-db-reset` e recarregado com o seed novo, que também deixa `classification` NULL) — `DataLoader` construído com sucesso, 28.599 sequências, batch com shapes corretos `[16, 128]`/`[16]`. 545 testes passando.
+
+**Correção do fix anterior estava incompleta — achado ao testar de verdade com 2 clientes reais (BPSP local + HSL notebook):** com o desempacotamento de `build()` corrigido, a autora subiu um segundo `SuperNode` no próprio desktop (representando BPSP, `FL_CLIENT_ID=BPSP`, conectado em `localhost:9091` — necessário porque `min-clients=2` no `pyproject.toml`, e até então só o HSL do notebook estava conectado). Esse segundo cliente passou da carga de dados (28.599 sequências, sem erro), mas quebrou em `src/mosaicfl/core/client.py:120`: `ValueError: not enough values to unpack (expected 3, got 2)`, dentro do loop de treino `for batch_x, batch_y, batch_dia in self.train_loader`.
+
+**Causa:** meu fix anterior descartou `dia_relativos` (`_dia_relativos`) junto com `demographics`, mas `FedProxClient.fit()`/`evaluate()` (a classe de cliente usada no Caminho B) **exige** um terceiro elemento por batch (`batch_dia`, passado como `model(batch_x, dia_relativo=batch_dia)`) — `dia_relativo` não é opcional no nível do loop de treino, só é opcional no `model.forward()`. Confirmado comparando com o padrão usado no loader FedNova padrão (`experiments/training/core/dataloaders.py`, `client_loaders[cid]`): `TensorDataset(train_seqs, train_lbls, train_dia)` — 3 tensores, sem demographics (que só é usado por um client/loop separado, exclusivo da ablation study).
+
+**Corrigido:** `sgbd.py` agora constrói `TensorDataset(sequences, labels, dia_relativos)` — inclui `dia_relativos`, mantém `demographics` descartado (correto, não usado pelo `FedProxClient`). **Validado de ponta a ponta com dado real**: `DataLoader` → batch de 3 elementos com shapes corretos → `model.forward(batch_x, dia_relativo=batch_dia)` executado com sucesso, saída `[16, 5]` (batch de 16, 5 classes). 545 testes passando.
+
+---
+
+## Bug sério: estado de convergência restaurado de um run quebrado anterior, mascarando o run corrigido
+
+Depois dos fixes de `sgbd.py`, os dois clientes (BPSP local + HSL notebook) rodaram a ROUND 1 de um run novo sem erro — mas nenhum checkpoint foi salvo, nem em `mosaicfl-db` nem em `mosaicfl-db-bpsp`. Investigação: `checkpoint_store.save()`/`complete_training()` rodam dentro do subprocesso `ServerApp` (`flower-superexec --plugin-type serverapp`), cuja saída **não aparece em nenhum lugar acessível** — nem no terminal do `make server-app` (só imprime "Successfully started run"), nem no terminal do `make superlink` (só mostra o log do próprio `flower-superlink`, sem a aplicação). Gap de observabilidade real, ainda não coberto — só SuperLink e SuperNode tinham `FL_LOG_FILE` até aqui.
+
+Ao inspecionar arquivos gerados pelo `ServerApp` diretamente (`logs/round_N_metrics.json`, `logs/training_state.json`, timestamps confirmando serem de hoje), achei a causa raiz real: o run anterior (todo quebrado, accuracy=0.0 em todas as 10 rounds, porque rodou inteiro com o bug do `dia_relativos` ainda presente) gravou `converged_round=4` no `training_state.json` — um falso positivo, já que accuracy 0.0 constante "parece" estabilizado pro `ConvergenceTracker`. **`_restore_from_state()` (`watchdog_mixin.py`) não distinguia "retomar a mesma sessão após queda" de "run novo, sem relação"** — restaurava sempre que o arquivo existisse, então o run novo (já corrigido) herdou `converged_round=4` desde a primeira rodada, disparando `should_stop`/calibração imediatamente, sem nunca progredir de verdade nem salvar checkpoint.
+
+**Corrigido:** `TrainingState` ganhou campo `run_id`. `_make_server_components` (`superlink.py`) passa `context.run_id` pra estratégia; `core.py.__init__` só chama `_restore_from_state()` se `loaded_state.run_id == run_id` (retomada legítima da mesma sessão) — caso contrário (run novo ou estado no formato antigo, sem `run_id`), ignora convergência/histórico do run anterior. **Validado com teste real simulando os dois cenários** (run_id diferente → não restaura; run_id igual → restaura corretamente) — os dois passaram. 545 testes passando.
+
+**Efeito colateral útil:** como o `training_state.json` real do desktop tem `run_id=None` (arquivo é de antes da correção), nenhum run futuro vai herdar o `converged_round=4` fantasma — não precisou de limpeza manual.
+
+**Limitação conhecida, não resolvida agora:** se o `flower-superlink` cair e reiniciar NO MEIO do mesmo `run_id` (recovery real de crash, o caso que esse mecanismo foi originalmente projetado pra cobrir), `register_training()` seria chamado de novo, criando uma linha duplicada em `fl_trainings` — não há hoje um jeito de checar "já existe um training_id pra este run_id" antes de registrar. Não implementado por ora — cenário mais raro que o de "run novo" que motivou o fix de hoje, e exigiria mudança de schema (fl_trainings não tem coluna run_id).
+
+---
+
+## Classificação explícita de treinamento no Caminho B (a pedido da autora)
+
+Depois de confirmar que os `training_id` 56-65 (teste de 03/07, Caminho A) já estavam corretamente marcados `run_classification='ajuste'` (nenhuma correção necessária ali), a autora pediu pra criar o equivalente explícito no Caminho B — até então, `checkpoint_store.save()` nunca chamava `register_training()`, então checkpoints do Caminho B ficavam em `fl_checkpoints` com `training_id=NULL`, sem nenhuma linha em `fl_trainings` (distinguíveis só pela ausência de vínculo, não por uma classificação explícita).
+
+**Implementado:**
+- `pyproject.toml`: nova chave `run-classification = "ajuste"` em `[tool.flwr.app.config]` (mesma semântica do `FL_RUN_CLASSIFICATION` do Caminho A).
+- `superlink.py`: lê `run-classification` do `run_config`, valida (fallback seguro pra `"ajuste"` se inválido, com warning — mesmo padrão de `manual_loop.py`), chama `checkpoint_store.register_training(algorithm="FedProx", ...)` antes de construir a estratégia, loga `training_registered`.
+- `core.py`: `ProductionFedProxStrategy` ganhou `training_id`/`num_rounds` no `__init__`; `aggregate_fit()` passa `training_id` pro `checkpoint_store.save()`; `aggregate_evaluate()` rastreia `best_round`/`best_accuracy` e chama `checkpoint_store.complete_training()` quando convergiu ou atingiu `num_rounds`.
+
+545 testes passando (mais os fallbacks de classe adicionados pros testes que usam `__new__` direto, bypassando `__init__`).

@@ -1,0 +1,1124 @@
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 4076338650586879174
+[92mINFO [0m:      Starting Flower SuperExec
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: 6db426bd93fa2579419aa2f7f5ea2c68e9735349f40095e026bb6e7189042393)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.3s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.5s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.6s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: 531fe4af946d0a22eb8df861319508c4a10272892d15f15ae0ecd5d8cfdaaf9d)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 1]
+[92mINFO [0m:      Receiving: evaluate message (ID: 86a50bac1eafaa6509e8483335f814e64d4214f7bbab6fd499c1fe6ea0cfca8d)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.4s
+[pipeline] concluído em 11.3s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 1]
+[92mINFO [0m:      Sending: evaluate message (ID: 132d159270b64c150fab4048f1dff641ae9d782c0703a495a6ed15070c61e47e)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 2]
+[92mINFO [0m:      Receiving: train message (ID: 8bc376767c26311296e80abf10b261808fe31d2753374a05b15f9759a38d76c6)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.3s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.4s
+[pipeline] concluído em 11.5s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 2]
+[92mINFO [0m:      Sending: train message (ID: 5f0f908d4f624bc0c0926b8848b776b7daabc0c6410d5a81f6bb2bbc960efad6)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 2]
+[92mINFO [0m:      Receiving: evaluate message (ID: 727f78fcf12d4cc2cdc2f71f198d0be7cb1bf53954bf582ea5e52e11b02989d3)
+[92mINFO [0m:      Start `flwr-clientapp` process
+[92mINFO [0m:      Received successfully
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.5s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 2]
+[92mINFO [0m:      Sending: evaluate message (ID: 0b5f6b53878fb8faf71171173a6e0a25d5ba5b9cc9e4488dc06c94ee64300dcb)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 3]
+[92mINFO [0m:      Receiving: train message (ID: 8497a314caec0b2b561d73a4dca3dd44eff08b563f01816a0e3d62deffd47693)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.4s
+[pipeline] concluído em 11.4s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 3]
+[92mINFO [0m:      Sending: train message (ID: 9dfb56c72fd9363f2bca1fb5bf88bc4166b1cd4dbce70861a9a96a1e47b2a855)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 3]
+[92mINFO [0m:      Receiving: evaluate message (ID: 38cc00067bde5a3caece8f22906adde1154a0b5f4b870c9b1a879289b70cd24a)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.3s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.5s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 3]
+[92mINFO [0m:      Sending: evaluate message (ID: 6e7e1fd46bae959528e3929526fc859409bec28264b748138f0d21f50c77a625)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 4]
+[92mINFO [0m:      Receiving: train message (ID: f4653918f383d4f3d840a5a7cc7f0e7edcc10c537ae1537d6ea80477522d4d02)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.4s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.6s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 4]
+[92mINFO [0m:      Sending: train message (ID: 774ceea57bc15d2df84d97776caa5410f7ba97eab6e6685586ff229ee1395eb2)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 4]
+[92mINFO [0m:      Receiving: evaluate message (ID: 763ed827e37b8e47d9422ec497b3918c6ba366348b46ddc0c84315313479c1de)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.3s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.6s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 4]
+[92mINFO [0m:      Sending: evaluate message (ID: d638a7e4a5035216e1a0e655b7639081c2e5a3be999c5e22f4ff67345b444e27)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 5]
+[92mINFO [0m:      Receiving: train message (ID: ab00f290bbad88b4432e58ac76fd7807bdbc0bcae1a6c557ee3dfba19f852446)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.4s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.6s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 5]
+[92mINFO [0m:      Sending: train message (ID: c2c03df679250abd9c09d02551c8239ed1d40abe27bd5624a875abe94cc2adf7)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 5]
+[92mINFO [0m:      Receiving: evaluate message (ID: d3b582bfdd5c3cb0ab1e449d94a51b1d8619014dbec61cbcf119007374471509)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.5s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.5s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.8s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 5]
+[92mINFO [0m:      Sending: evaluate message (ID: 9c58b94d2829fdae474b61d7c2c5a531522cd72b38368a320f2c73ac08b7debf)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 6]
+[92mINFO [0m:      Receiving: train message (ID: 3d262f44f5d005fba84a7b29146d0a73eba27ad28b3b5ed8a5f7db4f45dbfac7)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.5s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 6]
+[92mINFO [0m:      Sending: train message (ID: b746805653219461078ff041b8bba22a2e620983de041f3b028e72619116f157)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 6]
+[92mINFO [0m:      Receiving: evaluate message (ID: 1106f7839b4c63b067adbc03d272e96d3404d88c7075eca107a11bf2b7415bce)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.4s
+[pipeline] concluído em 11.4s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 6]
+[92mINFO [0m:      Sending: evaluate message (ID: d9f0cf26948859a7e2c1a27395bcab6b3c9d3c6bebf307d6c2ca95eac30c61e0)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 7]
+[92mINFO [0m:      Receiving: train message (ID: 784a1139dfd264a92eddab80e41a0915640433fd3c3682c2ce3bb44f97b02375)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.5s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 7]
+[92mINFO [0m:      Sending: train message (ID: 4967d300ba14ad4d4a5d39bb3fe3f85fcb94803b83cc703c67060bd6a9babda9)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 7]
+[92mINFO [0m:      Receiving: evaluate message (ID: e278f0e7162a1e20c0fb659ef80748a7eda03957daf7f20c3533aecdb82e6cf5)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.3s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.5s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 7]
+[92mINFO [0m:      Sending: evaluate message (ID: 97660398b39ab39fa3d734229c3b19113a56853fbd5cb3b0b2f4aed5a1f1c9d2)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 8]
+[92mINFO [0m:      Receiving: train message (ID: f3102b40fc7a0002f2c1e3d3cc469dbf73514c978f58fd1a8848f0850e6fb566)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.3s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.6s
+[pipeline] concluído em 11.6s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 8]
+[92mINFO [0m:      Sending: train message (ID: 4ffa645ffc856ad6fdf989e024685b2b62959aa238e2ade3baced4081c6c634e)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 8]
+[92mINFO [0m:      Receiving: evaluate message (ID: db5249572e900b2d234de775850c9eaac0970e4713feaaf84ddd127986085b7f)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.4s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 8]
+[92mINFO [0m:      Sending: evaluate message (ID: be71cf06fce4c4089a3968ad1790f675ae58d3f39267ad07e685525a018a06ac)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 9]
+[92mINFO [0m:      Receiving: train message (ID: 47b1b9288be499e0d753f0fec3021936f22961472e2275a927d57bcaf42ef959)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.4s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 9]
+[92mINFO [0m:      Sending: train message (ID: dff8f5a13a46cd5be8852704361027fba795f3dfa1e304c8c552bee7a80fd469)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 9]
+[92mINFO [0m:      Receiving: evaluate message (ID: 346c59358e98d3d20e6d7bbb8fb888f4baf7e3c2ff67cd084fde5250c7a121d1)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.3s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.6s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 9]
+[92mINFO [0m:      Sending: evaluate message (ID: bb6a9541435e63feb36d8ea94b1f53d33e9131bf54cbe92549a0136e8eb25be2)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 10]
+[92mINFO [0m:      Receiving: train message (ID: 490ba40346198a1c8f370a7c014009f90d32d19846d1e93c390d442afb59e1c5)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.4s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.6s
+[pipeline] concluído em 11.8s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 129, in handle_legacy_message_from_msgtype
+    fit_res = maybe_call_fit(
+              ^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 224, in maybe_call_fit
+    return client.fit(fit_ins)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 227, in _fit
+    results = self.numpy_client.fit(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 120, in fit
+    for batch_x, batch_y, batch_dia in self.train_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 10]
+[92mINFO [0m:      Sending: train message (ID: ce91647effe5be8e48136c9ddf74ec5c95de44d62ae8098a8dfa0cede2b1a948)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 10]
+[92mINFO [0m:      Receiving: evaluate message (ID: da8edc71a68f819ef9b7a1731f2ad40da43933747c7ffb468513ba70ddcf3825)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.4s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 136, in handle_legacy_message_from_msgtype
+    evaluate_res = maybe_call_evaluate(
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/client.py", line 244, in maybe_call_evaluate
+    return client.evaluate(evaluate_ins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/numpy_client.py", line 251, in _evaluate
+    results = self.numpy_client.evaluate(parameters, ins.config)  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/client.py", line 176, in evaluate
+    for batch_x, batch_y, batch_dia in self.val_loader:
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 3, got 2)
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 12945400730222074568, ROUND 10]
+[92mINFO [0m:      Sending: evaluate message (ID: b77c72f9aab22d22c3397753f5c66f26d1f6d9ddb0d6f7c3dc12bfeb80203c26)
+[92mINFO [0m:      Sent successfully

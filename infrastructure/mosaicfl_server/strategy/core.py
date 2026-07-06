@@ -53,6 +53,12 @@ class ProductionFedProxStrategy(
 
     _test_loader      = None  # fallback para __new__ em testes
     _checkpoint_store = None  # fallback para __new__ em testes
+    _training_id        = None  # fallback para __new__ em testes
+    _num_rounds         = None  # fallback para __new__ em testes
+    _run_id             = None  # fallback para __new__ em testes
+    _best_round         = 0     # fallback para __new__ em testes
+    _best_accuracy      = 0.0   # fallback para __new__ em testes
+    _training_completed = False  # fallback para __new__ em testes
 
     def __init__(
         self,
@@ -65,6 +71,9 @@ class ProductionFedProxStrategy(
         checkpoint_store: Optional[CheckpointStore] = None,
         round_timeout: int = 300,
         test_loader=None,
+        training_id: Optional[int] = None,
+        num_rounds: Optional[int] = None,
+        run_id: Optional[int] = None,
         *args,
         **kwargs,
     ):
@@ -91,16 +100,37 @@ class ProductionFedProxStrategy(
         self._current_state = TrainingState()
         self._last_round_metrics: Dict = {}
 
+        self._training_id = training_id
+        self._num_rounds = num_rounds
+        self._run_id = run_id
+        self._best_round = 0
+        self._best_accuracy = 0.0
+        self._training_completed = False
+
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
 
         if state_store is not None:
-            self._restore_from_state(state_store.load())
+            loaded_state = state_store.load()
+            if loaded_state.run_id == run_id and run_id is not None:
+                self._restore_from_state(loaded_state)
+            else:
+                # run_id diferente (ou estado antigo, sem run_id gravado) — não é
+                # retomada da mesma sessão após queda, é um run novo de verdade.
+                # Restaurar o ConvergenceTracker aqui reaproveitaria o histórico
+                # (e um eventual converged_round) de um run anterior sem relação
+                # com este, podendo disparar "convergência" falsa desde a 1ª rodada.
+                logger.info(
+                    "state_not_restored_new_run",
+                    extra={"stored_run_id": loaded_state.run_id, "current_run_id": run_id},
+                )
+                self._current_state.run_id = run_id
 
     def _save_state(self, server_round: int) -> None:
         """Persiste estado atual no TrainingStateStore."""
         if self._state_store is None:
             return
+        self._current_state.run_id = self._run_id
         self._current_state.last_round = server_round
         self._current_state.convergence_history = list(self.tracker.history)
         self._current_state.converged_round = self.tracker.converged_round
@@ -124,6 +154,7 @@ class ProductionFedProxStrategy(
                     round_num=server_round,
                     state_dict=self.global_model.state_dict(),
                     vocab=self.vocab,
+                    training_id=self._training_id,
                     accuracy=last_acc,
                     loss=last_loss,
                 )
@@ -170,6 +201,10 @@ class ProductionFedProxStrategy(
         }
         self._last_round_metrics = round_metrics
 
+        if accuracy > self._best_accuracy:
+            self._best_accuracy = accuracy
+            self._best_round = server_round
+
         metrics_file = LOG_DIR / f"round_{server_round}_metrics.json"
         try:
             with open(metrics_file, "w", encoding="utf-8") as f:
@@ -197,6 +232,32 @@ class ProductionFedProxStrategy(
                 extra={"round": server_round, "convergence_round": self.tracker.converged_round},
             )
             self._run_calibration(server_round)
+
+        is_last_round = self._num_rounds is not None and server_round >= self._num_rounds
+        if (
+            (converged or is_last_round)
+            and not self._training_completed
+            and self._checkpoint_store is not None
+            and self._training_id is not None
+        ):
+            self._training_completed = True
+            self._checkpoint_store.complete_training(
+                training_id=self._training_id,
+                n_rounds_done=server_round,
+                best_round=self._best_round,
+                best_accuracy=self._best_accuracy,
+                converged=converged,
+            )
+            logger.info(
+                "training_completed",
+                extra={
+                    "training_id": self._training_id,
+                    "n_rounds_done": server_round,
+                    "best_round": self._best_round,
+                    "best_accuracy": self._best_accuracy,
+                    "converged": converged,
+                },
+            )
 
         return aggregated_loss, aggregated_metrics
 

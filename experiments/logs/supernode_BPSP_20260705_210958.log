@@ -1,0 +1,41 @@
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 15825705170403481208
+[92mINFO [0m:      Starting Flower SuperExec
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 4109980700631375372, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: 69fcca7d1084bf64c03cbca4044a219636013e08efc1282e5c7f0e2094e6fe14)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.5s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 4109980700631375372, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: b8f1ac3d78caa5a6df401355a6c4d9aa9103f549547d0d37b0fdc5541968829a)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[93mWARNING [0m:   Connection attempt failed, retrying in 0.10 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 0.70 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 3.75 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 2.00 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 6.08 seconds
