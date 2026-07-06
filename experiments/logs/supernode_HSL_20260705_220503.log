@@ -1,0 +1,167 @@
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 11555826317983775344
+[92mINFO [0m:      Starting Flower SuperExec
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 13861882996647136656]
+[92mINFO [0m:      Receiving: get_parameters message (ID: 0d1554cb66f54ebebd3d597ad55b80a6e6a81db8f79d3944553d5351134268da)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+Successfully installed mosaicfl to /home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.01cf3170.
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.2s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.2s — 467 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 13861882996647136656]
+[92mINFO [0m:      Sending: get_parameters message (ID: f4330c609114e974dc6e4d673609641537835b836ddb361d7b26060430ddea4d)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 13861882996647136656, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: 4b1c604094beaa9cfbd2cecbc6edf47c6843b76f0083ee400bcde058c6e586bc)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.2s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.2s — 467 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 5.0s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 13861882996647136656, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: 04849d795eed2ef4e5338006cbf10c85ab69d6dd26af40d9efed31f05f7b713b)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 636008107781765571, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: 0dd07abc7a50764400c365d978681ebea867e00c58663c8c1ae69e10aa9af690)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+Successfully installed mosaicfl to /home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.c6f41277.
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 2.6s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.1s — 467 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.0s
+[pipeline] concluído em 3.8s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 636008107781765571, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: 302d7c19b9c1a9e1da23620b14cb5dd9aa0d5d2b2689d0c861455d8e69cf6184)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 5349982983466072346]
+[92mINFO [0m:      Receiving: get_parameters message (ID: 00c7a2aeefca3f8bbbd3f26c2963a230a99b8a0c6f4db634553684da248ab61a)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+Successfully installed mosaicfl to /home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.41d9166d.
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 2.5s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.1s — 467 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.0s
+[pipeline] concluído em 3.7s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 5349982983466072346]
+[92mINFO [0m:      Sending: get_parameters message (ID: 7a98ef39ad1cc7319c8dab50d47fe4adf71f14f0510065e9c405c725a5bffbcb)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 5349982983466072346, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: 33273172c6a57e128d1510029e6c1cb52ed8267e564a174ace3d7449c0045d07)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 2.6s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.1s — 467 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.0s
+[pipeline] concluído em 3.8s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 5349982983466072346, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: 1335819fed7cf3ba53794faa85bb04a9df153b2defa9025554cb41b9648d07ef)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
