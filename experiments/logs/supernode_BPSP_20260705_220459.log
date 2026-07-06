@@ -1,0 +1,86 @@
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 16582469777386390835
+[92mINFO [0m:      Starting Flower SuperExec
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15868461576938454981]
+[92mINFO [0m:      Receiving: get_parameters message (ID: 8ba680c076c0d934850484e4578c47bd04fe1f6162ab2d634f47440854b789d2)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5433/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 0.1s — 0 linhas
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.d7e11673/infrastructure/mosaicfl_client/runner/supernode.py", line 45, in _client_fn
+    _loader_cache[cache_key] = _split_loader(source.load())
+                                             ^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.d7e11673/infrastructure/mosaicfl_client/datasource/sgbd.py", line 112, in load
+    sequences, labels, vocab, _demographics, dia_relativos = pipeline.build(vocab=standard_vocab)
+                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/preprocessor/sequence_pipeline.py", line 185, in build
+    df = self._load_dataframe()
+         ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/preprocessor/sequence_pipeline.py", line 293, in _load_dataframe
+    raise RuntimeError(
+RuntimeError: Nenhum registro retornado. Verifique connection_string e o schema do banco.
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15868461576938454981]
+[92mINFO [0m:      Sending: get_parameters message (ID: 73128ba0461f0138d3d4ef416bf5a476accbf2c003082f56a6af1901f899ab4b)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 13861882996647136656, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: b7e05f5156aa6670e81dde3b64e8077e569e56a7199787f65697d3c9c8036a77)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5433/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 0.1s — 0 linhas
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.01cf3170/infrastructure/mosaicfl_client/runner/supernode.py", line 45, in _client_fn
+    _loader_cache[cache_key] = _split_loader(source.load())
+                                             ^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.01cf3170/infrastructure/mosaicfl_client/datasource/sgbd.py", line 112, in load
+    sequences, labels, vocab, _demographics, dia_relativos = pipeline.build(vocab=standard_vocab)
+                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/preprocessor/sequence_pipeline.py", line 185, in build
+    df = self._load_dataframe()
+         ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/mosaic-fl/src/mosaicfl/core/preprocessor/sequence_pipeline.py", line 293, in _load_dataframe
+    raise RuntimeError(
+RuntimeError: Nenhum registro retornado. Verifique connection_string e o schema do banco.
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 13861882996647136656, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: c1b57ac9fa76027f71f433fac2c714c4299821b399514df261bf4e734add47dd)
+[92mINFO [0m:      Sent successfully

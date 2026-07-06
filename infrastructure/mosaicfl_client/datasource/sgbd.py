@@ -81,20 +81,23 @@ class SGBDDataSource(DataSource):
         except Exception as e:
             return False, f"Erro de conexão: {e}"
 
-    def load(self) -> DataLoader:
+    def load(self, vocab: Optional[dict] = None) -> DataLoader:
         from mosaicfl.core.preprocessor import SequencePipeline
 
-        standard_vocab = _load_standard_vocab()
-        if standard_vocab:
-            logger.info(
-                "[SGBD] vocab padrão carregado: %d tokens — aggregação federada válida",
-                len(standard_vocab),
+        # vocab (parâmetro): enviado pelo servidor via config da rodada (fluxo de produção
+        # normal — ver FedProxClient._ensure_data). Fallback pro arquivo local só serve
+        # chamadores diretos deste método fora desse fluxo (ex: scripts de depuração).
+        standard_vocab = vocab or _load_standard_vocab()
+        if not standard_vocab:
+            raise RuntimeError(
+                "[SGBD] Nenhum vocabulário padrão disponível (nem enviado pelo servidor, nem "
+                "checkpoints/standard_vocab.json local). Abortando em vez de construir um vocab "
+                "local — seria incompatível com o de outros clientes na agregação federada."
             )
-        else:
-            logger.warning(
-                "[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. "
-                "Execute scripts/build_standard_vocab.py antes do treinamento federado em produção."
-            )
+        logger.info(
+            "[SGBD] vocab padrão carregado: %d tokens — agregação federada válida",
+            len(standard_vocab),
+        )
 
         logger.info("[SGBD] Construindo sequências via SequencePipeline hospital=%s", self.hospital_id)
         pipeline = SequencePipeline(

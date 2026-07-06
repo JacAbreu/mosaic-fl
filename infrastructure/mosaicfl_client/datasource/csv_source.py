@@ -41,7 +41,7 @@ class CSVDataSource(DataSource):
             return False, f"Arquivo vazio: {self.filepath}"
         return True, f"Arquivo CSV: {path.stat().st_size / 1024:.1f} KB"
 
-    def load(self) -> DataLoader:
+    def load(self, vocab: Optional[dict] = None) -> DataLoader:
         logger.info(f"[CSV] Lendo {self.filepath}...")
         df = pd.read_csv(self.filepath, sep=self.sep, encoding=self.encoding)
         self._df = df

@@ -1,0 +1,100 @@
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 11228619585652169643
+[92mINFO [0m:      Starting Flower SuperExec
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 636008107781765571]
+[92mINFO [0m:      Receiving: get_parameters message (ID: 3091eb4873f0590ae687e4433b7c6e92d0249426d69a7f4354dba0c81fa7ee15)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5433/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.5s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 636008107781765571]
+[92mINFO [0m:      Sending: get_parameters message (ID: 3b87370e035ec5fbfe076f851378e2fd8256c6353a8fe0ca1fa244f1b8190d9a)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 636008107781765571, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: 949268503c23fa8a103d3fa028330c56b6a2a047be486ec828e98fc78113b232)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5433/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.3s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 636008107781765571, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: 8bf6c8368fa861dfc60a7ee34d07eb4e53f48ddeb946f13aa8f8269f31f505a9)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 5349982983466072346, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: b0b05d053ff360a0ae3e3a3d085ebe029641ae786291a2d5bd9db095e92b87e6)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[SGBD] standard_vocab.json não encontrado — vocab será construído localmente. Execute scripts/build_standard_vocab.py antes do treinamento federado em produção.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5433/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 7.2s — 1,518,538 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,518,538 linhas
+[pipeline] 28,599 atendimentos únicos encontrados
+[pipeline] construindo vocabulário local (simulação)...
+[pipeline] vocabulário pronto em 0.4s — 651 tokens
+[pipeline] construindo tensores para 28,599 sequências...
+[pipeline] tensores: 2,859/28,599 (10%)
+[pipeline] tensores: 5,718/28,599 (20%)
+[pipeline] tensores: 8,577/28,599 (30%)
+[pipeline] tensores: 11,436/28,599 (40%)
+[pipeline] tensores: 14,295/28,599 (50%)
+[pipeline] tensores: 17,154/28,599 (60%)
+[pipeline] tensores: 20,013/28,599 (70%)
+[pipeline] tensores: 22,872/28,599 (80%)
+[pipeline] tensores: 25,731/28,599 (90%)
+[pipeline] tensores: 28,590/28,599 (100%)
+[pipeline] tensores prontos em 3.5s
+[pipeline] concluído em 11.5s total — 28,599 pacientes | dist={0: 15892, 1: 318, 2: 120, 3: 9448, 4: 2821} | demográficos: age_mean=0.51 sex_M=13664/28599
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 5349982983466072346, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: c001bb23e7efc4e703fd2395645a633acd5d78fe9d9af3f0ad9874a489efd92b)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully

@@ -312,6 +312,11 @@ email_*.md
 # Checkpoints exportados (gerados por make export-checkpoint — não versionar binários grandes)
 checkpoints/*.pt
 
+# Vocabulário padrão — derivado do estado atual do banco (knowledge.term_dictionary/
+# analyte_references), gerado por scripts/build_standard_vocab.py. Reexecutar sempre que
+# um novo hospital entrar na federação — versionar arrisca ficar desatualizado em silêncio.
+checkpoints/standard_vocab.json
+
 # =============================================================================
 # SuperLink (Caminho B) — banco SQLite de estado runtime, gerado a cada execução
 # =============================================================================

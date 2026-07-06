@@ -2,6 +2,7 @@
 
 Entry point para: flwr run . <federation>
 """
+import json
 import logging
 from pathlib import Path
 from typing import Dict, Optional
@@ -104,6 +105,17 @@ def _make_server_components(context: Context) -> ServerAppComponents:
     if not recovered_vocab:
         recovered_vocab = _load_standard_vocab()
 
+    # Sem vocab nenhum, o servidor enviaria vocab_json vazio pra todos os clientes — cada um
+    # cairia de volta a construir seu próprio vocab local (mesmo problema que motivou distribuir
+    # o vocab pelo protocolo FL). Falha aqui, no servidor, é mais cedo e mais claro que deixar
+    # o erro aparecer disperso em cada cliente.
+    if not recovered_vocab:
+        raise RuntimeError(
+            "Nenhum vocabulário padrão disponível (nem checkpoint anterior, nem "
+            "checkpoints/standard_vocab.json). Execute scripts/build_standard_vocab.py "
+            "antes de iniciar o ServerApp."
+        )
+
     config_loader = get_config_loader()
     checkpoint_store = get_checkpoint_store(RUNTIME_CFG.db_url)
     _health.start()
@@ -148,10 +160,18 @@ def _make_server_components(context: Context) -> ServerAppComponents:
         initial_parameters=initial_parameters,
         evaluate_metrics_aggregation_fn=weighted_average_accuracy,
         fit_metrics_aggregation_fn=weighted_average_loss,
+        # vocab_json: distribui o vocabulário canônico a cada rodada, direto pelo protocolo FL —
+        # sem isso, cada cliente construía seu próprio vocab local (tamanhos incompatíveis entre
+        # hospitais), causando falha silenciosa na agregação. Ver FedProxClient._ensure_data().
         on_fit_config_fn=lambda rnd: {
             "proximal_mu": proximal_mu,
             "local_epochs": local_epochs,
             "round": rnd,
+            "vocab_json": json.dumps(recovered_vocab),
+        },
+        on_evaluate_config_fn=lambda rnd: {
+            "round": rnd,
+            "vocab_json": json.dumps(recovered_vocab),
         },
     )
 

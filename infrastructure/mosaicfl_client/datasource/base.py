@@ -1,7 +1,7 @@
 """base.py — Interface abstrata para fontes de dados do cliente federado + constantes padrão."""
 import os
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Optional, Tuple
 
 from torch.utils.data import DataLoader
 
@@ -16,8 +16,12 @@ class DataSource(ABC):
     """Interface para todas as fontes de dados do cliente."""
 
     @abstractmethod
-    def load(self) -> DataLoader:
-        """Retorna DataLoader PyTorch pronto para treinamento."""
+    def load(self, vocab: Optional[dict] = None) -> DataLoader:
+        """Retorna DataLoader PyTorch pronto para treinamento.
+
+        vocab: vocabulário canônico compartilhado (enviado pelo servidor via config
+        da rodada, em produção). Fontes que não usam vocab (simulated, csv) ignoram.
+        """
         pass
 
     @abstractmethod

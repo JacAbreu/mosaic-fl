@@ -47,9 +47,34 @@ make client-generate-seed FL_DB_URL="$FL_DB_URL"   # gera scripts/db/seeds/hsl_s
 ### 1.4 Carregar só o BPSP neste banco
 
 ```bash
-gunzip -c scripts/db/seeds/bpsp_seed.sql.gz | \
-  docker exec -i mosaicfl-db-bpsp psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
+export FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5433/mosaicfl"
+make server-load-bpsp FL_DB_CONTAINER=mosaicfl-db-bpsp
 ```
+
+> `server-load-bpsp` já inclui o backfill de `classification` automaticamente (ver
+> seção 2.4b do Caminho A/HSL) — não precisa de passo manual separado.
+
+### 1.4b Gerar o vocabulário padrão compartilhado (obrigatório, só no desktop)
+
+Sem isso, cada cliente FL construía seu **próprio** vocabulário local a partir dos
+dados que vê. Como BPSP e HSL têm conjuntos de analitos diferentes, os vocabulários
+saíam com tamanhos diferentes — a camada de embedding sempre tem o mesmo formato
+(`MODEL_CFG.vocab_size` é fixo), então isso não crasha, mas o mesmo índice de
+embedding passa a representar tokens diferentes em cada cliente: a agregação
+federada (média dos pesos) fica sem sentido semântico, em silêncio — as rodadas
+rodam sem erro nos dois lados, mas o resultado agregado é lixo.
+
+```bash
+export FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5433/mosaicfl"
+mkdir -p checkpoints
+.venv/bin/python scripts/build_standard_vocab.py --output checkpoints/standard_vocab.json
+```
+
+**Só precisa existir no desktop.** O servidor (`ServerApp`) lê esse arquivo e
+distribui o vocab automaticamente a cada cliente, embutido na config de cada
+rodada (`vocab_json`) — não precisa copiar pro notebook. Se o servidor não tiver
+um vocab pra mandar (arquivo ausente e nenhum checkpoint anterior), o `ServerApp`
+agora falha ao subir, em vez de deixar os clientes com vocabulários incompatíveis.
 
 ### 1.5 Gerar certificados TLS com o IP real do desktop
 

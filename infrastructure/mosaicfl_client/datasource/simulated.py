@@ -33,7 +33,7 @@ class SimulatedDataSource(DataSource):
         self.batch_size = batch_size
         self.seed = seed
 
-    def load(self) -> DataLoader:
+    def load(self, vocab: Optional[dict] = None) -> DataLoader:
         logger.info(
             f"[SIMULATED] Gerando {self.num_samples} amostras sintéticas "
             f"(seq_len={self.seq_len}, vocab_size={self.vocab_size})"

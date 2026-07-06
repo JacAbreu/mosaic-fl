@@ -12,13 +12,14 @@ com SequencePipeline(hospital_id=FL_CLIENT_ID).build() contra o banco local.
 Usa state_dict() para sincronizar todos os tensores (treináveis + buffers de normalização).
 A loss local é CrossEntropy + termo proximal FedProx: (μ/2)·‖w_local − w_global‖².
 """
+import json
 import logging
 import numpy as np
 import torch
 import flwr as fl
 from torch.utils.data import DataLoader, TensorDataset
 from collections import OrderedDict
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -29,16 +30,59 @@ from .config import FED_CFG, MODEL_CFG, RUNTIME_CFG
 
 
 class FedProxClient(fl.client.NumPyClient):
-    def __init__(self, client_id: int, train_loader: DataLoader, val_loader: DataLoader):
+    def __init__(
+        self,
+        client_id: int,
+        train_loader: Optional[DataLoader] = None,
+        val_loader: Optional[DataLoader] = None,
+        loader_factory: Optional[Callable[[str], Tuple[DataLoader, DataLoader]]] = None,
+    ):
+        """
+        train_loader/val_loader: uso direto (simulação/testes) — dados já carregados.
+        loader_factory: uso em produção (SGBD) — carregamento adiado para o 1º fit()/
+            evaluate(), quando o vocab_json enviado pelo servidor via config já está
+            disponível (ver _ensure_data). Recebe o vocab_json (str) e devolve
+            (train_loader, val_loader) — quem cacheia entre rounds é o chamador
+            (supernode.py), não este cliente (um FedProxClient novo é criado por round).
+        """
         self.client_id = client_id
         self.train_loader = train_loader
         self.val_loader = val_loader
+        self._loader_factory = loader_factory
         self.model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
-        class_weights = self._compute_class_weights(train_loader).to(RUNTIME_CFG.device)
-        self.criterion      = torch.nn.CrossEntropyLoss(weight=class_weights)
         self._eval_criterion = torch.nn.CrossEntropyLoss()  # sem peso para comparação entre rounds
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=FED_CFG.lr)
         self.global_params: Optional[List[torch.Tensor]] = None
+        self.criterion: Optional[torch.nn.Module] = None
+        if train_loader is not None:
+            self._init_criterion()
+        elif loader_factory is None:
+            raise ValueError("FedProxClient precisa de train_loader ou loader_factory.")
+
+    def _init_criterion(self) -> None:
+        class_weights = self._compute_class_weights(self.train_loader).to(RUNTIME_CFG.device)
+        self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+
+    def _ensure_data(self, config: Dict) -> None:
+        """Carrega train_loader/val_loader sob demanda (produção/SGBD) usando o vocab da rodada.
+
+        Sem isso, o carregamento aconteceria antes de qualquer rodada começar — mas o
+        vocabulário canônico só chega via config (vocab_json), disponível apenas quando
+        fit()/evaluate() é chamado. Sem vocab_json, falha alto em vez de construir um vocab
+        local (que seria incompatível com o de outros clientes — mesmo índice de embedding
+        representando tokens diferentes em cada hospital, corrompendo a agregação em silêncio).
+        """
+        if self.train_loader is not None:
+            return
+        vocab_json = config.get("vocab_json")
+        if not vocab_json:
+            raise RuntimeError(
+                "Servidor não enviou vocabulário padrão (vocab_json ausente na config da "
+                "rodada). Treinamento federado de produção exige vocabulário compartilhado "
+                "entre clientes — abortando em vez de construir um vocab local incompatível."
+            )
+        self.train_loader, self.val_loader = self._loader_factory(vocab_json)
+        self._init_criterion()
 
     def set_parameters(self, parameters: List[np.ndarray]) -> None:
         """
@@ -100,6 +144,7 @@ class FedProxClient(fl.client.NumPyClient):
         return loss + (proximal_mu / 2) * proximal_term
 
     def fit(self, parameters: List[np.ndarray], config: Dict) -> Tuple[List[np.ndarray], int, Dict]:
+        self._ensure_data(config)
         local_epochs  = int(config.get("local_epochs",   FED_CFG.local_epochs))
         proximal_mu   = float(config.get("proximal_mu",  FED_CFG.proximal_mu))
         current_round = int(config.get("current_round",  0))
@@ -169,6 +214,7 @@ class FedProxClient(fl.client.NumPyClient):
         }
 
     def evaluate(self, parameters: List[np.ndarray], config: Dict) -> Tuple[float, int, Dict]:
+        self._ensure_data(config)
         self.set_parameters(parameters)
         self.model.eval()
         correct, total, loss_sum = 0, 0, 0.0
