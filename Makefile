@@ -42,6 +42,20 @@ BPSP_SEED        ?= scripts/db/seeds/bpsp_seed.sql.gz
 # pretenda atingir outro (risco real: truncar o banco errado).
 FL_DB_CONTAINER  ?= mosaicfl-db
 
+# Nome do banco de dados Postgres (não do container) usado por
+# server-load-bpsp/client-load-hsl/server-db-reset/client-db-reset — sobrescreva
+# junto com FL_DB_CONTAINER quando o container de destino tiver um banco com
+# nome diferente de "mosaicfl" (ex.: full-db-* usa FL_DB_NAME=$(FULL_DB_NAME)).
+FL_DB_NAME       ?= mosaicfl
+
+# Container Postgres para o banco "completo" (todos os dados FAPESP — BPSP +
+# HSL — combinados, isolado do mosaicfl-db principal). Nome do banco em si é
+# diferente de "mosaicfl" de propósito, para não confundir com o principal.
+# Ver alvos full-db-*.
+FULL_DB_CONTAINER ?= mosaic-brute-data
+FULL_DB_NAME      ?= mosaic_brute_data
+FULL_DB_PORT      ?= 5434
+
 .PHONY: setup ollama-setup ollama-check \
         test test-integration test-e2e test-all test-cov experiment training training-full \
         training-full-cuda training-bpsp-only training-hsl-only \
@@ -417,7 +431,7 @@ client-load-hsl:
 	@echo "Carregando $(HSL_SEED) no banco ($(FL_DB_CONTAINER))..."
 	zcat "$(HSL_SEED)" | \
 	  docker exec -i $(FL_DB_CONTAINER) \
-	    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
+	    psql -U mosaicfl -d $(FL_DB_NAME) -v ON_ERROR_STOP=1
 	@echo "Seed HSL carregado com sucesso."
 	@echo "Calculando referências canônicas e preenchendo classification (backfill)..."
 	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/compute_analyte_references.py
@@ -460,7 +474,7 @@ server-generate-seed:
 ## falha com "duplicate key value violates unique constraint" (patients_pkey).
 server-db-reset:
 	@echo "Apagando dados clínicos do banco do servidor ($(FL_DB_CONTAINER))..."
-	docker exec -i $(FL_DB_CONTAINER) psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1 -c "TRUNCATE clinical.patients CASCADE; TRUNCATE metrics.clinical_outcomes; TRUNCATE metrics.exam_records; TRUNCATE metrics.risk_history;"
+	docker exec -i $(FL_DB_CONTAINER) psql -U mosaicfl -d $(FL_DB_NAME) -v ON_ERROR_STOP=1 -c "TRUNCATE clinical.patients CASCADE; TRUNCATE metrics.clinical_outcomes; TRUNCATE metrics.exam_records; TRUNCATE metrics.risk_history;"
 	@echo "Banco resetado. Schema e migrations preservados."
 
 ## Apaga todos os dados clínicos do banco do cliente (preserva schema e migrations).
@@ -468,7 +482,7 @@ server-db-reset:
 ## de recarregar um seed regenerado.
 client-db-reset:
 	@echo "Apagando dados clínicos do banco do cliente ($(FL_DB_CONTAINER))..."
-	docker exec -i $(FL_DB_CONTAINER) psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1 -c "TRUNCATE clinical.patients CASCADE; TRUNCATE metrics.clinical_outcomes; TRUNCATE metrics.exam_records; TRUNCATE metrics.risk_history;"
+	docker exec -i $(FL_DB_CONTAINER) psql -U mosaicfl -d $(FL_DB_NAME) -v ON_ERROR_STOP=1 -c "TRUNCATE clinical.patients CASCADE; TRUNCATE metrics.clinical_outcomes; TRUNCATE metrics.exam_records; TRUNCATE metrics.risk_history;"
 	@echo "Banco resetado. Schema e migrations preservados."
 
 ## Carrega o seed BPSP no banco do servidor.
@@ -479,7 +493,7 @@ server-load-bpsp:
 	@echo "Carregando $(BPSP_SEED) no banco ($(FL_DB_CONTAINER))..."
 	zcat "$(BPSP_SEED)" | \
 	  docker exec -i $(FL_DB_CONTAINER) \
-	    psql -U mosaicfl -d mosaicfl -v ON_ERROR_STOP=1
+	    psql -U mosaicfl -d $(FL_DB_NAME) -v ON_ERROR_STOP=1
 	@echo "Seed BPSP carregado com sucesso."
 	@echo "Calculando referências canônicas e preenchendo classification (backfill)..."
 	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/compute_analyte_references.py
@@ -494,6 +508,69 @@ server-load-bpsp:
 ##   make server-setup FL_DB_PASSWORD=outrasenha
 server-setup: db-up client-migrate server-db-reset server-load-bpsp
 	@echo "Servidor BPSP pronto. Execute 'make fl-server' para iniciar o treinamento federado."
+
+# ── Banco completo — todos os dados FAPESP (BPSP + HSL) num container isolado ─
+#
+# Container Docker próprio (docker run direto, fora do docker-compose.db.yml
+# padrão — mesmo padrão do mosaicfl-db-bpsp do tutorial de rede real). O banco
+# Postgres interno se chama "mosaic_brute_data" (FULL_DB_NAME) — de propósito
+# diferente de "mosaicfl", para não confundir os dois bancos.
+#
+# Uso (sequência completa):
+#   make full-db-setup
+#   make full-db-setup FULL_DB_CONTAINER=outro_nome FULL_DB_NAME=outro_db FULL_DB_PORT=5435
+#
+# Ou passo a passo (para reexecutar só uma etapa):
+#   make full-db-up
+#   make full-db-generate-seeds
+#   make full-db-migrate FL_DB_URL=postgresql://mosaicfl:senhaForte@localhost:5434/mosaic_brute_data
+#   make full-db-load    FL_DB_URL=postgresql://mosaicfl:senhaForte@localhost:5434/mosaic_brute_data
+
+## Sobe um Postgres novo e isolado (container customizado, fora do compose padrão).
+full-db-up:
+	docker run -d \
+		--name $(FULL_DB_CONTAINER) \
+		-e POSTGRES_DB=$(FULL_DB_NAME) -e POSTGRES_USER=mosaicfl \
+		-e POSTGRES_PASSWORD=$(FL_DB_PASSWORD) \
+		-p $(FULL_DB_PORT):5432 \
+		-v $(FULL_DB_CONTAINER)_data:/home/postgres/pgdata/data \
+		timescale/timescaledb-ha:pg16
+	@echo "Aguardando banco '$(FULL_DB_CONTAINER)' ficar pronto..."
+	@until docker exec $(FULL_DB_CONTAINER) pg_isready -U mosaicfl -d $(FULL_DB_NAME) >/dev/null 2>&1; do sleep 1; done
+	@echo "Banco '$(FULL_DB_CONTAINER)' pronto na porta $(FULL_DB_PORT), banco '$(FULL_DB_NAME)'."
+
+## Gera os dois seeds (BPSP e HSL) a partir dos ZIPs FAPESP em $(FL_DATA_DIR).
+## Sobrescreve scripts/db/seeds/{bpsp,hsl}_seed.sql.gz caso já existam — garante
+## que o banco completo carregue a versão mais atual dos geradores, não seeds
+## antigos possivelmente gerados por uma versão anterior do código.
+full-db-generate-seeds:
+	$(MAKE) --no-print-directory server-generate-seed
+	$(MAKE) --no-print-directory client-generate-seed
+
+## Aplica as migrations no banco completo (requer FL_DB_URL apontando pra ele).
+full-db-migrate:
+	FL_DB_URL="$(FL_DB_URL)" bash scripts/db/migrate.sh upgrade head
+
+## Carrega BPSP + HSL (seeds já gerados) no banco completo — server-load-bpsp/
+## client-load-hsl já incluem o backfill de classification automaticamente.
+## Ao final, gera o vocabulário padrão compartilhado (checkpoints/standard_vocab.json),
+## necessário para treinamento federado real via Caminho B (ver
+## docs/Tutorial_Rede_Federada_Real_Desktop_Notebook.md, seção 1.4b).
+full-db-load:
+	$(MAKE) --no-print-directory server-load-bpsp FL_DB_CONTAINER=$(FULL_DB_CONTAINER) FL_DB_NAME=$(FULL_DB_NAME) FL_DB_URL="$(FL_DB_URL)"
+	$(MAKE) --no-print-directory client-load-hsl  FL_DB_CONTAINER=$(FULL_DB_CONTAINER) FL_DB_NAME=$(FULL_DB_NAME) FL_DB_URL="$(FL_DB_URL)"
+	mkdir -p checkpoints
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/build_standard_vocab.py --output checkpoints/standard_vocab.json
+
+## Sequência completa: sobe o container, gera os seeds, aplica migrations,
+## carrega BPSP+HSL e gera o vocabulário padrão compartilhado.
+full-db-setup:
+	$(MAKE) --no-print-directory full-db-up
+	$(MAKE) --no-print-directory full-db-generate-seeds
+	$(MAKE) --no-print-directory full-db-migrate FL_DB_URL="postgresql://mosaicfl:$(FL_DB_PASSWORD)@localhost:$(FULL_DB_PORT)/$(FULL_DB_NAME)"
+	$(MAKE) --no-print-directory full-db-load    FL_DB_URL="postgresql://mosaicfl:$(FL_DB_PASSWORD)@localhost:$(FULL_DB_PORT)/$(FULL_DB_NAME)"
+	@echo ""
+	@echo "Banco completo pronto: postgresql://mosaicfl:$(FL_DB_PASSWORD)@localhost:$(FULL_DB_PORT)/$(FULL_DB_NAME)"
 
 ## Inicia a API de inferência REST.
 ## O modelo é carregado automaticamente do banco (FL_DB_URL) se não houver checkpoint em arquivo.
