@@ -218,6 +218,8 @@ class FedProxClient(fl.client.NumPyClient):
         self.set_parameters(parameters)
         self.model.eval()
         correct, total, loss_sum = 0, 0, 0.0
+        all_preds: List[int] = []
+        all_labels: List[int] = []
         with torch.no_grad():
             for batch_x, batch_y, batch_dia in self.val_loader:
                 batch_x = batch_x.to(RUNTIME_CFG.device)
@@ -229,10 +231,40 @@ class FedProxClient(fl.client.NumPyClient):
                 _, predicted = torch.max(outputs.data, 1)
                 total += batch_y.size(0)
                 correct += (predicted == batch_y).sum().item()
+                all_preds.extend(predicted.cpu().tolist())
+                all_labels.extend(batch_y.cpu().tolist())
 
         accuracy = correct / total if total > 0 else 0
         avg_loss = loss_sum / total if total > 0 else 0.0
-        return float(avg_loss), total, {"accuracy": accuracy, "client_id": self.client_id}
+
+        # F1 calculado localmente (nunca expõe predições/labels brutos ao servidor —
+        # só os agregados escalares/por-classe, mesma lógica de accuracy/loss).
+        # labels=range(num_classes) explícito: garante vetor de mesmo tamanho em
+        # todos os clientes, mesmo quando um hospital não tem exemplos de alguma
+        # classe local (BPSP e HSL têm distribuições muito diferentes — sem isso,
+        # per_class_f1 viria com tamanhos diferentes entre clientes e quebraria
+        # a agregação ponderada por classe no servidor).
+        from sklearn.metrics import f1_score
+        num_classes = MODEL_CFG.num_classes
+        if total > 0:
+            f1_macro = float(f1_score(
+                all_labels, all_preds, average="macro",
+                labels=list(range(num_classes)), zero_division=0,
+            ))
+            per_class_f1 = f1_score(
+                all_labels, all_preds, average=None,
+                labels=list(range(num_classes)), zero_division=0,
+            ).tolist()
+        else:
+            f1_macro = 0.0
+            per_class_f1 = [0.0] * num_classes
+
+        return float(avg_loss), total, {
+            "accuracy": accuracy,
+            "client_id": self.client_id,
+            "f1_macro": f1_macro,
+            "per_class_f1_json": json.dumps(per_class_f1),
+        }
 
 
 def create_client_fn(

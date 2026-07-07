@@ -1,11 +1,30 @@
 {
   "status": "running",
-  "last_round": 0,
-  "convergence_history": [],
+  "run_id": 14032412097865427907,
+  "last_round": 10,
+  "convergence_history": [
+    0.7119798608026062,
+    0.6678513253368873,
+    0.7149415074781579,
+    0.6706648896786613,
+    0.6629646083222271,
+    0.6225381312009477,
+    0.6034355101436398,
+    0.650673774618688,
+    0.6610395379831187,
+    0.6993928624315119
+  ],
   "converged_round": null,
-  "last_metrics": {},
-  "last_checkpoint": null,
+  "last_metrics": {
+    "round": 10,
+    "loss": 0.8261197774688809,
+    "accuracy": 0.6993928624315119,
+    "timestamp": "2026-07-06T23:01:51.901516",
+    "converged": false,
+    "convergence_round": null
+  },
+  "last_checkpoint": "checkpoints/round_10.pt",
   "timed_out_rounds": [],
-  "started_at": "2026-07-04T13:21:34.852289",
-  "updated_at": "2026-07-04T13:21:34.852294"
+  "started_at": "2026-07-06T22:44:40.023620",
+  "updated_at": "2026-07-06T23:01:51.901911"
 }

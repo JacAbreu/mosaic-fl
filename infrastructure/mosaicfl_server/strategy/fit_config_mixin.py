@@ -5,6 +5,7 @@ from collections import OrderedDict
 from typing import List, Tuple
 
 import torch
+from flwr.common import parameters_to_ndarrays
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +54,18 @@ class _FitConfigMixin:
         return super().configure_fit(server_round, parameters, client_manager)
 
     def _load_global_weights(self, parameters) -> None:
-        """Carrega pesos agregados no modelo global (compatível com client)."""
+        """Carrega pesos agregados no modelo global (compatível com client).
+
+        parameters chega como flwr.common.Parameters (retorno de
+        super().aggregate_fit()), não como lista de ndarrays — precisa
+        converter antes de iterar, senão `zip()` falha com
+        "'Parameters' object is not iterable".
+        """
+        ndarrays = parameters_to_ndarrays(parameters)
         state_dict = OrderedDict(
             {
                 k: torch.tensor(v)
-                for k, v in zip(self.global_model.state_dict().keys(), parameters)
+                for k, v in zip(self.global_model.state_dict().keys(), ndarrays)
             }
         )
         missing, unexpected = self.global_model.load_state_dict(state_dict, strict=False)

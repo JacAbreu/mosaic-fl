@@ -1,8 +1,8 @@
 {
   "round": 7,
-  "loss": null,
-  "accuracy": 0.0,
-  "timestamp": "2026-07-05T21:04:31.342534",
-  "converged": true,
-  "convergence_round": 4
+  "loss": 0.961623300389327,
+  "accuracy": 0.6034355101436398,
+  "timestamp": "2026-07-06T22:56:42.686797",
+  "converged": false,
+  "convergence_round": null
 }

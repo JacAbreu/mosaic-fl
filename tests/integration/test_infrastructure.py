@@ -598,6 +598,11 @@ class TestProductionFedProxStrategy:
                 "infrastructure.mosaicfl_server.state_store", fromlist=["TrainingState"]
             ).TrainingState()
             strategy._last_round_metrics = {}
+            strategy._history_rounds = []
+            strategy._history_accuracies = []
+            strategy._history_losses = []
+            strategy._history_f1_macros = []
+            strategy._history_per_class_f1 = []
             strategy.vocab = {}
             strategy.CHECKPOINT_DIR = tmp_path / "checkpoints"
             strategy.LOG_DIR = tmp_path / "logs"
@@ -606,9 +611,14 @@ class TestProductionFedProxStrategy:
         return strategy, model, tmp_path
 
     def test_load_global_weights_updates_model(self, strategy_and_model):
+        """_load_global_weights recebe flwr.common.Parameters (retorno real de
+        aggregate_fit()), não uma lista de ndarrays — ver bug real encontrado em
+        2026-07-06 (TypeError: 'Parameters' object is not iterable)."""
+        from flwr.common import ndarrays_to_parameters
+
         strategy, model, _ = strategy_and_model
         zero_params = [np.zeros_like(v.cpu().numpy()) for v in model.state_dict().values()]
-        strategy._load_global_weights(zero_params)
+        strategy._load_global_weights(ndarrays_to_parameters(zero_params))
         for v in model.state_dict().values():
             if v.dtype == torch.float32:
                 assert torch.allclose(v, torch.zeros_like(v))
@@ -658,6 +668,10 @@ class TestProductionFedProxStrategy:
         assert strategy.should_stop is True
 
     def test_aggregate_fit_saves_checkpoint(self, strategy_and_model):
+        """Mocka FedProx.aggregate_fit retornando flwr.common.Parameters (tipo real),
+        não uma lista de ndarrays — ver bug real encontrado em 2026-07-06."""
+        from flwr.common import ndarrays_to_parameters
+
         strategy, model, tmp_path = strategy_and_model
         checkpoint_dir = tmp_path / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -666,7 +680,7 @@ class TestProductionFedProxStrategy:
         old_ckpt = strat_mod.CHECKPOINT_DIR
         strat_mod.CHECKPOINT_DIR = checkpoint_dir
         strategy.CHECKPOINT_DIR = checkpoint_dir
-        params = [v.cpu().numpy() for v in model.state_dict().values()]
+        params = ndarrays_to_parameters([v.cpu().numpy() for v in model.state_dict().values()])
         try:
             with patch("flwr.server.strategy.FedProx.aggregate_fit",
                        return_value=(params, {})):
@@ -679,9 +693,11 @@ class TestProductionFedProxStrategy:
 
     def test_load_weights_strict_false_no_crash(self, strategy_and_model):
         """strict=False deve carregar sem RuntimeError mesmo com chaves faltando."""
+        from flwr.common import ndarrays_to_parameters
+
         strategy, model, _ = strategy_and_model
         all_values = list(model.state_dict().values())
-        partial_params = [np.zeros_like(v.cpu().numpy()) for v in all_values[:3]]
+        partial_params = ndarrays_to_parameters([np.zeros_like(v.cpu().numpy()) for v in all_values[:3]])
         try:
             strategy._load_global_weights(partial_params)
         except RuntimeError:

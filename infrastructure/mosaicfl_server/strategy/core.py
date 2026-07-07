@@ -13,7 +13,7 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 import flwr as fl
 import torch
@@ -58,6 +58,7 @@ class ProductionFedProxStrategy(
     _run_id             = None  # fallback para __new__ em testes
     _best_round         = 0     # fallback para __new__ em testes
     _best_accuracy      = 0.0   # fallback para __new__ em testes
+    _best_criterion_value = 0.0  # fallback para __new__ em testes
     _training_completed = False  # fallback para __new__ em testes
 
     def __init__(
@@ -99,6 +100,17 @@ class ProductionFedProxStrategy(
         self._round_timer: Optional[threading.Timer] = None
         self._current_state = TrainingState()
         self._last_round_metrics: Dict = {}
+
+        # Acumula por rodada para save_round_history() no fim do treino (mesmo padrão
+        # de manual_loop.py, Caminho A). tau_eff/round_duration_s não são calculados
+        # aqui — FedProx não usa tau_eff (só FedNova) e não há medição de duração
+        # por rodada implementada no Caminho B ainda.
+        self._history_rounds: List[int] = []
+        self._history_accuracies: List[float] = []
+        self._history_losses: List[float] = []
+        self._history_f1_macros: List[float] = []
+        self._history_per_class_f1: List[list] = []
+        self._best_criterion_value: float = 0.0
 
         self._training_id = training_id
         self._num_rounds = num_rounds
@@ -187,6 +199,10 @@ class ProductionFedProxStrategy(
         )
 
         accuracy = aggregated_metrics.get("accuracy", 0.0) if aggregated_metrics else 0.0
+        f1_macro = aggregated_metrics.get("f1_macro", 0.0) if aggregated_metrics else 0.0
+        per_class_f1_json = aggregated_metrics.get("per_class_f1_json") if aggregated_metrics else None
+        per_class_f1 = json.loads(per_class_f1_json) if per_class_f1_json else None
+
         self.tracker.check(accuracy)
         self.round_counter = server_round
 
@@ -195,13 +211,28 @@ class ProductionFedProxStrategy(
             "round": server_round,
             "loss": aggregated_loss,
             "accuracy": accuracy,
+            "f1_macro": f1_macro,
+            "per_class_f1": per_class_f1,
             "timestamp": datetime.now().isoformat(),
             "converged": converged,
             "convergence_round": self.tracker.converged_round,
         }
         self._last_round_metrics = round_metrics
 
-        if accuracy > self._best_accuracy:
+        self._history_rounds.append(server_round)
+        self._history_accuracies.append(accuracy)
+        self._history_losses.append(aggregated_loss)
+        self._history_f1_macros.append(f1_macro)
+        self._history_per_class_f1.append(per_class_f1 or [])
+
+        # Critério de melhor rodada segue FED_CFG.checkpoint_criterion (já declarado
+        # em fl_trainings.checkpoint_criterion, ver register_training() em
+        # superlink.py) — mesma lógica de manual_loop.py (Caminho A): best_accuracy
+        # sempre guarda a accuracy (não o F1) da rodada escolhida, mesmo quando o
+        # critério de escolha é f1_macro — só o critério de SELEÇÃO muda.
+        criterion_value = f1_macro if FED_CFG.checkpoint_criterion == "f1_macro" else accuracy
+        if criterion_value > self._best_criterion_value:
+            self._best_criterion_value = criterion_value
             self._best_accuracy = accuracy
             self._best_round = server_round
 
@@ -258,6 +289,24 @@ class ProductionFedProxStrategy(
                     "converged": converged,
                 },
             )
+            try:
+                self._checkpoint_store.save_round_history(
+                    training_id=self._training_id,
+                    rounds=self._history_rounds,
+                    accuracies=self._history_accuracies,
+                    losses=self._history_losses,
+                    f1_macros=self._history_f1_macros,
+                    per_class_f1s=self._history_per_class_f1,
+                )
+                logger.info(
+                    "round_history_saved",
+                    extra={"training_id": self._training_id, "n_rounds": len(self._history_rounds)},
+                )
+            except Exception as e:
+                logger.warning(
+                    "round_history_save_error",
+                    extra={"training_id": self._training_id, "error": str(e)},
+                )
 
         return aggregated_loss, aggregated_metrics
 

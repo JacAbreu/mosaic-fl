@@ -4,6 +4,7 @@ Entry point para: flwr run . <federation>
 """
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -13,7 +14,7 @@ from flwr.common import Context
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 
 from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
-from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_loss
+from mosaicfl.core.federated import weighted_average_evaluate_metrics, weighted_average_loss
 from mosaicfl.core.model import SimplifiedBEHRT
 
 from ..config_loader import get_config_loader
@@ -26,6 +27,33 @@ from .config import LOG_DIR, _health
 from .health import write_health_status
 
 logger = logging.getLogger(__name__)
+
+# ServerApp roda como subprocesso próprio (flower-superexec --plugin-type serverapp),
+# cuja stdout/stderr não aparece nem no terminal do "flwr run", nem no do
+# "flower-superlink" — gap de observabilidade real (achado em 2026-07-05/06,
+# nenhum log da estratégia/aggregate_fit/aggregate_evaluate era visível em
+# lugar nenhum). Log em arquivo próprio, capturando o logger raiz (pega tudo:
+# core.py, watchdog_mixin.py, calibration_mixin.py, este módulo).
+#
+# Caminho relativo ao CWD do processo (não a __file__): este módulo roda a
+# partir do FAB extraído (~/.flwr/apps/...), não do checkout do projeto —
+# Path(__file__).parent... apontaria pra dentro do FAB, não pro projeto real.
+# LOG_DIR/CHECKPOINT_DIR (config.py) já usam esse mesmo padrão relativo ao CWD
+# com sucesso (round_N_metrics.json aparece certo em logs/ do projeto).
+_EXPERIMENTS_LOG_DIR = Path("experiments/logs")
+_EXPERIMENTS_LOG_DIR.mkdir(parents=True, exist_ok=True)
+_serverapp_log_file = _EXPERIMENTS_LOG_DIR / f"serverapp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+_root_logger = logging.getLogger()
+if not any(isinstance(h, logging.FileHandler) and getattr(h, "_mosaicfl_serverapp", False)
+           for h in _root_logger.handlers):
+    _file_handler = logging.FileHandler(_serverapp_log_file, encoding="utf-8")
+    _file_handler._mosaicfl_serverapp = True
+    _file_handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s | %(message)s"
+    ))
+    _root_logger.addHandler(_file_handler)
+    _root_logger.setLevel(logging.INFO)
+    logger.info("serverapp_log_file_iniciado path=%s", _serverapp_log_file)
 
 
 def _make_server_components(context: Context) -> ServerAppComponents:
@@ -158,7 +186,7 @@ def _make_server_components(context: Context) -> ServerAppComponents:
         min_evaluate_clients=min_clients,
         min_available_clients=min_clients,
         initial_parameters=initial_parameters,
-        evaluate_metrics_aggregation_fn=weighted_average_accuracy,
+        evaluate_metrics_aggregation_fn=weighted_average_evaluate_metrics,
         fit_metrics_aggregation_fn=weighted_average_loss,
         # vocab_json: distribui o vocabulário canônico a cada rodada, direto pelo protocolo FL —
         # sem isso, cada cliente construía seu próprio vocab local (tamanhos incompatíveis entre

@@ -1193,4 +1193,78 @@ Investigação de por que isso não causava um crash óbvio: `MODEL_CFG.vocab_si
 - `infrastructure/mosaicfl_client/datasource/sgbd.py`: `load(vocab=...)` usa o vocab recebido; se nenhum vocab disponível (nem passado, nem arquivo local), **levanta `RuntimeError`** em vez do warning-e-segue-o-jogo anterior.
 - `infrastructure/mosaicfl_client/runner/supernode.py`: `_client_fn` agora tem dois caminhos — fontes vocab-dependentes (`sgbd`) usam uma `_loader_factory` fechada sobre o `DataSource` e o cache existente (`_loader_cache`), construída lazy no 1º round; fontes que não dependem de vocab (`simulated`, `csv`) mantêm o carregamento imediato de antes, sem mudança.
 
+---
+
+## Bug real definitivo achado — `TypeError: 'Parameters' object is not iterable` em `aggregate_fit`
+
+Em 2026-07-06 (noite), com os 3 fixes anteriores (vocab compartilhado, `run_id`, `dia_relativos`) já em produção, ainda travava sempre depois dos dois clientes (BPSP local + HSL notebook) responderem a ROUND 1 — nenhum checkpoint salvo, sem erro visível em lugar nenhum. Implementei log em arquivo pro próprio `ServerApp` (gap de observabilidade identificado ontem, nunca resolvido — `flower-superexec --plugin-type serverapp` não loga em lugar acessível). **Primeiro bug do próprio fix**: calculei o caminho do log com `Path(__file__).parent.parent.parent.parent`, presumindo que o módulo rodaria do checkout do projeto — mas ele roda do FAB extraído (`~/.flwr/apps/...`), então o log caiu dentro do FAB, não em `experiments/logs/` do projeto. Corrigido usando caminho relativo ao CWD (`Path("experiments/logs")`), mesmo padrão já usado com sucesso por `LOG_DIR`/`CHECKPOINT_DIR`.
+
+Com o log no lugar certo, achei o traceback real pela primeira vez:
+```
+INFO flwr | aggregate_fit: received 2 results and 0 failures
+ERROR flwr | ServerApp raised an exception
+TypeError: 'Parameters' object is not iterable
+  File ".../strategy/core.py", line 149, in aggregate_fit
+    self._load_global_weights(aggregated_parameters)
+  File ".../strategy/fit_config_mixin.py", line 60, in _load_global_weights
+    for k, v in zip(self.global_model.state_dict().keys(), parameters)
+```
+
+**Causa raiz:** `_load_global_weights()` (`fit_config_mixin.py`) sempre esperou `parameters` como uma lista pronta de ndarrays — mas `super().aggregate_fit()` (FedProx/FedAvg) retorna um objeto `flwr.common.Parameters` (wrapper serializado), não uma lista iterável. **Bug pré-existente, nunca exercitado antes** — esta foi a primeira vez que os dois clientes reais completaram a ROUND 1 com sucesso (depois dos fixes de vocab/run_id/dia_relativos), produzindo `aggregated_parameters` não-nulo pela primeira vez; o "ServerApp raised an exception" derrubava o processo inteiro (Exit Code 201), explicando por que nenhuma tentativa anterior nunca avançava — o ServerApp morria silenciosamente logo depois de "receber 2 resultados e 0 falhas".
+
+**Corrigido:** `_load_global_weights()` agora converte com `flwr.common.parameters_to_ndarrays(parameters)` antes de iterar.
+
+**Achado adicional sobre os testes existentes:** os 3 testes que exercitavam esse método (`test_load_global_weights_updates_model`, `test_aggregate_fit_saves_checkpoint`, `test_load_weights_strict_false_no_crash`) **mockavam `FedProx.aggregate_fit` retornando uma lista de ndarrays diretamente**, não um `Parameters` real — por isso os 545 testes sempre passavam, mesmo com o bug presente. Corrigidos os 3 pra usar `ndarrays_to_parameters(...)` (tipo real), o que imediatamente expôs o mesmo `TypeError` nos testes — confirmando que agora exercitam o call site de verdade. Mesmo padrão de `feedback_grep_todos_call_sites`: suíte verde não implica cobertura real do fluxo de produção.
+
+**Validado com dado real e com simulação isolada**: reproduzi `aggregate_fit(1, [], [])` com um `Parameters` genuíno (via `ndarrays_to_parameters`) e mock de `FedProx.aggregate_fit` — passou sem erro, meta confirmada. 545 testes passando.
+
+---
+
+## MARCO — Caminho B validado de ponta a ponta pela primeira vez (2026-07-06/07, madrugada)
+
+Depois do fix do `TypeError`, a autora rodou `make server-app` mais uma vez, com desktop (BPSP, `mosaicfl-db-bpsp`) + notebook (HSL) reais conectados. Desta vez, as 10 rounds completaram integralmente, sincronizadas nos dois lados, sem nenhum erro.
+
+**Resultado:** `training_id=7`, `algorithm=FedProx`, `run_classification=ajuste`, `n_rounds_done=10`, `best_round=3` (accuracy=71,49%), `completed_at` preenchido — a primeira vez que esse campo é populado no Caminho B desde que ele existe. Accuracy oscilou entre rounds (71,2% na 2 → 66,8% na 3 → ... → 66,1% na 10, loss variando entre 0,82 e 0,95) — explicado, não é bug: heterogeneidade non-IID severa entre BPSP e HSL já documentada (`melhora_pronto` = 0,4% no BPSP vs. 61,5% no HSL) combinada com `proximal_mu` provavelmente conservador demais pra esse grau de desequilíbrio (mesma análise já registrada em `docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md` para o Caminho A).
+
+Processos (SuperLink + os 2 `SuperNode`s) encerrados manualmente ao final, sem zumbis pendentes — confirmado com `ps aux` limpo.
+
+**Importante:** esse resultado é de `mosaicfl-db-bpsp`, banco de **teste** da mecânica do Caminho B — não citável como treinamento real na defesa. A estratégia de 3 bancos (banco de teste atual / `mosaic_brute_data` para exploração / banco final ainda não criado) está documentada e deve ser seguida antes de gerar qualquer resultado formal.
+
+**Resumo da saga completa de bugs do Caminho B (2026-07-05 a 2026-07-07), todos encontrados só ao rodar de verdade com 2 máquinas reais, nunca por leitura de código isolada:**
+1. Vocabulário incompatível entre clientes (cada um construía o seu) — corrigido com distribuição automática via `vocab_json` na config do FL.
+2. Estado de convergência de um run quebrado sendo restaurado em runs novos sem relação — corrigido com `run_id` no `TrainingState`.
+3. `dia_relativos` faltando no `TensorDataset` do datasource `sgbd.py`.
+4. `TypeError: 'Parameters' object is not iterable` em `_load_global_weights()` — o bug definitivo, só visível depois que os 3 anteriores já tinham sido corrigidos e os 2 clientes finalmente completavam uma rodada com sucesso.
+
 **Validado de ponta a ponta com dado real** (não só testes unitários): simulei o fluxo completo — `FedProxClient` criado sem dados (`train_loader is None`), `get_parameters()`/`fit()` chamado com `config={"vocab_json": ...}` real (o mesmo `checkpoints/standard_vocab.json` gerado, 38 tokens) — log confirmou `"usando vocabulário pré-compartilhado — 38 tokens"` (não mais "construído localmente"), `fit()` completou com métricas reais (loss, grad_norm, tau) contra o banco BPSP de verdade (28.599 sequências). Testado também o caminho de falha: `fit()` sem `vocab_json` no config levanta `RuntimeError` explícito, confirmado. 545 testes passando (suíte padrão `tests/unit tests/integration`) — 4 falhas em `tests/test_fl_cycle_explained.py` são de um subsistema não relacionado (`FederatedScheduler`/`SchedulerStateStore` tentando criar `/app`, hardcoded pra ambiente Docker), pré-existentes, não causadas por essas mudanças.
+
+---
+
+## `fl_round_history` implementado no Caminho B (a pedido da autora, antes da simulação real)
+
+Ao avaliar o resultado do `training_id=7` (marco acima), a autora perguntou sobre diagnóstico/tendência — a resposta revelou uma lacuna real: `metrics.fl_round_history` está vazia pro Caminho B (só o Caminho A, via `manual_loop.py`, populava essa tabela) — só tinha os pontos isolados capturados durante o monitoramento manual, não a trajetória completa.
+
+**Implementado:** `ProductionFedProxStrategy` (`core.py`) ganhou `_history_rounds`/`_history_accuracies`/`_history_losses` (listas acumuladas a cada `aggregate_evaluate()`), e `save_round_history()` é chamado uma vez, no mesmo ponto onde `complete_training()` já é chamado (convergência ou fim das rodadas) — mesmo padrão do `manual_loop.py` (acumula durante o loop, grava tudo de uma vez no fim).
+
+**Limitação inicial registrada, depois preenchida no mesmo dia (autora confirmou que estava no escopo):** `f1_macro`/`per_class_f1` não eram calculados no Caminho B — `client.evaluate()` só retornava `accuracy`. Implementado a seguir.
+
+**Validado:** simulação isolada com `MagicMock` no `checkpoint_store` — 3 rodadas simuladas, `save_round_history` chamado com `rounds=[1,2,3]`, `accuracies`/`losses` correspondentes, confirmado via `call_args`. 545 testes passando (fixture de teste `strategy_and_model` também precisou dos 3 novos atributos, mesmo padrão de sempre pros testes que usam `__new__` direto).
+
+---
+
+## F1 macro + per-class F1 implementados no Caminho B, de forma federada (privacy-preserving)
+
+**Decisão de arquitetura, verificada antes de implementar:** o Caminho A (`manual_loop.py`) calcula F1 via `evaluate_global_model()`, avaliando o modelo global **centralizado** num `test_loader` que mistura dados de BPSP e HSL — só funciona porque é uma simulação numa única máquina. O Caminho B roda em 2 máquinas reais e separadas; confirmei que `_test_loader` (usado só para calibração, `calibration_mixin.py`) **nunca é passado** em `superlink.py` — ou seja, o servidor não tem (e não deveria ter) acesso a um conjunto de teste centralizado cruzando os dois hospitais. F1 precisa ser calculado **localmente em cada cliente**, e agregado como métrica (nunca como predição/label bruto) — a mesma filosofia de privacidade que já rege accuracy/loss.
+
+**Implementado:**
+- `src/mosaicfl/core/client.py` (`FedProxClient.evaluate()`): calcula `f1_macro` e `per_class_f1` localmente via `sklearn.metrics.f1_score`, com `labels=range(num_classes))` explícito — garante vetor do mesmo tamanho em todos os clientes, mesmo com BPSP e HSL tendo distribuições de classe muito diferentes (sem isso, um cliente sem exemplos de uma classe local produziria um vetor mais curto, quebrando a agregação). `per_class_f1` vai serializado em `per_class_f1_json` (`flwr.common.Metrics` só aceita escalares — lista/dict bruto quebra).
+- `src/mosaicfl/core/federated.py`: nova função `weighted_average_evaluate_metrics()` — agrega `accuracy`, `f1_macro` (média ponderada simples) e `per_class_f1` (média ponderada por classe, desserializando e reserializando o JSON).
+- `infrastructure/mosaicfl_server/runner/superlink.py`: troca `evaluate_metrics_aggregation_fn=weighted_average_accuracy` por `weighted_average_evaluate_metrics`.
+- `infrastructure/mosaicfl_server/strategy/core.py` (`aggregate_evaluate`): extrai `f1_macro`/`per_class_f1` do agregado, acumula em `_history_f1_macros`/`_history_per_class_f1`, passa pro `save_round_history()`. **Seleção de melhor rodada agora respeita `FED_CFG.checkpoint_criterion`** (já declarado como `"f1_macro"` em `fl_trainings.checkpoint_criterion` desde ontem, mas nunca de fato usado na seleção — só `accuracy` era comparada). Mesma convenção do `manual_loop.py`: `best_accuracy` sempre guarda a accuracy da rodada escolhida, mesmo quando o critério de escolha é F1 — só o critério de comparação muda.
+
+**Validado com dado real e simulação isolada:**
+1. `client.evaluate()` contra BPSP de verdade (5.719 amostras de validação): `f1_macro=0,2247`, `per_class_f1` com 5 elementos — classes raras do BPSP (`curado_internado`, `melhora_pronto`) corretamente com F1=0,0, batendo com o desbalanceamento já documentado.
+2. `weighted_average_evaluate_metrics()` com 2 clientes simulados (pesos/contagens diferentes) — média ponderada conferida manualmente, bate.
+3. `aggregate_evaluate()` simulado com 3 rodadas (accuracy alta na rodada 1, mas F1 mais alto na rodada 2) — `best_round` corretamente selecionou a rodada 2 (pelo F1), `best_accuracy` guardou a accuracy real da rodada 2 (não o F1), `save_round_history` recebeu o histórico completo e correto das 3 rodadas.
+
+`tau_eff`/`round_duration_s` continuam fora — `tau_eff` não se aplica a FedProx (só FedNova), e não há medição de duração por rodada implementada no Caminho B ainda (não fazia parte do pedido). 545 testes passando.
