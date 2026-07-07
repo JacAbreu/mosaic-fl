@@ -1,0 +1,651 @@
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 5989905151892213815
+[92mINFO [0m:      Starting Flower SuperExec
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 16019870648706919693]
+[92mINFO [0m:      Receiving: get_parameters message (ID: 42a9f4ff0c24df8e6fb2c62577e8d2f2b874690f0ad999474d6e1f448bde914b)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+Successfully installed mosaicfl to /home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.124551d6.
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 16019870648706919693]
+[92mINFO [0m:      Sending: get_parameters message (ID: 8369a59023a063cd191f6921aff3aa678c7d56274636581c26f4585d12b04ae1)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 16019870648706919693, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: b224211a3308c5f98df963259aea5f1bc2137bb351432e5cc570631733836f02)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 16019870648706919693, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: 2b7f22fbd9a5d87f6ed87ed314c27ec271aaf17d4a2256b5f2378624c78205c5)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: f88a8d35f1219bf63f9bf4fcd270fb853fa8f408d9ef7ffcfb8329989520970d)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+Successfully installed mosaicfl to /home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.8fcd2e02.
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: 1701f7f8d5d3f430b09a485d1970e6604d0d789419bfe4c353558c93e05028cb)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 1]
+[92mINFO [0m:      Receiving: evaluate message (ID: 55e8a576ed384e91fefffe7f6393099c642900286f83baa33bc95e43d845da1c)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 1]
+[92mINFO [0m:      Sending: evaluate message (ID: 9e70406ec82f8cb850323dce8667e6e047d608f9d392007ca8b56d4fdd510053)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 2]
+[92mINFO [0m:      Receiving: train message (ID: e6d49b567f1c07497f395623a0e63406350c4017cdb7aa9b85faed498cd6eb41)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.4s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 5.0s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 2]
+[92mINFO [0m:      Sending: train message (ID: 95016e42f80072d9f74529587379e3f3dac11c888975987c9a3e5223f357c19b)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 2]
+[92mINFO [0m:      Receiving: evaluate message (ID: e8e16c7a715c642251331406843b1b2f04ca7eba5842865cf6289d63d773e8e8)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.2s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.8s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 2]
+[92mINFO [0m:      Sending: evaluate message (ID: 9ffe0f04a8268382bb99e74b4449f42391cc3392a0877ec8409ca409b17314c6)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 3]
+[92mINFO [0m:      Receiving: train message (ID: 45a30b09360ec3303ea5af7e979144bb7b7299b862161fe4654a108a50974f84)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.5s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 3]
+[92mINFO [0m:      Sending: train message (ID: 177ead526ca8a21bea892b83dd6f0c37f35dd2e9a79f981620b9ca95cf40a19d)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 3]
+[92mINFO [0m:      Receiving: evaluate message (ID: 249a479582addc2ebe91964ec2c96396a69b23040140e9c612cb7d2025b73cfb)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.4s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 3]
+[92mINFO [0m:      Sending: evaluate message (ID: 19a657fa2ba3bd1fb539b5ff93186e49371a0f43d63483f7691dbfbe37f073e1)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 4]
+[92mINFO [0m:      Receiving: train message (ID: 4a4032cc652d7b154a341b75b1bec5cb5dea61f7342308cbb4065e998d707d07)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.5s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 4]
+[92mINFO [0m:      Sending: train message (ID: 6479fda069cc77d29ea576c08595097d4612182385b7d26530d727e5312a7449)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 4]
+[92mINFO [0m:      Receiving: evaluate message (ID: b06406df96b85525912a307bad14f0b43881efcc667dee7f94b08ebd64bbda4a)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 4]
+[92mINFO [0m:      Sending: evaluate message (ID: 6ccaa373739ee54580f825e0469c99ede317588a13b4241d2add3621e6aa97ed)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 5]
+[92mINFO [0m:      Receiving: train message (ID: 56f0a3a5f36fb045104b3af76b69435741a727c2e65ac8e7f8ec420fb775fbc9)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.5s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 5]
+[92mINFO [0m:      Sending: train message (ID: f0fd8457c64f68f8f88744f29b234410683327db619ad22fc44fc2baec1710b7)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 5]
+[92mINFO [0m:      Receiving: evaluate message (ID: ab5da371755f050cd797b975934aa158e6e16772c372ef821bf87aa831b26d3f)
+[92mINFO [0m:      Start `flwr-clientapp` process
+[92mINFO [0m:      Received successfully
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 5.0s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 5]
+[92mINFO [0m:      Sending: evaluate message (ID: 0c678042e42a159903579995c1dd8165683aa00af74f5921d278d2b02dbf9602)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 6]
+[92mINFO [0m:      Receiving: train message (ID: 573115c7cbbb069e2265439dd120552d855bfdc52b13e93496363367e949d41f)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 6]
+[92mINFO [0m:      Sending: train message (ID: 098f2ccca9410cc3a87424b1b6e6bb08dab3aba4a644e349e3d7b78cf5e9cea4)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 6]
+[92mINFO [0m:      Receiving: evaluate message (ID: 7591a0e2877a9c7133756f812d0af5599e47cdbf786c2a6e04afd17506cdbb93)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.4s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 6]
+[92mINFO [0m:      Sending: evaluate message (ID: 15540f5c5efd9db6b8e3e2532cdbc339c4678470c7a9624c739cc4c868864832)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 7]
+[92mINFO [0m:      Receiving: train message (ID: ac442198d00f38223cca22378d3ebf037f8bb6e86955c543e446b69d80b852ff)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.4s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 5.0s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 7]
+[92mINFO [0m:      Sending: train message (ID: 8acfa595777482d1ab0eb7ed3851dc543193702fb091e83a119a3c0f84c065e3)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 7]
+[92mINFO [0m:      Receiving: evaluate message (ID: c5b10a15e62a389e612f479d148cd8da803f048212ac843cb5554a10e352580b)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.5s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 7]
+[92mINFO [0m:      Sending: evaluate message (ID: 7c44d7c1af623b06244e6d0f51bb22b16fd65c5ccac7474a0b881344d0fa01b8)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 8]
+[92mINFO [0m:      Receiving: train message (ID: 6e491a193a82d8220aa01eb9c684834b0309a45e39b16a163cf6c8f0b54eab69)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.5s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 8]
+[92mINFO [0m:      Sending: train message (ID: fad988feb9181a4c97d6d1c622df93928474bdedf055be06510805b793db3cd4)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 8]
+[92mINFO [0m:      Receiving: evaluate message (ID: 2125dcb8295c7b6c9aacf02937a7feed0114e4a00d6cbb9413922a031b662cdc)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.2s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.8s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 8]
+[92mINFO [0m:      Sending: evaluate message (ID: 7d01a9ad5ddacd9241b958b722384bd3a50a0ab110c7bb49dad957cc08fc0161)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 9]
+[92mINFO [0m:      Receiving: train message (ID: 05495068b4e179a821c23b347651a149aa4aa8d3cb47e65fed4314be38c8fab2)
+[92mINFO [0m:      Start `flwr-clientapp` process
+[92mINFO [0m:      Received successfully
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.4s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 5.0s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 9]
+[92mINFO [0m:      Sending: train message (ID: fe30b00d7ad4032466bccb71311926a44fbef1bbffd45b5529f2236eec082758)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 9]
+[92mINFO [0m:      Receiving: evaluate message (ID: 34756cf1b3e3b75f0361de7d8071b433c8be538523da78e92cbb106153bb4210)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.5s
+[pipeline] concluído em 5.0s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 9]
+[92mINFO [0m:      Sending: evaluate message (ID: fe9ad10aafaab8af63e742b38319edcfb26273c97947b0622c026bcca16a6526)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 10]
+[92mINFO [0m:      Receiving: train message (ID: 6e07dcad18b2f7e21a828c2016e2093a20f89c353ff1478e86b01cdd579d1c3c)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.3s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.9s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 10]
+[92mINFO [0m:      Sending: train message (ID: 2bf4386c39805e3499951951d14c91726bd436f07802332f2620e0583f5f535d)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 10]
+[92mINFO [0m:      Receiving: evaluate message (ID: 913eee17a1d9eaf3e14336c8d4382e1d60271a1f48975c7c18af041f139853c9)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 3.2s — 300,433 linhas
+[pipeline] filtrado para hospital_id='HSL' — 300,433 linhas
+[pipeline] 5,174 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 38 tokens
+[pipeline] construindo tensores para 5,174 sequências...
+[pipeline] tensores: 517/5,174 (10%)
+[pipeline] tensores: 1,034/5,174 (20%)
+[pipeline] tensores: 1,551/5,174 (30%)
+[pipeline] tensores: 2,068/5,174 (40%)
+[pipeline] tensores: 2,585/5,174 (50%)
+[pipeline] tensores: 3,102/5,174 (60%)
+[pipeline] tensores: 3,619/5,174 (70%)
+[pipeline] tensores: 4,136/5,174 (80%)
+[pipeline] tensores: 4,653/5,174 (90%)
+[pipeline] tensores: 5,170/5,174 (100%)
+[pipeline] tensores prontos em 1.4s
+[pipeline] concluído em 4.8s total — 5,174 pacientes | dist={0: 67, 1: 45, 2: 3182, 3: 1280, 4: 600} | demográficos: age_mean=0.52 sex_M=2859/5174
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 14032412097865427907, ROUND 10]
+[92mINFO [0m:      Sending: evaluate message (ID: b01c571e35ef5e75ad7bd7fac94e3233f6c41c3f7c62265fb2bd2df0b2a6de01)
+[92mINFO [0m:      Sent successfully
+[93mWARNING [0m:   Connection attempt failed, retrying in 0.69 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 0.31 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 1.31 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 1.20 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 2.26 seconds
