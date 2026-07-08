@@ -49,6 +49,7 @@ class FedProxClient(fl.client.NumPyClient):
         self.train_loader = train_loader
         self.val_loader = val_loader
         self._loader_factory = loader_factory
+        self.vocab: Optional[Dict[str, int]] = None  # setado em _ensure_data(); usado por extract_rag_patterns()
         self.model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
         self._eval_criterion = torch.nn.CrossEntropyLoss()  # sem peso para comparação entre rounds
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=FED_CFG.lr)
@@ -81,6 +82,7 @@ class FedProxClient(fl.client.NumPyClient):
                 "rodada). Treinamento federado de produção exige vocabulário compartilhado "
                 "entre clientes — abortando em vez de construir um vocab local incompatível."
             )
+        self.vocab = json.loads(vocab_json)  # usado por extract_rag_patterns() em evaluate()
         self.train_loader, self.val_loader = self._loader_factory(vocab_json)
         self._init_criterion()
 
@@ -259,12 +261,32 @@ class FedProxClient(fl.client.NumPyClient):
             f1_macro = 0.0
             per_class_f1 = [0.0] * num_classes
 
-        return float(avg_loss), total, {
+        metrics = {
             "accuracy": accuracy,
             "client_id": self.client_id,
             "f1_macro": f1_macro,
             "per_class_f1_json": json.dumps(per_class_f1),
         }
+
+        # Extração de padrões pro RAG — só quando o servidor pede (config, rodada final),
+        # nunca em toda rodada: generate_all_profiles() roda o forward com atenção sobre
+        # o val_loader inteiro, uma vez por classe — caro pra repetir a cada round.
+        # Os "padrões" são perfis por classe de desfecho (top tokens de maior atenção),
+        # não registros de paciente — sem patient_id, data ou valor bruto de exame —
+        # seguro de enviar ao servidor (mesma filosofia de privacidade de accuracy/F1).
+        if config.get("extract_rag_patterns", False) and self.vocab:
+            metrics["rag_patterns_json"] = json.dumps(self._extract_rag_patterns())
+
+        return float(avg_loss), total, metrics
+
+    def _extract_rag_patterns(self) -> list:
+        """Gera perfis prototípicos por classe (BEHRTPatternExtractor) sobre o
+        val_loader local — nunca inclui dado identificável de paciente."""
+        from mosaicfl.core.interpretability import BEHRTPatternExtractor
+        extractor = BEHRTPatternExtractor(self.model, self.vocab)
+        return extractor.generate_all_profiles(
+            self.val_loader, desfechos=list(range(MODEL_CFG.num_classes))
+        )
 
 
 def create_client_fn(

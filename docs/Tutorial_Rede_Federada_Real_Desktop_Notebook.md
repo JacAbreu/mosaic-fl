@@ -9,6 +9,29 @@ Contexto geral do Caminho B (o que é SuperLink/ServerApp/SuperNode, TLS, `~/.fl
 está documentado no `README.md`, seção "Rede Federada Real via SuperLink (Desktop + Notebook) —
 Caminho B". Este tutorial é o passo a passo prático da variante com banco separado.
 
+## Caminho A vs. Caminho B — nomes corretos e por que escolhemos o B
+
+O projeto tem **dois caminhos** pra rodar aprendizado federado, e coexistem no mesmo
+repositório (portas diferentes, não competem entre si):
+
+| | **Caminho A** — `fl-server`/`fl-client` | **Caminho B** — `superlink`/`supernode` |
+|---|---|---|
+| API do Flower | Legada — sockets diretos (`fl.server.start_server`/`fl.client.start_client`) | Produção — `flower-superlink` + `ServerApp`/`ClientApp`, via `flwr run` |
+| Portas | 8080 (server) / 8081 (health) | 9091 (Fleet API) / 9092 (ServerAppIo, interno) / 9093 (Control API) |
+| TLS | Suportado, mas os passos originais nem sempre mencionavam | Obrigatório desde o início — scripts falham cedo e com erro claro sem certificado |
+| Onde roda historicamente | Testes/depuração, Treinamentos Reais 1-3 (single-machine, `training-full[-cuda]`) | Validação real entre 2 máquinas físicas (desktop + notebook), a partir de 2026-07-04 |
+| Mais próximo de um deploy real? | Não — arquitetura legada, sem o modelo de deployment do Flower moderno | **Sim** — é a arquitetura que o Flower recomenda pra cross-silo real, com FAB (empacotamento automático de código) e coordenação via SuperLink |
+
+**Por que optamos pelo Caminho B pra validar a rede real (desktop+notebook):** o Caminho A
+nunca foi desenhado pra rodar em 2 máquinas fisicamente separadas de verdade — era usado
+em simulação (um processo simula vários hospitais na mesma máquina) ou, no máximo, 2
+processos na mesma rede local sem a infraestrutura de produção do Flower por trás
+(distribuição de código via FAB, gerenciamento de sessão via SuperLink, etc.). O Caminho B
+é o que o próprio Flower recomenda pra esse cenário — e por isso, embora tenha exigido uma
+sessão inteira de depuração pra ficar funcional (ver `docs/Linha_do_Tempo_MOSAIC-FL.md`,
+2026-07-05 a 07 — 4 bugs reais encontrados só ao rodar de verdade com 2 máquinas), é o
+caminho certo pra validar que o sistema funciona como um deploy real funcionaria.
+
 ---
 
 ## Parte 1 — Desktop (Servidor, BPSP)
@@ -187,6 +210,38 @@ Se quiser conferir depois:
 ```bash
 cat ~/.flwr/config.toml
 ```
+
+---
+
+## Usando GPU no Caminho B (desktop, achado em 2026-07-07)
+
+Por padrão, o Caminho B roda inteiramente em **CPU** — `RUNTIME_CFG.device` (`src/mosaicfl/core/config.py`)
+só usa GPU se `FL_DEVICE=cuda` estiver **explicitamente** definido (não há detecção
+automática, mesmo com GPU disponível). Nenhum alvo do Caminho B (`superlink`, `supernode`,
+`server-app`) define isso por conta própria — só os alvos do Caminho A (`training-full-cuda`
+e afins) fazem.
+
+**Quem se beneficia de GPU:** o treino/avaliação de verdade acontece do lado do **cliente**
+(`FedProxClient.fit()`/`evaluate()`, dentro do `SuperNode`) — é lá que importa. O `SuperLink`
+(coordenador) só agrega arrays, não roda forward/backward — não se beneficia de GPU.
+
+**Comando, se você estiver rodando um cliente (SuperNode) local aqui no desktop** (ex.: o
+BPSP local, usado nos testes de validação da mecânica do Caminho B):
+```bash
+export FL_DEVICE=cuda
+export FL_TLS_CERT_DIR="/caminho/para/certs"
+export FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:PORTA/BANCO"
+make supernode FL_CLIENT_ID=BPSP FL_SUPERLINK_ADDRESS=localhost:9091 FL_DATA_SOURCE=sgbd
+```
+
+Confirme que a GPU está disponível antes:
+```bash
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+.venv/bin/python -c "import torch; print('cuda disponivel:', torch.cuda.is_available())"
+```
+
+> O mesmo vale pro notebook, se ele tiver GPU — exportar `FL_DEVICE=cuda` antes do
+> `make supernode` de lá também. Sem GPU, deixe `FL_DEVICE` sem definir (cai no padrão CPU).
 
 ---
 

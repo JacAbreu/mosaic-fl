@@ -67,7 +67,9 @@ serverapp = "infrastructure.mosaicfl_server.runner:app"
 clientapp = "infrastructure.mosaicfl_client.runner:app"
 
 [tool.flwr.app.config]
-num-rounds            = 10
+# 50 (2026-07-07): 10 rounds nunca dava chance real de convergir — histórico do
+# Caminho A (FedNova) precisou de 23-109 rounds pra convergir, média 46, mediana 42.
+num-rounds            = 50
 local-epochs          = 1
 proximal-mu           = 1.0
 min-clients           = 2

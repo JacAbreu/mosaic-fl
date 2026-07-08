@@ -198,6 +198,34 @@
 - **Resultado relevante:** FL + DP (ε=1,9) atingiu **96,1%** vs. modelo não-FL centralizado **96,0%** — diferença de **0,1pp**. Mesmo com mecanismo de privacidade diferencial ativo, o gap é inferior a 0,5pp.
 - **Relevância:** Demonstra que gaps < 1pp ocorrem mesmo com DP ativo; sem DP (caso do MOSAIC-FL), 0,77pp é coerente.
 
+### 7.8 Avaliação de desempenho e segurança de FL sob IID/Non-IID e privacidade diferencial (ViT-Tiny, CIFAR-10)
+- **Autores:** Viet Pham-Le-Quoc, Thao Dinh-Cong, Tu Pham-Hoang-Anh, Thuat Nguyen-Khanh, Quan Le-Trung
+- **Instituição:** University of Information Technology, Vietnam National University, Ho Chi Minh City, Vietnã
+- **Título:** Performance and Security Evaluation of Federated Learning under IID and Non-IID Settings and Differential Privacy
+- **Publicação:** 2025 IEEE International Conference on Communication, Networks and Satellite (COMNETSAT), Padang, Indonésia, 11–13 dez. 2025, pp. 187–194
+- **DOI:** https://doi.org/10.1109/COMNETSAT68601.2025.11324726
+- **Citação formal (IEEE):** V. Pham-Le-Quoc, T. Dinh-Cong, T. Pham-Hoang-Anh, T. Nguyen-Khanh, and Q. Le-Trung, "Performance and Security Evaluation of Federated Learning under IID and Non-IID Settings and Differential Privacy," in *2025 IEEE International Conference on Communication, Networks and Satellite (COMNETSAT)*, Padang, Indonesia, 2025, pp. 187–194, doi: 10.1109/COMNETSAT68601.2025.11324726.
+- **Resultado relevante:** framework FL (Flower + ViT-Tiny) com DP aplicada via ruído gaussiano direto nos parâmetros do modelo, **sem clipping de norma ℓ2** — os próprios autores admitem que isso não produz garantia formal (ε,δ)-DP. Mesmo assim, a degradação sob ruído é abrupta: acurácia cai de 94,6% (sem ruído) para 80,0% já em 5% de escala de ruído (cenário IID), e de 92,8% para 71,9% em 10% (cenário non-IID 80/10/10). Os autores classificam ≥5% de ruído como perda "significativa".
+- **Avaliação/relevância para o MOSAIC-FL:**
+  1. **Corrobora, em domínio distinto (CIFAR-10/imagem, não clínico/tabular), a mesma tendência observada na curva Acc×ε do MOSAIC-FL** (ver [[project_dp_curve_makefile]] e [[feedback_resultados_negativos]]): sob DP-FedAvg, o custo de privacidade é severo e não-linear, não uma peculiaridade do dataset FAPESP/BPSP-HSL. Fortalece a seção de discussão do TCC — o achado negativo é consistente com a literatura recente, não anômalo.
+  2. **Limitação metodológica do artigo que o MOSAIC-FL já supera:** por não aplicar clipping, o mecanismo deles não oferece (ε,δ)-DP formal. O MOSAIC-FL já implementa contabilidade RDP via `opacus` (ver [[project_dp_rdp_ece_pre]]), com ε simples e RDP lado a lado. Os próprios autores listam "incorporar formal privacy accounting usando Rényi DP e moments accountant" como trabalho futuro (Seção VI, item 1) — algo que o MOSAIC-FL já entrega. Vale citar como diferencial metodológico na monografia.
+  3. **Lacuna de literatura confirmada, mas não resolvida por este artigo:** os autores citam "layer-wise or coordinate-wise noise" como direção futura (Seção VI, item 3) — sem propor mecanismo, algoritmo ou citação específica. Isso confirma que ruído seletivo/por camada é uma lacuna real e reconhecida na literatura (relevante para a ideia registrada em [[project_dp_ruido_seletivo]]), mas **não fornece** o mecanismo verificável necessário para implementação — a pendência de levantar uma fonte com método concreto antes de implementar continua em aberto.
+  4. **Ressalva de comparabilidade:** domínio (imagem/CIFAR-10, ViT-Tiny), escala (3 clientes, 25 rounds) e agregação (FedAvg puro, sem FedNova/FedProx) diferem do MOSAIC-FL — não usar os números absolutos como benchmark direto, só como evidência qualitativa de tendência.
+
+### 7.9 DP-ADKD-FL — DP por camada com sensibilidade de parâmetro + destilação de conhecimento adaptativa
+- **Autores:** Ling Li, Lidong Zhu, Weibang Li
+- **Instituição:** National Key Laboratory of Wireless Communications, University of Electronic Science and Technology of China; School of Computer Science and Artificial Intelligence, Southwest Minzu University, Chengdu, China
+- **Título:** Privacy-Preserving Federated Learning with Differential Privacy and Adaptive Knowledge Distillation for Dynamic Non-IID Data
+- **Publicação:** 2025 International Symposium on Networks, Computers and Communications (ISNCC)
+- **DOI:** https://doi.org/10.1109/ISNCC66965.2025.11250384
+- **Citação formal (IEEE):** L. Li, L. Zhu, and W. Li, "Privacy-Preserving Federated Learning with Differential Privacy and Adaptive Knowledge Distillation for Dynamic Non-IID Data," in *2025 International Symposium on Networks, Computers and Communications (ISNCC)*, 2025, doi: 10.1109/ISNCC66965.2025.11250384.
+- **Resultado relevante:** propõe DP-ADKD-FL, com três mecanismos: (1) DP em camadas diferenciadas por sensibilidade de parâmetro — pontuação `S(θ) = α·‖∇θL‖₂ + β·I(θ;D) + γ·V(θ)` classifica cada parâmetro em alta/média/baixa sensibilidade, aplicando Fully Homomorphic Encryption, Functional Encryption e Local DP (ruído Laplace) respectivamente; (2) destilação de conhecimento adaptativa bidirecional, onde cliente e servidor trocam *probabilidades de predição* destiladas (não pesos), com ruído DP aplicado às probabilidades; (3) orçamento de privacidade dinâmico por rodada, ligado à detecção de distribution drift via divergência Jensen-Shannon + Maximum Mean Discrepancy. Validado em MNIST e EuroSAT (10 clientes, 20 rounds, com entrada de novo cliente na 5ª rodada), superando FedAvg/DP-FedAvg/FedDF/SCAFFOLD tanto em acurácia quanto em métricas de defesa contra inversão de modelo.
+- **Avaliação/relevância para o MOSAIC-FL:**
+  1. **Fornece um mecanismo formal e citável para a pendência de ruído seletivo por camada** (ver [[project_dp_ruido_seletivo]]) — resolve, na teoria, a ressalva já levantada de que "parâmetro sem ruído fica fora da garantia formal de privacidade": aqui o parâmetro sensível não fica desprotegido, recebe criptografia mais forte (FHE/FE) em vez de ruído DP.
+  2. **Custo de implementação alto:** não é "pular ruído em algumas camadas" — exige bibliotecas de criptografia homomórfica/funcional (ex. TenSEAL, Pyfhel), esforço de engenharia substancial e sem código disponibilizado pelos autores. Dado o atraso de cronograma já registrado ([[project_pressao_cronograma_qualidade]]), implementar o framework completo não parece viável no prazo do TCC.
+  3. **Peça mais barata e adaptável:** a fórmula de sensibilidade `S(θ)` poderia ser reaproveitada só para modular a *magnitude* do ruído gaussiano por camada (mantendo o mecanismo de ruído já validado via RDP/opacus do MOSAIC-FL, sem trocar para criptografia), combinada com a ideia de orçamento de privacidade dinâmico por rodada.
+  4. **Ressalva de comparabilidade:** MNIST/EuroSAT com 10 clientes sintéticos e label-skew artificial — domínio distante do clínico/tabular do MOSAIC-FL; útil como fonte de mecanismo, não como benchmark numérico. A fórmula de composição de ε entre clientes (Eq. 32 do artigo) não deixa claro se é equivalente em rigor à contabilidade RDP multi-rodada já usada no MOSAIC-FL ([[project_dp_rdp_ece_pre]]) — precisaria verificação antes de qualquer adoção.
+
 ### Resumo quantitativo para citação na monografia
 
 | Estudo | Domínio | FL vs. Centralizado | Gap |
@@ -277,6 +305,43 @@ A análise do Experimento 6 (2026-06-25) revelou que o modelo SimplifiedBEHRT te
 O limiar prático para convergência de transformers em centralizado é ~1–3 steps/parâmetro. Sob FL não-IID, o **drift entre clientes** reduz a eficiência de cada step — efetivamente, o limiar real é 3–10× maior. 20 rodadas são insuficientes não por conta dos parâmetros, mas porque o drift consome a maior parte do progresso de cada rodada.
 
 **Ação corretiva indicada pela literatura:** aumentar µ (0,01 → 0,1) para reduzir drift antes de aumentar o número de rodadas, conforme recomendado em Li et al. (2020) para cenários de alta heterogeneidade.
+
+---
+
+## 9. Calibração Federada — Literatura de Suporte para Temperature Scaling sob DP
+
+> Esta seção documenta a fonte bibliográfica que resolve a pendência registrada em 2026-07-07
+> (ver [[project_next_steps]]): como federar calibração de confiança (Temperature Scaling),
+> especificamente sob privacidade diferencial, sem recorrer a uma média ingênua sobre logits/rótulos.
+
+### 9.1 Private Federated Multiclass Post-hoc Calibration ***
+
+> *** ATENÇÃO — FONTE É PREPRINT, SEM REVISÃO POR PARES (status em 2026-07-07). ***
+> Toda citação desta fonte na monografia — corpo do texto, tabela ou referências — deve
+> carregar esta mesma marca `***` para deixar explícito ao leitor/banca que os achados e o
+> mecanismo (FedTemp) ainda não passaram por peer review. Não citar como se fosse artigo
+> publicado/revisado sem essa ressalva visível junto à citação.
+
+- **Autores:** Samuel Maddock, Graham Cormode, Carsten Maple
+- **Instituição:** University of Warwick, Reino Unido
+- **Publicação:** Preprint arXiv, 2 out. 2025 — **status: NÃO revisado por pares** ***
+- **arXiv:** https://arxiv.org/abs/2510.01987
+- **PDF:** https://arxiv.org/pdf/2510.01987
+- **Citação formal (estilo ABNT/arXiv), com marca de preprint:** MADDOCK, Samuel; CORMODE, Graham; MAPLE, Carsten. Private Federated Multiclass Post-hoc Calibration. arXiv:2510.01987 [cs.LG], 2 out. 2025. Disponível em: https://arxiv.org/abs/2510.01987. ***(preprint, sem revisão por pares)***
+- **Citação formal (estilo IEEE/numérico), com marca de preprint:** S. Maddock, G. Cormode, and C. Maple, "Private Federated Multiclass Post-hoc Calibration," arXiv preprint arXiv:2510.01987, 2025. ***(preprint, sem revisão por pares)***
+
+**Resultado relevante:** o artigo federa dois tipos de calibração pós-hoc — *histogram binning* (FedBBQ) e *scaling* (FedTemp/FedVector/FedMatrix, generalizações federadas de Guo et al. 2017, já referenciado na seção 5.5) — e estende ambos para privacidade diferencial em nível de usuário `(ε,δ)`-DP via clipping + ruído gaussiano calibrado, no mesmo espírito do DP-FedAvg. Avaliação em 7 datasets (MNIST, CIFAR-10/100, SVHN, TinyImageNet, FEMNIST, Shakespeare) sob heterogeneidade forte (label-skew via Dirichlet(β) e o benchmark LEAF, não-IID natural).
+
+**Mecanismo central — FedTemp (Algoritmo 2 do artigo):** cada cliente reserva uma fração local dos seus dados como conjunto de calibração (train/calibração/teste, nunca sai do cliente); treina localmente um escalador `g_k(z) = σ(A_k·z + b_k)` sobre os logits do modelo já treinado; para temperature scaling puro, `A` é restrito a um escalar `1/a` e `b=0` — isso preserva a ordem das predições (top-1 accuracy não muda, só a confiança é recalibrada). Os parâmetros locais (poucos: 1 escalar por rodada de calibração) são agregados via média federada (FedAvg-style) sob secure aggregation. Sob DP: os parâmetros do escalador são clipados a norma `C` e recebem ruído gaussiano calibrado antes da agregação — mecanismo estruturalmente idêntico ao DP-FedAvg já implementado no MOSAIC-FL, mas aplicado a pouquíssimos parâmetros (o escalador, não o modelo inteiro).
+
+**Achado central dos autores (Conclusão, RQ3):** *"em DP-FL, recomendamos usar FedTemp, pois alcança o melhor cwECE sem degradação de acurácia, diferente do FedBBQ (binning) que pode degradar sob alta privacidade"* — FedTemp é descrito como insensível ao ruído DP porque tem poucos parâmetros (baixa sensibilidade global), enquanto métodos de binning e scalers de maior ordem (FedCal, com MLP) sofrem degradação sob ruído. Para FL sem DP, o achado é o oposto: binning federado com pesos (FedBBQ) supera scaling se treinado por rodadas suficientes (T>30).
+
+**Avaliação/relevância para o MOSAIC-FL:**
+1. **Resolve a pendência bibliográfica registrada em [[project_next_steps]] e [[project_rag_api_predict]]** — havia decisão explícita de não implementar calibração federada sem antes levantar literatura verificada, já que (diferente de F1/padrões RAG) calibração exige otimização sobre logits+rótulos, não uma média simples. Este preprint entrega exatamente esse mecanismo verificado, com prova formal de `(ε,δ)`-DP no Apêndice B.1.
+2. **Compatibilidade direta com a arquitetura existente:** o design (split local train/calibração/teste por cliente, calibrador treinado sobre logits pós-treinamento, DP via clip+ruído gaussiano na agregação) é estruturalmente análogo ao que o MOSAIC-FL já tem para o modelo principal via DP-FedAvg + RDP/opacus ([[project_dp_rdp_ece_pre]]). A diferença chave é que o objeto calibrado (`a`, o escalar de temperatura) tem dimensionalidade muito menor que o modelo inteiro — o que sugere que o custo de privacidade para calibração pode ser bem menor do que o observado na curva Acc×ε do modelo completo ([[project_dp_curve_makefile]], [[feedback_resultados_negativos]]), mas isso precisa ser validado empiricamente no MOSAIC-FL, não presumido.
+3. **Métrica alinhada ao problema de classe rara do MOSAIC-FL:** os autores usam classwise-ECE (cwECE), não o ECE tradicional (top-label), justamente porque ECE padrão "pode simplificar demais" o problema multiclasse (Kull et al. 2019, citado no artigo) — isso é diretamente relevante para o MOSAIC-FL, onde a classe rara `curado_internado` é o ponto mais frágil do sistema.
+4. **Ressalva de comparabilidade e de status da fonte*****: nenhum dos 7 datasets é clínico ou tem desbalanceamento tão severo quanto o MOSAIC-FL (46 amostras da classe mais rara); a heterogeneidade simulada é via Dirichlet(β) ou LEAF, diferente da heterogeneidade real BPSP×HSL. **É um preprint (out. 2025), ainda sem revisão por pares** — citável na monografia, mas toda citação (corpo do texto ou referências) precisa levar a marca `***` definida no topo desta seção 9.1, sinalizando esse status à banca.
+5. **Próximo passo recomendado:** revisar o Apêndice B.1 (prova formal de `(ε,δ)`-DP) e B.6 (order-preserving training / FedOPVector) antes de qualquer prototipagem, para confirmar que a composição de privacidade do calibrador pode ser somada de forma consistente ao orçamento de privacidade já contabilizado via opacus para o modelo principal — dois mecanismos de DP no mesmo pipeline (modelo + calibrador) precisam ter seus `ε` compostos corretamente, não tratados como independentes.
 
 ---
 

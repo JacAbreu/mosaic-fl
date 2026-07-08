@@ -63,6 +63,17 @@ def weighted_average_evaluate_metrics(metrics: List[Tuple[int, Dict[str, Any]]])
         ]
         result["per_class_f1_json"] = json.dumps(per_class_f1)
 
+    # Padrões pro RAG (rag_patterns_json) — só presentes na rodada em que o servidor
+    # pediu (config extract_rag_patterns). Diferente de accuracy/F1, NÃO se faz média —
+    # são perfis independentes por hospital, concatenados numa base de conhecimento
+    # combinada (cada hospital contribui os seus próprios perfis prototípicos).
+    all_patterns: list = []
+    for _, m in metrics:
+        if "rag_patterns_json" in m:
+            all_patterns.extend(json.loads(m["rag_patterns_json"]))
+    if all_patterns:
+        result["rag_patterns_json"] = json.dumps(all_patterns)
+
     return result
 
 

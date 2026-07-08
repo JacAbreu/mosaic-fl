@@ -54,6 +54,17 @@ class ModelMetadata(BaseModel):
     )
 
 
+class RagExplanation(BaseModel):
+    justificativa:        Optional[str]  = None
+    fontes:                list[dict]    = []
+    alucinacao_detectada: bool           = False
+    confiavel:            bool           = False
+    llm_backend:          Optional[str]  = None
+    llm_model_used:       Optional[str]  = None
+    llm_was_fallback:     bool           = False
+    erro:                 Optional[str]  = None  # preenchido quando a explicação não pôde ser gerada
+
+
 class PredictResponse(BaseModel):
     patient_id:          str
     risk_score:          float
@@ -62,6 +73,7 @@ class PredictResponse(BaseModel):
     predicted_class:     int
     predicted_label:     str
     model_metadata:      ModelMetadata
+    rag_explanation:     Optional[RagExplanation] = None
 
 
 class IngestRequest(BaseModel):

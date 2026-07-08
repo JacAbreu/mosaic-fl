@@ -75,6 +75,7 @@ _exporter:        ClinicalPathExporter = ClinicalPathExporter()
 _fhir_exporter:   FHIRExporter        = FHIRExporter()
 _engine:          Optional[InferenceEngine] = None
 _patient_locks:   dict               = {}
+_rag = None  # type: Optional["mosaicfl.core.rag.ClinicalRAG"]  — instanciado sob demanda
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -174,6 +175,18 @@ def _get_engine() -> "InferenceEngine":
             )
 
     return _engine
+
+
+def _get_rag():
+    """Instancia ClinicalRAG sob demanda (1ª chamada) — carrega embedding model +
+    backend LLM (Ollama/HuggingFace), caro de recriar a cada request. Chamador
+    (routers/prediction.py) deve tratar exceções — RAG é enriquecimento opcional
+    da predição, uma falha aqui não deve derrubar /api/predict."""
+    global _rag
+    if _rag is None:
+        from mosaicfl.core.rag import ClinicalRAG
+        _rag = ClinicalRAG(db_url=os.getenv("FL_DB_URL", ""))
+    return _rag
 
 
 def _patient_lock(pid: str):

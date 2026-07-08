@@ -251,6 +251,15 @@ Pelo menos um heatmap de atenção por classe para um caso representativo do Exp
 
 O Pooled B vs A (+0,39 p.p.) está documentado no centralizado. A late fusion no federado não foi isolada — sempre esteve ativa desde o Exp 1. Uma rodada com `demo_dim=0` fecharia o argumento.
 
+**K — Ruído DP diferenciado por sensibilidade de parâmetro (per-layer/per-parameter DP)**
+
+A curva Acc×ε medida no MOSAIC-FL mostrou custo de privacidade severo sob DP-FedAvg uniforme (ver [[project_dp_curve_makefile]] na memória do projeto). Dois artigos trazidos em 2026-07-07 (`docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md` §7.8 e §7.9) formam a base bibliográfica para uma linha de trabalhos futuros nessa direção:
+
+- Pham-Le-Quoc et al. (IEEE COMNETSAT 2025, §7.8) reporta a mesma degradação severa sob ruído gaussiano uniforme e lista explicitamente "layer-wise or coordinate-wise noise" como lacuna aberta na literatura, sem propor mecanismo.
+- Li, Zhu & Li (IEEE ISNCC 2025, §7.9) propõem DP-ADKD-FL, com uma função de sensibilidade `S(θ) = α·‖∇θL‖₂ + β·I(θ;D) + γ·V(θ)` que classifica parâmetros em alta/média/baixa sensibilidade e aplica proteção diferenciada (criptografia para os mais sensíveis, ruído DP para os demais) — a implementação completa (FHE/FE) está fora de escopo do prazo do TCC, mas a fórmula de sensibilidade em si é reaproveitável para modular a *magnitude* do ruído gaussiano por camada dentro do DP-FedAvg já existente, sem trocar de mecanismo criptográfico.
+
+Combinados, os dois artigos justificam esta como uma lacuna real e reconhecida na literatura (não resolvida por nenhum dos dois de forma diretamente aplicável ao MOSAIC-FL), adequada para a seção de trabalhos futuros da monografia — não para implementação dentro do prazo atual.
+
 ---
 
 ## 6. O que NÃO é uma lacuna

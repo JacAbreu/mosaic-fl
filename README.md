@@ -6,9 +6,15 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 - **Aprendizado Federado (FedNova)** para dados hospitalares fragmentados com heterogeneidade non-IID severa
 - **BEHRT simplificado** para sequências clínicas temporais (tokens analito×classificação)
 - **RAG (Ollama/gemma3:4b + fallback HuggingFace)** para justificativa diagnóstica interpretável
-- **Differential Privacy (DP-FedAvg)** para garantia formal de privacidade nos pesos (Exp 17–19 em andamento)
+- **Differential Privacy (DP-FedAvg + contabilidade RDP via `opacus`)** para garantia formal de privacidade nos pesos — curva Acc×ε medida (Treinamento Real 3): custo de privacidade **severo** em todos os níveis de ruído testados
 
-**Resultado atual (Exp 15):** FL FedNova 69,59% Acc · AUC 0,8181 · ECE 0,0149 (isotônica OvR) — supera todos os baselines centralizados com budget equivalente (120 rodadas = 120 épocas pooled).
+**Status atual (2026-07-08):** resultados parciais, trabalho em andamento — pipeline validado ponta a ponta, ainda em fase ativa de ajuste (calibração federada e teste de convergência em 50 rounds em curso). Não há, neste momento, um número definitivo de acurácia a citar como resultado final do TCC; os números de cada rodada de treinamento ficam registrados em [`docs/Sumario_Treinamento_Parte3.md`](docs/Sumario_Treinamento_Parte3.md), atualizado conforme os experimentos avançam.
+
+> **Nota sobre a seção [Experimentos](#experimentos) abaixo:** a tabela "Exp 1–19" vem da **fase de
+> ajuste** — código ainda em correção de bugs, esquema de labels e critério de checkpoint mudando no
+> meio do caminho. Não citar esses números como resultado final do TCC. Detalhe completo da
+> reclassificação em [`docs/Linha_do_Tempo_MOSAIC-FL.md`](docs/Linha_do_Tempo_MOSAIC-FL.md), seção
+> "Fechamento da Fase de Ajuste".
 
 ---
 
@@ -33,15 +39,20 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 | Kubernetes Secrets para credenciais | Não há cluster K8s ativo; infra é preparatória |
 | Deploy automatizado no CI/CD | Pipeline de CD está scaffolded, não operacional |
 | Prometheus / Grafana / audit trail LGPD | Roadmap de produção, documentado no [`docs/TODO.md`](docs/TODO.md) |
-| Differential Privacy nos pesos | Implementado (DP-FedAvg); série de experimentos Exp 17/18/19 em execução |
 | Certificação ANVISA / LGPD completa | Fora do escopo de pesquisa; documentado como requisito futuro |
+
+> **Differential Privacy nos pesos não está nesta lista** — foi implementado (DP-FedAvg + contabilidade
+> RDP via `opacus`) e já tem resultado experimental concluído (curva Acc×ε, [`docs/Sumario_Treinamento_Parte3.md`](docs/Sumario_Treinamento_Parte3.md)):
+> custo de privacidade **severo** em todos os níveis de ruído testados. É um achado científico válido
+> (negativo, reportado sem suavização), não um item pendente — deve ser avaliado como parte da
+> corretude funcional do projeto, não excluído do julgamento.
 
 ### O que deve ser avaliado
 
 - **Qualidade do código Python:** type hints, design patterns, structured logging, separação de responsabilidades, ausência de anti-patterns
 - **Arquitetura:** estrutura inspirada na arquitetura hexagonal — `mosaicfl.core` (domínio puro) isolado de `infrastructure/` (adapters de produção) e `experiments/` (adapter de pesquisa); Strategy pattern, Single Responsibility
 - **Testes:** cobertura, organização (um arquivo por classe), contratos de API, testes explicativos
-- **Corretude funcional:** implementação de FedProx, BEHRT, RAG, convergência, persistência de estado, recovery de sessão
+- **Corretude funcional:** implementação de FedProx, BEHRT, RAG, DP-FedAvg (RDP/`opacus`), convergência, persistência de estado, recovery de sessão
 - **Documentação:** README (raiz), [`docs/CHANGELOG.md`](docs/CHANGELOG.md), [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md), [`docs/TODO.md`](docs/TODO.md) rastreável
 - **Observabilidade:** structured logging JSON, health endpoints, separação liveness/readiness
 
@@ -530,7 +541,7 @@ Ou via pytest diretamente:
 **Resultado esperado (suite padrão):**
 
 ```
-551+ passed, 6 deselected, 1 warning in ~12s
+577+ passed, 6 deselected, 1 warning in ~18s
 ```
 
 Os 6 deselected são os testes `@pytest.mark.e2e` — excluídos por padrão por serem mais lentos. Execute com `make test-e2e` quando precisar validar o ciclo completo.
@@ -628,15 +639,32 @@ make api
 FL_API_HOST=127.0.0.1 FL_API_PORT=9000 make api
 ```
 
-**Exemplo de predição:**
+**Autenticação:** `FL_AUTH_REQUIRED` é `true` por padrão. Em desenvolvimento, use `FL_AUTH_REQUIRED=false make api`
+ou envie qualquer `Authorization: Bearer <token>` (o JWT só é validado de fato se `FL_JWT_SECRET` estiver configurado).
+
+**Exemplo de predição** (schema real: `exams`, não `records`; cada exame usa `exam_name`, não `exam`):
 ```bash
 curl -s -X POST http://localhost:8000/api/predict \
   -H "Content-Type: application/json" \
-  -d '{"patient_id": "TEST-001", "records": [
-        {"date": "2020-04-01", "exam": "LEUCOCITOS", "value": 12.5, "unit": "10^3/uL"},
-        {"date": "2020-04-01", "exam": "PCR", "value": 48.0, "unit": "mg/L"}
+  -H "Authorization: Bearer dev-token" \
+  -d '{"patient_id": "TEST-001", "exams": [
+        {"exam_name": "LEUCOCITOS", "date": "2020-04-01", "value": 12.5, "unit": "10^3/uL"},
+        {"exam_name": "PCR",        "date": "2020-04-01", "value": 48.0, "unit": "mg/L"}
       ]}' | python -m json.tool
 ```
+
+**RAG (justificativa diagnóstica) integrado à resposta:** por padrão (`explain=true`), o `/api/predict`
+inclui `rag_explanation` na resposta — usa `?explain=false` para pular (resposta mais rápida, sem chamada
+ao LLM). Se o RAG falhar por qualquer motivo, a predição principal **não é afetada** — só `rag_explanation.erro`
+vem preenchido.
+
+> **Atenção — `FL_LLM_BACKEND` e `FL_LLM_MODEL` não apontam para o `gemma3:4b` por padrão**, mesmo com
+> Ollama rodando e o modelo disponível localmente. Sem declarar as duas variáveis explicitamente, o RAG
+> cai silenciosamente para `distilgpt2` via HuggingFace (qualidade bem inferior, sem aviso óbvio):
+> ```bash
+> export FL_LLM_BACKEND="ollama"
+> export FL_LLM_MODEL="gemma3:4b"
+> ```
 
 **Exportar checkpoint para deploy offline:**
 ```bash
@@ -936,6 +964,7 @@ como referência comentada, após a primeira migração).
 | `FL_SUPERLINK_ADDRESS` | — | `IP_DESKTOP:9091` | `localhost:9091` |
 | `FL_CLIENT_ID` | — | ID do hospital (`HSL`) | `hospital_dev` |
 | `FL_DATA_SOURCE` | — | `simulated` \| `sgbd` \| `csv` | `simulated` |
+| `FL_DEVICE` | não usa (só agrega) | `cuda` p/ GPU | `cpu` (sem detecção automática) |
 
 ### Caminho A vs. Caminho B — qual usar
 
@@ -1401,7 +1430,12 @@ O CronJob do scheduler executa por padrão às **2h da manhã** (`0 2 * * *`), c
 
 Todos os experimentos usam o dataset FAPESP COVID-19 (BPSP + HSL), split determinístico 70/10/10/10 (seed=42), 5 classes de prognóstico clínico.
 
-### Resultados consolidados (Exp 1–16)
+> **A tabela abaixo (Exp 1–19) é histórica — fase de ajuste, não resultado final.** Registrada aqui
+> para rastreabilidade da evolução do projeto (motivo pelo qual FedNova foi adotado, por exemplo),
+> mas o código passou por correções de bugs e reestruturação depois dela. Os números atuais, à medida
+> que os experimentos avançam, ficam em [`docs/Sumario_Treinamento_Parte3.md`](docs/Sumario_Treinamento_Parte3.md).
+
+### Resultados consolidados (Exp 1–16) — histórico, fase de ajuste
 
 | Exp | Descrição | Acc | F1 macro | AUC macro | ECE | Notas |
 |---|---|---|---|---|---|---|
@@ -1417,11 +1451,17 @@ Todos os experimentos usam o dataset FAPESP COVID-19 (BPSP + HSL), split determi
 | 16 | **BEHRT Pooled** (120 épocas, budget equiv.) | | | | | Baselines centralizados |
 | 16A | → Pooled A (sem demográficos) | 68,29% | 0,4897 | — | — | |
 | 16B | → Pooled B (late fusion demográfica) | **68,68%** | 0,4912 | — | — | RF centralizado: 68,41% |
-| 17 | DP-FedAvg σ=1,0 S=1,0 | _pendente_ | | | | ε_acum ≈ 422 (cota solta) |
-| 18 | DP-FedAvg σ=0,5 S=1,0 | _pendente_ | | | | ε_acum ≈ 845 |
-| 19 | DP-FedAvg σ=2,0 S=1,0 | _pendente_ | | | | ε_acum ≈ 211 |
+| 17 | DP-FedAvg σ=1,0 S=1,0 | *superado — ver abaixo* | | | | Curva Acc×ε refeita depois, com RDP/`opacus` |
+| 18 | DP-FedAvg σ=0,5 S=1,0 | *superado — ver abaixo* | | | | Curva Acc×ε refeita depois, com RDP/`opacus` |
+| 19 | DP-FedAvg σ=2,0 S=1,0 | *superado — ver abaixo* | | | | Curva Acc×ε refeita depois, com RDP/`opacus` |
 
-**Conclusão central (Exp 15 vs. 16):** o custo de privacidade do aprendizado federado é **negativo** — FL FedNova (69,59%) supera BEHRT Pooled B (68,68%) e RF Centralizado (68,41%) com o mesmo orçamento de treinamento. Federação melhora o modelo ao expô-lo à heterogeneidade non-IID de dois hospitais.
+> As linhas 17–19 acima nunca chegaram a rodar nesta forma — a curva Acc×ε com DP-FedAvg foi
+> executada depois, já com contabilidade RDP via `opacus`, como parte dos "Treinamentos Reais"
+> (`docs/Sumario_Treinamento_Parte3.md`, Treinamento Real 3). Resultado: custo de privacidade
+> **severo** em todos os níveis de ruído testados — reportado ali com o mesmo rigor de um resultado
+> positivo, sem suavização.
+
+**Conclusão da fase de ajuste (Exp 15 vs. 16, histórica — não reflete o Treinamento Real):** nesta fase, o custo de privacidade do aprendizado federado aparentava ser **negativo** — FL FedNova (69,59%) superava BEHRT Pooled B (68,68%) e RF Centralizado (68,41%) com o mesmo orçamento de treinamento. Essa conclusão **não se sustentou** no Treinamento Real subsequente (diferenças entre os modelos ficaram dentro de ~1,1 p.p., sem vantagem clara da federação) — ver `docs/Sumario_Treinamento_Parte3.md` para o resultado válido.
 
 ### Per-class F1 (BEHRT Pooled A — proxy para Exp 15)
 
@@ -1436,6 +1476,10 @@ Todos os experimentos usam o dataset FAPESP COVID-19 (BPSP + HSL), split determi
 Ver análise detalhada em [`docs/analise_erros_clinicos.md`](docs/analise_erros_clinicos.md).
 
 ### Baseline Comparativo — Random Forest (Bag-of-Tokens)
+
+> Números desta subseção também são da fase de ajuste (ver nota no início de Experimentos) —
+> o Treinamento Real (`docs/Sumario_Treinamento_Parte3.md`) não reproduziu essa vantagem do federado
+> sobre o RF na mesma magnitude.
 
 O Random Forest usa a mesma representação de tokens que o BEHRT, mas sem modelagem de ordem temporal — cada sequência vira um vetor de contagem (**Bag-of-Tokens**). É o adversário mais honesto: mesmos dados, mesma granularidade, zero aprendizado temporal.
 

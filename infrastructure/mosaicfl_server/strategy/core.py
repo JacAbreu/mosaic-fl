@@ -202,6 +202,7 @@ class ProductionFedProxStrategy(
         f1_macro = aggregated_metrics.get("f1_macro", 0.0) if aggregated_metrics else 0.0
         per_class_f1_json = aggregated_metrics.get("per_class_f1_json") if aggregated_metrics else None
         per_class_f1 = json.loads(per_class_f1_json) if per_class_f1_json else None
+        rag_patterns_json = aggregated_metrics.get("rag_patterns_json") if aggregated_metrics else None
 
         self.tracker.check(accuracy)
         self.round_counter = server_round
@@ -308,7 +309,23 @@ class ProductionFedProxStrategy(
                     extra={"training_id": self._training_id, "error": str(e)},
                 )
 
+        if rag_patterns_json:
+            self._build_rag_knowledge_base(rag_patterns_json)
+
         return aggregated_loss, aggregated_metrics
+
+    def _build_rag_knowledge_base(self, patterns_json: str) -> None:
+        """Constrói a base de conhecimento do RAG com os perfis prototípicos enviados
+        pelos clientes (extraídos localmente, sem dado identificável de paciente —
+        ver FedProxClient._extract_rag_patterns). Nunca propaga exceção: RAG é
+        enriquecimento, uma falha aqui não deve travar o treino federado."""
+        try:
+            patterns = json.loads(patterns_json)
+            from mosaicfl.core.rag import ClinicalRAG
+            ClinicalRAG().build_knowledge_base(patterns)
+            logger.info("rag_knowledge_base_built", extra={"n_patterns": len(patterns)})
+        except Exception as e:
+            logger.warning("rag_knowledge_base_build_error", extra={"error": str(e)})
 
     def _save_evaluation_report(
         self,

@@ -219,6 +219,44 @@ class TestPredictEndpoint:
         }, headers={"X-API-Key": "secret123"},)
         engine.predict_proba.assert_called_once()
 
+    def test_explain_false_skips_rag(self, client_state, monkeypatch):
+        """?explain=false não deve nem tentar carregar/chamar o RAG (resposta rápida)."""
+        from infrastructure.mosaicfl_api import state as state_mod
+        called = {"n": 0}
+
+        def _fake_get_rag():
+            called["n"] += 1
+            raise AssertionError("RAG não deveria ser chamado com explain=false")
+
+        monkeypatch.setattr(state_mod, "_get_rag", _fake_get_rag)
+        client, _, _ = client_state
+        r = client.post("/api/predict?explain=false", json={
+            "patient_id": "P003",
+            "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}],
+        }, headers={"X-API-Key": "secret123"})
+        assert r.status_code == 200
+        assert r.json()["rag_explanation"] is None
+        assert called["n"] == 0
+
+    def test_rag_failure_does_not_break_predict(self, client_state, monkeypatch):
+        """RAG é enriquecimento opcional — se falhar (Ollama fora do ar, etc.), a predição
+        principal continua funcionando, só rag_explanation.erro vem preenchido."""
+        from infrastructure.mosaicfl_api import state as state_mod
+
+        def _broken_get_rag():
+            raise RuntimeError("Ollama não está acessível em localhost:11434")
+
+        monkeypatch.setattr(state_mod, "_get_rag", _broken_get_rag)
+        client, _, _ = client_state
+        r = client.post("/api/predict", json={
+            "patient_id": "P004",
+            "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}],
+        }, headers={"X-API-Key": "secret123"})
+        assert r.status_code == 200
+        assert r.json()["predicted_label"] is not None
+        assert r.json()["rag_explanation"]["erro"] is not None
+        assert r.json()["rag_explanation"]["justificativa"] is None
+
 
 class TestIngestEndpoint:
     def test_returns_200(self, client_state, tmp_path):

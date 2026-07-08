@@ -11,7 +11,7 @@ from .. import audit
 from .. import state
 from ..schemas import (
     ClassProbability, ExamInput, IngestRequest, IngestResponse,
-    ModelMetadata, PredictRequest, PredictResponse,
+    ModelMetadata, PredictRequest, PredictResponse, RagExplanation,
 )
 from ..security import (
     _api_limiter, _get_token_fingerprint, _ingest_limiter,
@@ -188,19 +188,53 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
     )
 
 
+def _build_rag_explanation(records: list[ExamRecord], proba: dict) -> RagExplanation:
+    """Gera a justificativa via RAG. Nunca propaga exceção — RAG é enriquecimento
+    opcional da predição (Ollama fora do ar, timeout etc. não devem derrubar
+    /api/predict); falhas viram RagExplanation com `erro` preenchido."""
+    try:
+        tokens = ", ".join(f"{r.exam_name}={r.value}" for r in records)
+        predicted_label = proba["predicted_label"]
+        probability = proba["probabilities"][predicted_label]["value"]
+        rag = state._get_rag()
+        result = rag.explain(
+            patient_data={"tokens": tokens},
+            model_prediction={"diagnostico": predicted_label, "probabilidade": probability},
+        )
+        return RagExplanation(
+            justificativa=result["justificativa"],
+            fontes=result["fontes"],
+            alucinacao_detectada=result["alucinacao_detectada"],
+            confiavel=result["confiavel"],
+            llm_backend=result["llm_backend"],
+            llm_model_used=result["llm_model_used"],
+            llm_was_fallback=result["llm_was_fallback"],
+        )
+    except Exception as exc:
+        logger.warning("rag_explanation_failed: %s", exc)
+        return RagExplanation(erro="Não foi possível gerar a explicação via RAG neste momento.")
+
+
 @router.post("/api/predict", response_model=PredictResponse)
 async def predict(
     request:     Request,
     body:        PredictRequest,
     fingerprint: str = Depends(_get_token_fingerprint),
+    explain:     bool = True,
 ):
-    """Score de risco pontual — não persiste estado, não exporta arquivos."""
+    """Score de risco pontual — não persiste estado, não exporta arquivos.
+
+    explain=True (padrão): inclui justificativa gerada via RAG na resposta —
+    mais lento (chamada ao LLM). Use ?explain=false para resposta rápida, sem
+    justificativa, quando a latência do RAG não for aceitável.
+    """
     await _rate_check(request, _api_limiter)
     records = [_to_record(e) for e in body.exams]
     if not records:
         raise HTTPException(status_code=422, detail="exams não pode ser vazio")
     proba = state._get_engine().predict_proba(records)
     audit.log_access("predict", token_fp=fingerprint, patient_id=body.patient_id)
+    rag_explanation = _build_rag_explanation(records, proba) if explain else None
     return PredictResponse(
         patient_id=_pid_to_internal(body.patient_id),
         risk_score=proba["risk_score"],
@@ -216,6 +250,7 @@ async def predict(
             checkpoint_at=proba.get("checkpoint_at"),
             model_version=proba.get("model_version"),
         ),
+        rag_explanation=rag_explanation,
     )
 
 

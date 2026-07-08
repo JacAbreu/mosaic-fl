@@ -582,3 +582,7 @@ O que aconteceu conforme esperado:
   - Critério F1 macro fez diferença real: R77 (F1=0,4905) vs o que seria R58 por accuracy (Acc=68,15%, F1=0,4819) — escolhemos um modelo 2,25 p.p. menos acurado mas 0,0086 mais
   equilibrado entre classes.
 
+
+Artigo:
+
+https://www.nature.com/articles/s41598-024-77428-0 -> Transformada de Fourrier e Privacidade

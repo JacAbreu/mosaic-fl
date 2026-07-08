@@ -1267,4 +1267,65 @@ Ao avaliar o resultado do `training_id=7` (marco acima), a autora perguntou sobr
 2. `weighted_average_evaluate_metrics()` com 2 clientes simulados (pesos/contagens diferentes) — média ponderada conferida manualmente, bate.
 3. `aggregate_evaluate()` simulado com 3 rodadas (accuracy alta na rodada 1, mas F1 mais alto na rodada 2) — `best_round` corretamente selecionou a rodada 2 (pelo F1), `best_accuracy` guardou a accuracy real da rodada 2 (não o F1), `save_round_history` recebeu o histórico completo e correto das 3 rodadas.
 
+---
+
+## Validação do `/api/predict` (2026-07-07) — 3 achados reais + RAG integrado a pedido da autora
+
+Ao seguir `docs/Passo_a_Passo_Validar_RAG_API.md` (escrito na madrugada anterior), a autora subiu a API de verdade e testou. Achados, todos confirmados contra o sistema real, não suposição:
+
+1. **Autenticação exigida por padrão** — sem header, `403 Token de autorização ausente`. Não há senha/token fixo no código; `FL_AUTH_REQUIRED=false` desativa, ou qualquer string serve como Bearer/API-Key quando `FL_JWT_SECRET` não está configurado (JWT não é validado nesse caso, só exige presença).
+2. **Exemplo do README estava desatualizado** — o schema real de `/api/predict` usa `exams`/`exam_name`, não `records`/`exam` (`infrastructure/mosaicfl_api/schemas.py::PredictRequest`/`ExamInput`).
+3. **RAG não estava integrado na API ao vivo** — só existia no pipeline offline de experimentos (`experiments/training/federated_training.py`, `experiments/training/core/rag.py`). `/api/predict` retornava predição/probabilidades, mas nunca chamava `ClinicalRAG`.
+
+**A autora pediu explicitamente pra fechar essa lacuna** ("a RAG deveria ser uma forma de obter melhores resultados, incluindo na interface com usuário") — decisão de design discutida e confirmada antes de implementar: RAG **ativado por padrão** (`explain=true` implícito), com `?explain=false` como saída pra quem não pode esperar a latência do LLM; se o RAG falhar, a predição principal continua funcionando normalmente, só o campo de explicação vem com erro (RAG é enriquecimento, não deveria derrubar a função central da API).
+
+**Implementado:**
+- `infrastructure/mosaicfl_api/schemas.py`: novo `RagExplanation` (`justificativa`, `fontes`, `alucinacao_detectada`, `confiavel`, `llm_backend`, `llm_model_used`, `llm_was_fallback`, `erro`) — campo opcional em `PredictResponse`.
+- `infrastructure/mosaicfl_api/state.py`: `_get_rag()` — singleton (mesmo padrão de `_get_engine()`), evita recarregar embedding model + LLM a cada request.
+- `infrastructure/mosaicfl_api/routers/prediction.py`: `_build_rag_explanation()` — mapeia `ExamRecord`/`proba` pro formato que `ClinicalRAG.explain()` espera (`patient_data["tokens"]`, `model_prediction["diagnostico"/"probabilidade"]`), nunca propaga exceção (try/except cobrindo toda a chamada). `/api/predict` ganhou parâmetro de query `explain: bool = True`.
+
+**Achado adicional ao validar contra Ollama/gemma3:4b real:** `FL_LLM_BACKEND` (default `"huggingface"`) e `FL_LLM_MODEL` (default `"distilgpt2"`) — **nenhum dos dois aponta pro gemma3:4b por padrão**, mesmo com Ollama rodando e o modelo disponível (confirmado via `make ollama-check`). Sem declarar as duas variáveis explicitamente, o RAG cai silenciosamente pro `distilgpt2` (HuggingFace) — texto mais fraco, em inglês, truncado pelo `max_new_tokens`. Não é bug desta sessão, é o default pré-existente do projeto — só documentado agora, no tutorial.
+
+**Validado com dado real (3 cenários):**
+1. `FL_LLM_BACKEND`/`FL_LLM_MODEL` não declarados → RAG funciona, mas usa `distilgpt2`.
+2. Só `FL_LLM_BACKEND=ollama` (sem `FL_LLM_MODEL`) → falha (tenta achar "distilgpt2" no Ollama, não existe lá) — capturado pelo try/except, `erro` preenchido, request não quebra.
+3. Ambas declaradas (`FL_LLM_BACKEND=ollama FL_LLM_MODEL=gemma3:4b`) → funciona corretamente, justificativa clínica coerente em português.
+
+2 testes novos adicionados (`tests/integration/test_mosaicfl_api.py`): `explain=false` confirma que o RAG **nem é chamado** (mock que falha se `_get_rag()` for invocado); falha do RAG confirmada como não-bloqueante (mock que levanta exceção, `/api/predict` ainda retorna 200 com `rag_explanation.erro` preenchido). 547 testes passando (545 + 2 novos).
+
+**Interface — correção de um erro meu**: eu tinha dito antes que não existia UI dedicada no projeto. Errado — existe um painel web completo (`infrastructure/mosaicfl_api/static/index.html`, "MOSAIC-FL — Painel Clínico", Bootstrap + Chart.js), servido automaticamente na raiz da API.
+
+---
+
+## Base de conhecimento do RAG construída de forma federada (2026-07-07)
+
+Testando `/api/predict`, a resposta veio com `fontes: []` e `confiavel: false` sempre — `knowledge.clinical_profiles` (a base vetorial do RAG, pgvector) estava vazia nesse banco. Investigando: essa tabela só é populada por `build_knowledge_base()`, chamada apenas no pipeline offline de experimentos (Caminho A), nunca no Caminho B.
+
+**Discussão de arquitetura antes de implementar (autora perguntou "no mundo real, o servidor não deveria ter dado nenhum de paciente?"):** resposta é sim — no FL genuíno, o servidor nunca deveria acessar dado bruto de nenhum hospital. Verificado: `BEHRTPatternExtractor.generate_all_profiles()` já gera **perfis por classe de desfecho** (top-5 tokens de maior atenção + score, sem `patient_id`, sem data, sem valor bruto de exame) — nasce anonimizado por construção. Isso torna viável extrair os padrões **no lado do cliente** (cada hospital sobre seus próprios dados) e enviar só os perfis agregados ao servidor — mesmo princípio já usado pro F1 no mesmo dia.
+
+**Decisão (autora pediu RAG agora, calibração federada fica como próximo passo de pesquisa — calibração via Temperature Scaling exige otimização sobre logits+rótulos, não é uma média simples como F1; não implementar sem lastro bibliográfico verificado):**
+
+**Implementado:**
+- `src/mosaicfl/core/client.py`: `FedProxClient` guarda `self.vocab` (parseado de `vocab_json` em `_ensure_data()`). `evaluate()` extrai padrões (`_extract_rag_patterns()`, usando `BEHRTPatternExtractor`) só quando `config["extract_rag_patterns"]=True` — nunca em toda rodada (o forward com atenção sobre o val_loader inteiro, por classe, é caro: ~27s no teste real contra o BPSP completo).
+- `src/mosaicfl/core/federated.py`: `weighted_average_evaluate_metrics()` agora também concatena (não faz média — são perfis independentes por hospital) `rag_patterns_json` de todos os clientes.
+- `infrastructure/mosaicfl_server/runner/superlink.py`: `on_evaluate_config_fn` manda `extract_rag_patterns: rnd >= num_rounds` — só pede os padrões na última rodada configurada, evitando o custo repetido. **Limitação conhecida**: se a convergência disparar antes da última rodada, os padrões não são coletados nesse run (aceitável — Caminho A converge em média aos 40-46 rounds, bem acima do budget de 10 usado nos testes do Caminho B até agora).
+- `infrastructure/mosaicfl_server/strategy/core.py`: `aggregate_evaluate()` extrai `rag_patterns_json` do agregado; `_build_rag_knowledge_base()` chama `ClinicalRAG().build_knowledge_base(patterns)` — nunca propaga exceção (RAG é enriquecimento, não deveria travar o treino).
+
+**Validado com dado real, 3 camadas:**
+1. `client._extract_rag_patterns()` contra BPSP de verdade: 223 padrões extraídos (de até 250 possíveis, 5 classes × 50), nenhum campo identificável de paciente, ~27s de custo real.
+2. `weighted_average_evaluate_metrics()` com 2 clientes simulados: confirmado que concatena (3 padrões de 2+1, não faz média).
+3. `core.py._build_rag_knowledge_base()` chamado com padrões reais → confirmado no banco (`knowledge.clinical_profiles` recebeu as linhas) → dados de teste removidos em seguida pra não poluir a base real.
+
+547 testes passando (mesma contagem de antes — nenhum teste novo específico pro RAG-federado ainda, validação foi só manual/isolada dessa vez, dado o prazo).
+
+---
+
+## `num-rounds` subido de 10 para 50 (2026-07-07)
+
+Discussão sobre por que `calibrated`/`confiavel` sempre vinham `false` levou à pergunta "com quantos rounds o Caminho A converge?" — consultado o banco: 40 treinamentos convergidos, `n_rounds_done` médio 46 (mediana 42), variando de 23 a 109. Os 10 rounds usados até agora nos testes do Caminho B estavam bem abaixo do mínimo histórico (23) — nunca teve chance real de convergir.
+
+**Alterado:** `pyproject.toml`, `[tool.flwr.app.config]`, `num-rounds = 10` → `50`. 547 testes passando (nenhum depende do valor específico).
+
+**Custo esperado**: cada rodada do BPSP levou ~1-2 minutos nos testes de hoje — com 50 rounds, um treino completo (se não convergir antes) pode levar de 50 minutos a quase 2 horas.
+
 `tau_eff`/`round_duration_s` continuam fora — `tau_eff` não se aplica a FedProx (só FedNova), e não há medição de duração por rodada implementada no Caminho B ainda (não fazia parte do pedido). 545 testes passando.
