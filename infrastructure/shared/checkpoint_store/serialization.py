@@ -8,7 +8,7 @@ _deserialize    — desempacota bytes de volta em dict
 import io
 from collections import OrderedDict
 from datetime import datetime, timezone
-from typing import Dict
+from typing import Dict, List, Optional
 
 import torch
 
@@ -57,16 +57,30 @@ def _serialize(
     vocab: Dict[str, int],
     temperature: float = 1.0,
     checkpoint_round: int = 0,
+    calibration_method: str = "temperature",
+    isotonic_calibrators: Optional[List] = None,
+    isotonic_num_classes: int = 0,
 ) -> bytes:
+    """
+    calibration_method: qual método produziu este checkpoint ("temperature" | "isotonic" |
+        "auto" — nesse último caso, já resolvido para "temperature" ou "isotonic" antes de
+        chegar aqui, refletindo qual dos dois venceu por ECE).
+    isotonic_calibrators: lista de `sklearn.isotonic.IsotonicRegression` (um por classe) quando
+        calibration_method="isotonic"; None quando calibration_method="temperature" (cada
+        IsotonicRegression é picklable — torch.save serializa via pickle por baixo).
+    """
     buf = io.BytesIO()
     torch.save(
         {
-            "model_state":      state_dict,
-            "vocab":            vocab,
-            "temperature":      temperature,
-            "checkpoint_round": checkpoint_round,
-            "checkpoint_at":    datetime.now(timezone.utc).isoformat(),
-            "model_version":    _model_version(state_dict),
+            "model_state":          state_dict,
+            "vocab":                vocab,
+            "temperature":          temperature,
+            "checkpoint_round":     checkpoint_round,
+            "checkpoint_at":        datetime.now(timezone.utc).isoformat(),
+            "model_version":        _model_version(state_dict),
+            "calibration_method":   calibration_method,
+            "isotonic_calibrators": isotonic_calibrators,
+            "isotonic_num_classes": isotonic_num_classes,
         },
         buf,
     )

@@ -42,3 +42,21 @@ class TestFedConfig:
         cfg = FedConfig(num_rounds=5, batch_size=8)
         assert cfg.num_rounds == 5
         assert cfg.batch_size == 8
+
+    def test_calibration_method_default_temperature(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.delenv("FL_CALIBRATION_METHOD", raising=False)
+        cfg = FedConfig()
+        assert cfg.calibration_method == "temperature"
+
+    def test_calibration_method_reads_env_var(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setenv("FL_CALIBRATION_METHOD", "isotonic")
+        cfg = FedConfig()
+        assert cfg.calibration_method == "isotonic"
+
+    def test_calibration_method_auto(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setenv("FL_CALIBRATION_METHOD", "auto")
+        cfg = FedConfig()
+        assert cfg.calibration_method == "auto"

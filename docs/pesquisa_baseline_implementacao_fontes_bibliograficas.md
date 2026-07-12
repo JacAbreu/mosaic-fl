@@ -310,9 +310,46 @@ O limiar prático para convergência de transformers em centralizado é ~1–3 s
 
 ## 9. Calibração Federada — Literatura de Suporte para Temperature Scaling sob DP
 
-> Esta seção documenta a fonte bibliográfica que resolve a pendência registrada em 2026-07-07
+> Esta seção documenta as fontes bibliográficas levantadas para a pendência registrada em 2026-07-07
 > (ver [[project_next_steps]]): como federar calibração de confiança (Temperature Scaling),
 > especificamente sob privacidade diferencial, sem recorrer a uma média ingênua sobre logits/rótulos.
+> O mecanismo específico para o caso do MOSAIC-FL (multiclasse + DP em nível de usuário) só foi
+> encontrado em preprint (9.1, Maddock et al.).
+>
+> **Busca em 2026-07-08 (IEEE Xplore + biblioteca institucional, acesso USP/Harvard):** 13 artigos
+> candidatos avaliados ao todo, em três rodadas de busca. **Apenas 5 tratam de calibração federada
+> de fato** — mas só **um** (9.1, Maddock et al., preprint) cobre a interseção exata que o MOSAIC-FL
+> precisa: multiclasse + DP em nível de usuário. Os outros 4 relevantes são peer-reviewed em venues
+> de primeira linha (VLDB, TMLR, ICML, AAAI) mas cada um cobre só parte do problema — nenhum trata
+> calibração federada **e** DP **e** multiclasse simultaneamente:
+> - 9.2 Cormode & Markov (VLDB 2023): federado + DP, mas só classificador **binário**.
+> - 9.3 Bu et al. (TMLR 2023): DP + multiclasse, mas **centralizado**, não federado.
+> - 9.4 Peng et al./FedCal (ICML 2024): federado + multiclasse, mas **sem DP** (excluído explicitamente pelos autores).
+> - 9.5 Chen et al./APH (AAAI-24): federado + multiclasse, mas **sem DP**, mecanismo diferente (ensemble de cabeças, não escalar).
+>
+> **Os outros 8 dos 13 são falsos positivos** — "calibração" é um termo sobrecarregado na literatura
+> de FL, usado com pelo menos 6 sentidos distintos e não relacionados ao problema de calibração de
+> confiança probabilística (ECE/temperature scaling) que o MOSAIC-FL precisa:
+> (a) jargão de ruído DP ("calibrated noise", i.e. ruído calibrado à sensibilidade, Dwork et al.);
+> (b) ajuste de logits para corrigir viés de classe rara/long-tail antes de destilação (FEDIC, ICME 2022);
+> (c) ajuste de logits para corrigir label skew durante o treino (HeteroSFL, IoT J. 2025);
+> (d) geração de features sintéticas para robustez adversarial (RoFLCCA, IoT J. 2026);
+> (e) gráfico de diagnóstico (reliability diagram) sem mecanismo de calibração propriamente dito
+> (FL para saúde mental, ICSCSS 2025);
+> (f) calibração pós-hoc real (ECE/isotonic regression/conformal prediction), mas **centralizada**,
+> sem nenhuma menção a FL (Gharoun et al., preprint arXiv 2025). Um artigo adicional (Cai et al.,
+> IEEE TMM 2024, "Bayesian Uncertainty Calibration for Federated Time Series Analysis") trata de
+> calibração de incerteza real em FL não-IID, mas **não aborda privacidade diferencial** — por isso
+> também não recebe subseção própria.
+>
+> **Padrão que emerge do conjunto (9.2–9.5):** todo trabalho peer-reviewed encontrado sobre calibração
+> federada **exclui DP explicitamente do escopo** (FedCal, Seção 5.3, diz isso literalmente) ou trata
+> DP sem federação (Bu et al.) ou federação sem multiclasse (Cormode & Markov). Isso não é um problema
+> de cobertura de busca — é evidência convergente, de múltiplas buscas e venues, de que a interseção
+> exata (multiclasse + federado + DP em nível de usuário) é uma lacuna real e recente da literatura,
+> coberta até agora só por um preprint (out. 2025). Buscas futuras devem incluir ACM Digital Library
+> e arXiv diretamente, além do IEEE Xplore, mas a expectativa realista é continuar encontrando peças
+> parciais do problema, não uma segunda fonte peer-reviewed equivalente ao Maddock et al.
 
 ### 9.1 Private Federated Multiclass Post-hoc Calibration ***
 
@@ -342,6 +379,68 @@ O limiar prático para convergência de transformers em centralizado é ~1–3 s
 3. **Métrica alinhada ao problema de classe rara do MOSAIC-FL:** os autores usam classwise-ECE (cwECE), não o ECE tradicional (top-label), justamente porque ECE padrão "pode simplificar demais" o problema multiclasse (Kull et al. 2019, citado no artigo) — isso é diretamente relevante para o MOSAIC-FL, onde a classe rara `curado_internado` é o ponto mais frágil do sistema.
 4. **Ressalva de comparabilidade e de status da fonte*****: nenhum dos 7 datasets é clínico ou tem desbalanceamento tão severo quanto o MOSAIC-FL (46 amostras da classe mais rara); a heterogeneidade simulada é via Dirichlet(β) ou LEAF, diferente da heterogeneidade real BPSP×HSL. **É um preprint (out. 2025), ainda sem revisão por pares** — citável na monografia, mas toda citação (corpo do texto ou referências) precisa levar a marca `***` definida no topo desta seção 9.1, sinalizando esse status à banca.
 5. **Próximo passo recomendado:** revisar o Apêndice B.1 (prova formal de `(ε,δ)`-DP) e B.6 (order-preserving training / FedOPVector) antes de qualquer prototipagem, para confirmar que a composição de privacidade do calibrador pode ser somada de forma consistente ao orçamento de privacidade já contabilizado via opacus para o modelo principal — dois mecanismos de DP no mesmo pipeline (modelo + calibrador) precisam ter seus `ε` compostos corretamente, não tratados como independentes.
+
+### 9.2 Federated Calibration and Evaluation of Binary Classifiers
+
+- **Autores:** Graham Cormode, Igor L. Markov
+- **Instituição:** Meta
+- **Publicação:** Proceedings of the VLDB Endowment (PVLDB), vol. 16, n. 11, pp. 3253–3265, 2023 — **revisado por pares**
+- **DOI:** https://doi.org/10.14778/3611479.3611523
+- **arXiv:** https://arxiv.org/abs/2210.12526
+- **Citação formal (IEEE):** G. Cormode and I. L. Markov, "Federated Calibration and Evaluation of Binary Classifiers," Proc. VLDB Endowment, vol. 16, no. 11, pp. 3253–3265, 2023, doi: 10.14778/3611479.3611523.
+
+**Resultado relevante:** federaliza o cálculo de métricas clássicas de classificador (precisão, recall, acurácia, ROC-AUC) e a calibração via *histogram binning*, sob três modelos de privacidade — Secure Aggregation, DP distribuído e DP local — com **limites teóricos de erro** demonstrados como função do número de clientes `M`, do orçamento de privacidade `ε` e do número de buckets `B` do histograma (ex.: erro de calibração federada sem ruído é `O(1/M^(1/3))`). Validado empiricamente em 3 datasets tabulares de competições Kaggle (seguro, testes genéticos, spam).
+
+**Avaliação/relevância para o MOSAIC-FL:**
+1. **É a base peer-reviewed sobre a qual o preprint do Maddock et al. (9.1) constrói** — o próprio Maddock cita este trabalho como o mais próximo na literatura e o estende de duas formas que o MOSAIC-FL precisa: (a) de classificador **binário** para **multiclasse**, e (b) de DP em **nível de exemplo** para DP em **nível de usuário** (mais forte, e o que o MOSAIC-FL já usa via `opacus`). Citar os dois juntos permite mostrar à banca uma linha de pesquisa peer-reviewed sólida (Cormode & Markov) sendo estendida por um preprint recente (Maddock) exatamente na direção que o MOSAIC-FL precisa.
+2. **Confirma, com prova formal, que histogram binning degrada sob DP** (Fig. 5 do artigo: ECE de binning sob LocalDP oscila e piora com mais bins) — o mesmo padrão qualitativo que motivou o Maddock et al. a recomendar temperature scaling (FedTemp) em vez de binning sob DP forte. Duas fontes independentes (uma peer-reviewed, uma preprint) convergem na mesma recomendação.
+3. **Limitação que impede uso direto no MOSAIC-FL:** o problema clínico do MOSAIC-FL é multiclasse (5 classes de prognóstico), não binário — este artigo sozinho não cobre o caso de uso sem a extensão do Maddock et al.
+
+### 9.3 On the Convergence and Calibration of Deep Learning with Differential Privacy
+
+- **Autores:** Zhiqi Bu, Hua Wang, Zongyu Dai, Qi Long
+- **Instituição:** University of Pennsylvania, EUA
+- **Publicação:** Transactions on Machine Learning Research (TMLR), jun. 2023 — **revisado por pares** (versão de manuscrito de autor via NIH Public Access / PMC, publicação final em TMLR)
+- **arXiv:** https://arxiv.org/abs/2106.07830
+- **Código:** https://github.com/woodyx218/opacus_global_clipping
+- **Citação formal (IEEE):** Z. Bu, H. Wang, Z. Dai, and Q. Long, "On the Convergence and Calibration of Deep Learning with Differential Privacy," Transactions on Machine Learning Research, 2023.
+
+**Resultado relevante:** análise teórica (via Neural Tangent Kernel) do treinamento DP-SGD/DP-Adam em cenário **centralizado** (não federado). Achado central: a norma de clipping por amostra `R` — não o ruído — é o principal fator que determina a calibração do modelo sob DP. Clipping com `R` pequeno produz modelos mais acurados porém mal calibrados (superconfiantes); clipping com `R` grande produz acurácia similar **e calibração significativamente melhor**, mantendo a mesma garantia formal de privacidade `(ε,δ)`.
+
+**Avaliação/relevância para o MOSAIC-FL:**
+1. **Não é federado** — a análise e os experimentos são todos em treinamento centralizado (incluindo Transformers). Não resolve a pendência de *como federar* a calibração; é complementar, não substituto, ao preprint do Maddock et al.
+2. **Alavanca prática e imediatamente testável, independente de implementar um calibrador federado:** o DP-FedAvg do MOSAIC-FL já usa clipping por cliente (`FL_DP_CLIP`, ver [[project_dp_curve_makefile]]). Este artigo sugere que parte da severidade observada na curva Acc×ε ([[feedback_resultados_negativos]]) pode estar ligada à escolha do clip norm, não apenas ao ruído `σ`. **Vale testar clip norms maiores na próxima rodada de experimentos de DP**, como experimento barato e desacoplado de qualquer implementação de calibração federada — não requer FedTemp nem nenhum mecanismo novo, só variar `FL_DP_CLIP` nos experimentos já existentes.
+3. **Ressalva:** o achado é sobre calibração do modelo principal (confiança das predições), não sobre um calibrador separado — mas informa diretamente a escolha de hiperparâmetro do DP-FedAvg já em uso no MOSAIC-FL.
+
+### 9.4 FedCal: Achieving Local and Global Calibration in Federated Learning via Aggregated Parameterized Scaler
+
+- **Autores:** Hongyi Peng, Han Yu, Xiaoli Tang, Xiaoxiao Li
+- **Instituição:** Nanyang Technological University (Singapura); University of British Columbia e Vector Institute (Canadá)
+- **Publicação:** Proceedings of the 41st International Conference on Machine Learning (ICML), PMLR vol. 235, 2024 — **revisado por pares**
+- **arXiv:** https://arxiv.org/abs/2405.15458
+- **Citação formal (IEEE):** H. Peng, H. Yu, X. Tang, and X. Li, "FedCal: Achieving Local and Global Calibration in Federated Learning via Aggregated Parameterized Scaler," in Proc. 41st Int. Conf. Machine Learning (ICML), PMLR vol. 235, 2024.
+
+**Resultado relevante:** é o artigo de origem do método "FedCal" citado no related work do preprint do Maddock et al. (9.1). Propõe calibradores locais tipo MLP (mais expressivos que um único escalar de temperatura), com técnica de *order-preserving* pra não alterar a acurácia top-k, agregados via *Weight Matching* (alinhamento de permutação de pesos, não uma média direta — MLPs não são naturalmente "agregáveis" como um escalar). Prova formalmente (Teorema 4.4) que o erro de calibração global tem um **limite inferior assintótico não-nulo** sob label skew, mesmo com variância limitada entre clientes — ou seja, calibração federada sob non-IID é **teoricamente impossível de zerar**, só de minimizar. Reduz ECE global em 47,66% em média sobre 4 datasets (MNIST, SVHN, CIFAR-10, CIFAR-100) frente ao melhor baseline.
+
+**Avaliação/relevância para o MOSAIC-FL:**
+1. **Confirma, com prova formal peer-reviewed, que a lacuna de DP é uma omissão consciente, não um descuido.** Os próprios autores escrevem explicitamente na Seção 5.3: *"a incorporação e exploração de [Differential Privacy] estão fora do escopo da nossa pesquisa atual"*. É a terceira fonte (junto com Bu et al. em 9.3, e implicitamente Cormode & Markov em 9.2) a tratar calibração federada e DP como problemas historicamente separados na literatura — reforça que o preprint do Maddock (9.1) ataca uma interseção genuinamente pouco explorada.
+2. **Explica por que o Maddock rejeita FedCal para o cenário com DP:** o preprint 9.1 cita FedCal como baseline e conclui que "scalers de maior ordem como FedCal são inadequados" sob ruído DP — por ter muito mais parâmetros (MLP `K-64-64-K`) que um escalar de temperatura, FedCal é mais sensível a ruído gaussiano quando aplicado sob DP. Ler o artigo original confirma o motivo: o mecanismo de agregação via Weight Matching não foi desenhado pensando em privacidade, e a arquitetura MLP amplia a sensibilidade global do que seria clipado/ruidoso sob DP.
+3. **Prova teórica útil para a discussão do TCC:** o limite inferior assintótico (Teorema 4.4) é um resultado formal e citável de que calibração federada sob heterogeneidade non-IID tem um piso de erro que nenhum método pode eliminar — útil para contextualizar qualquer resultado de ECE que o MOSAIC-FL venha a reportar, mesmo antes de considerar o custo adicional do DP.
+4. **Ressalva de comparabilidade:** datasets de imagem (MNIST/SVHN/CIFAR), não clínicos; sem DP, então não informa diretamente o trade-off ε×ECE que o MOSAIC-FL precisa medir.
+
+### 9.5 Watch Your Head: Assembling Projection Heads to Save the Reliability of Federated Models
+
+- **Autores:** Jinqian Chen, Jihua Zhu, Qinghai Zheng, Zhongyu Li, Zhiqiang Tian
+- **Instituição:** Xi'an Jiaotong University; Fuzhou University; Shaanxi Joint Key Laboratory for Artificial Intelligence, China
+- **Publicação:** Proceedings of the 38th AAAI Conference on Artificial Intelligence (AAAI-24), 2024, pp. 11329–11337 — **revisado por pares**
+- **Citação formal (IEEE):** J. Chen, J. Zhu, Q. Zheng, Z. Li, and Z. Tian, "Watch Your Head: Assembling Projection Heads to Save the Reliability of Federated Models," in Proc. 38th AAAI Conf. Artificial Intelligence (AAAI-24), 2024, pp. 11329–11337.
+
+**Resultado relevante:** demonstra empiricamente que modelos federados genéricos (FedAvg e variantes) são sistematicamente **menos confiáveis** que o equivalente centralizado — maior erro de calibração (F-ECE, uma variante federada do ECE ponderada por partição de cliente) em dados in-domain, e menor entropia preditiva (excesso de confiança) em dados out-of-distribution. Atribui a causa principal ao viés da *projection head* (última camada) do modelo federado, e propõe APH (Assembled Projection Heads): re-inicializa e faz fine-tuning de múltiplas cabeças de projeção com taxas de aprendizado diferentes a partir dos pesos federados, depois faz *ensemble* das predições por média. Reduz F-ECE de 0,168→0,036 (FedAvg, CIFAR-10) com <30% de overhead computacional.
+
+**Avaliação/relevância para o MOSAIC-FL:**
+1. **Mecanismo estruturalmente diferente do que o MOSAIC-FL precisa** — não é um escalar de temperatura pós-hoc (FedTemp/Maddock), é um ensemble de múltiplas cabeças fine-tuned localmente. Mais caro computacionalmente e não tem análise formal de privacidade — nenhuma menção a DP no artigo inteiro.
+2. **Evidência peer-reviewed adicional e independente de que FL, por si só (sem DP), já produz modelos mal calibrados e overconfident** — reforça o motivo pelo qual calibração federada importa para o MOSAIC-FL mesmo antes de considerar o custo do DP, com uma fonte AAAI (top-tier) que não é nenhuma das já citadas.
+3. **Não substitui nem se soma diretamente ao mecanismo do Maddock** — é uma referência complementar sobre "por que FL descalibra", não sobre "como federar um calibrador sob DP". Útil para fundamentar a motivação da seção de calibração do TCC, não a implementação.
 
 ---
 

@@ -101,6 +101,21 @@ class FedConfig:
     # Valores válidos: "f1_macro" (padrão, Bloco 2+), "accuracy" (Bloco 1 — legado).
     # Futuro: migra para fl_config no banco com audit trail (justificativa + efeitos esperados).
     checkpoint_criterion:  str   = field(default_factory=lambda: os.getenv("FL_CHECKPOINT_CRITERION", "f1_macro"))
+    # Método de calibração pós-treinamento (calibration_mixin._run_calibration).
+    # Valores válidos:
+    #   "temperature" (padrão — TemperatureScaler, Guo et al. 2017)
+    #   "isotonic"    (IsotonicCalibrator OvR, Zadrozny & Elkan 2002 — histórico do projeto mostra
+    #                  ECE menor que temperature scaling quando o viés de subconfiança não é
+    #                  uniforme entre classes, ver docstring de mosaicfl.core.calibration)
+    #   "auto"        (ajusta os dois no conjunto de calibração e persiste o que tiver menor ECE —
+    #                  formaliza a comparação que experiments/training/core/fl_core/manual_loop.py
+    #                  já fazia manualmente; não é combinação/ensemble dos dois, é escolha do vencedor)
+    # Combinação de verdade (ensemble/ponderação simultânea dos dois calibradores) fica como ideia
+    # futura — ver docs/Linha_do_Tempo_MOSAIC-FL.md (2026-07-12) e memória de projeto
+    # project_calibracao_ensemble_futuro — não implementar sem lastro bibliográfico federado.
+    # Nenhum dos três modos é federado sob DP ainda
+    # (ver docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md, seção 9).
+    calibration_method:    str   = field(default_factory=lambda: os.getenv("FL_CALIBRATION_METHOD", "temperature"))
     # Privacidade Diferencial (DP-FedAvg, McMahan et al. 2018)
     # dp_noise_multiplier=0.0 desabilita DP completamente (sem overhead).
     # dp_noise_multiplier=σ > 0: cada rodada adiciona N(0, (σ·S/n)²) ao modelo agregado,

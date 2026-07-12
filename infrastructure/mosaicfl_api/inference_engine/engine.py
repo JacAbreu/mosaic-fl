@@ -16,6 +16,7 @@ from .compat import _DEFAULT_MC_SAMPLES, _MOSAICFL_AVAILABLE
 from .tokenization import _load_alias_cache, _load_canonical_refs, _resolve_canonical, records_to_tokens
 
 if _MOSAICFL_AVAILABLE:
+    from mosaicfl.core.calibration import IsotonicCalibrator
     from mosaicfl.core.config import MODEL_CFG
     from mosaicfl.core.model import SimplifiedBEHRT
 
@@ -49,6 +50,8 @@ class InferenceEngine:
         self._alias_cache:       dict[str, str]             = {}
         self._canonical_refs:    dict[str, tuple[float, float]] = {}
         self._temperature:       float                      = 1.0
+        self._calibration_method: str                       = "temperature"
+        self._isotonic:          Optional["IsotonicCalibrator"] = None
         self._checkpoint_round:  Optional[int]              = None
         self._checkpoint_at:     Optional[str]              = None
         self._model_version:     Optional[str]              = None
@@ -66,7 +69,11 @@ class InferenceEngine:
             )
 
     def _load(self, path: Path) -> None:
-        state = torch.load(path, map_location="cpu", weights_only=True)
+        # weights_only=False: checkpoint contém vocab (dict str→int), temperatura, metadados
+        # e, quando calibration_method="isotonic", objetos sklearn.IsotonicRegression (picklable,
+        # não tensors) — mesmo trade-off já aceito em checkpoint_store/serialization._deserialize()
+        # (arquivo local produzido pelo próprio pipeline de treino, não upload externo).
+        state = torch.load(path, map_location="cpu", weights_only=False)
         if isinstance(state, dict) and "vocab" in state:
             self._vocab = state["vocab"]
             self.model.load_state_dict(state["model_state"])
@@ -74,6 +81,7 @@ class InferenceEngine:
             self._checkpoint_round = state.get("checkpoint_round")
             self._checkpoint_at    = state.get("checkpoint_at")
             self._model_version    = state.get("model_version")
+            self._load_calibration_state(state)
         else:
             # Compatibilidade com checkpoints antigos (só pesos)
             self.model.load_state_dict(state)
@@ -84,9 +92,28 @@ class InferenceEngine:
             )
         self._checkpoint_path = path
         logger.info(
-            "inference_engine_loaded path=%s vocab_size=%d T=%.4f",
-            path, len(self._vocab), self._temperature,
+            "inference_engine_loaded path=%s vocab_size=%d method=%s T=%.4f",
+            path, len(self._vocab), self._calibration_method, self._temperature,
         )
+
+    def _load_calibration_state(self, state: dict) -> None:
+        """Reconstrói o calibrador ativo a partir do checkpoint (temperature ou isotonic).
+
+        Checkpoints salvos antes desta funcionalidade não têm "calibration_method" —
+        tratados como "temperature" (comportamento prévio, sem quebra de compatibilidade)."""
+        self._calibration_method = state.get("calibration_method", "temperature")
+        self._isotonic = None
+        if self._calibration_method == "isotonic":
+            calibrators = state.get("isotonic_calibrators")
+            num_classes = state.get("isotonic_num_classes", 0)
+            if calibrators:
+                self._isotonic = IsotonicCalibrator.from_calibrators(calibrators, num_classes)
+            else:
+                logger.warning(
+                    "inference_engine_isotonic_missing — calibration_method=isotonic mas "
+                    "isotonic_calibrators ausente/vazio; usando probabilidades não calibradas"
+                )
+                self._calibration_method = "temperature"
 
     def _load_references(self, db_url: str) -> None:
         """Carrega alias cache e refs canônicas do banco."""
@@ -126,10 +153,11 @@ class InferenceEngine:
         self._checkpoint_at    = checkpoint.get("checkpoint_at")
         self._model_version    = checkpoint.get("model_version")
         self.model.load_state_dict(checkpoint["model_state"])
+        self._load_calibration_state(checkpoint)
         self._checkpoint_path  = Path("<checkpoint_store>")
         logger.info(
-            "inference_engine_loaded_from_store vocab_size=%d T=%.4f round=%s",
-            len(self._vocab), self._temperature, self._checkpoint_round,
+            "inference_engine_loaded_from_store vocab_size=%d method=%s T=%.4f round=%s",
+            len(self._vocab), self._calibration_method, self._temperature, self._checkpoint_round,
         )
 
     def _tokenize(self, exam_records: list) -> "tuple[torch.Tensor, torch.Tensor]":
@@ -171,13 +199,14 @@ class InferenceEngine:
                 "risk_score":       0.0,
                 "temperature":      self._temperature,
                 "trained":          self._checkpoint_path is not None,
-                "calibrated":       self._temperature != 1.0,
+                "calibrated":       self._is_calibrated(),
                 "checkpoint_round": self._checkpoint_round,
                 "checkpoint_at":    self._checkpoint_at,
                 "model_version":    self._model_version,
             }
 
         x, mask = self._tokenize(exam_records)
+        use_isotonic = self._calibration_method == "isotonic" and self._isotonic is not None
 
         # Lock garante que model.train()/eval() não colidem entre requests simultâneos
         with self._mc_lock:
@@ -185,8 +214,13 @@ class InferenceEngine:
             all_probs: list = []
             with torch.no_grad():
                 for _ in range(mc_samples):
-                    logits = self.model(x, mask=mask) / max(self._temperature, 1e-3)
-                    all_probs.append(F.softmax(logits, dim=-1)[0])
+                    if use_isotonic:
+                        logits = self.model(x, mask=mask)
+                        probs  = self._isotonic.calibrate_probs(F.softmax(logits, dim=-1))
+                    else:
+                        logits = self.model(x, mask=mask) / max(self._temperature, 1e-3)
+                        probs  = F.softmax(logits, dim=-1)
+                    all_probs.append(probs[0])
             self.model.eval()
 
         stacked    = torch.stack(all_probs, dim=0)   # (mc_samples, num_classes)
@@ -211,11 +245,18 @@ class InferenceEngine:
             "risk_score":       round(risk_score, 4),
             "temperature":      self._temperature,
             "trained":          self._checkpoint_path is not None,
-            "calibrated":       self._temperature != 1.0,
+            "calibrated":       self._is_calibrated(),
+            "calibration_method": self._calibration_method,
             "checkpoint_round": self._checkpoint_round,
             "checkpoint_at":    self._checkpoint_at,
             "model_version":    self._model_version,
         }
+
+    def _is_calibrated(self) -> bool:
+        """True se algum calibrador estiver ativo (temperatura ≠ 1.0 ou isotônica ajustada)."""
+        if self._calibration_method == "isotonic":
+            return self._isotonic is not None
+        return self._temperature != 1.0
 
     def predict(self, exam_records: list) -> float:
         """Escalar de risco ∈ [0,1] — mantido para compatibilidade com armazenamento histórico."""

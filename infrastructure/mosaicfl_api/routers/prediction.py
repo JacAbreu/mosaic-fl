@@ -180,6 +180,7 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
         model_metadata=ModelMetadata(
             trained=proba["trained"],
             calibrated=proba.get("calibrated", False),
+            calibration_method=proba.get("calibration_method", "temperature"),
             mc_samples=proba["mc_samples"],
             checkpoint_round=proba.get("checkpoint_round"),
             checkpoint_at=proba.get("checkpoint_at"),
@@ -245,6 +246,7 @@ async def predict(
         model_metadata=ModelMetadata(
             trained=proba["trained"],
             calibrated=proba.get("calibrated", False),
+            calibration_method=proba.get("calibration_method", "temperature"),
             mc_samples=proba["mc_samples"],
             checkpoint_round=proba.get("checkpoint_round"),
             checkpoint_at=proba.get("checkpoint_at"),

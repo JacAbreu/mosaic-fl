@@ -4,7 +4,7 @@ import logging
 import sqlite3
 from collections import OrderedDict
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .base import CheckpointStore
 from .serialization import _CREATE_SQLITE, _CREATE_SQLITE_TRAININGS, _deserialize, _serialize
@@ -121,10 +121,18 @@ class SQLiteCheckpointStore(CheckpointStore):
         temperature: float = 1.0,
         training_id: Optional[int] = None,
         evaluation_json: Optional[Dict] = None,
+        calibration_method: str = "temperature",
+        isotonic_calibrators: Optional[List] = None,
+        isotonic_num_classes: int = 0,
     ) -> None:
         # evaluation_json não é persistido no SQLite (backend de simulação).
         # Produção usa PostgreSQLCheckpointStore, que persiste via migration 012.
-        data = _serialize(state_dict, vocab, temperature, checkpoint_round=round_num)
+        data = _serialize(
+            state_dict, vocab, temperature, checkpoint_round=round_num,
+            calibration_method=calibration_method,
+            isotonic_calibrators=isotonic_calibrators,
+            isotonic_num_classes=isotonic_num_classes,
+        )
         sha256 = hashlib.sha256(data).hexdigest()
         created_at = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self._db_path) as conn:
@@ -133,7 +141,12 @@ class SQLiteCheckpointStore(CheckpointStore):
                     "INSERT INTO fl_checkpoints "
                     "(round, accuracy, loss, model_bytes, sha256, vocab_size, training_id, created_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-                    "ON CONFLICT(training_id) DO UPDATE SET "
+                    # ON CONFLICT precisa repetir o WHERE do índice parcial (fl_checkpoints_training_id_uniq)
+                    # para o SQLite reconhecê-lo como alvo do UPSERT — sem isso, "ON CONFLICT(training_id)"
+                    # sozinho não casa com um índice único parcial (erro: "ON CONFLICT clause does not
+                    # match any PRIMARY KEY or UNIQUE constraint"). Mesmo requisito já atendido em
+                    # postgres_store.py; aqui estava faltando (nunca exercitado por nenhum teste).
+                    "ON CONFLICT(training_id) WHERE training_id IS NOT NULL DO UPDATE SET "
                     "round=excluded.round, accuracy=excluded.accuracy, loss=excluded.loss, "
                     "model_bytes=excluded.model_bytes, sha256=excluded.sha256, "
                     "vocab_size=excluded.vocab_size",

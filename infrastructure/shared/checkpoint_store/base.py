@@ -1,7 +1,7 @@
 """base.py — Interface abstrata para persistência de checkpoints federados."""
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 
 class CheckpointStore(ABC):
@@ -76,8 +76,17 @@ class CheckpointStore(ABC):
         temperature: float = 1.0,
         training_id: Optional[int] = None,
         evaluation_json: Optional[Dict] = None,
+        calibration_method: str = "temperature",
+        isotonic_calibrators: Optional[List] = None,
+        isotonic_num_classes: int = 0,
     ) -> None:
-        """UPSERT do checkpoint: 1 linha por training_id (substitui quando Acc melhora)."""
+        """UPSERT do checkpoint: 1 linha por training_id (substitui quando Acc melhora).
+
+        calibration_method: "temperature" | "isotonic" — qual calibrador está ativo neste
+        checkpoint (ver FED_CFG.calibration_method, mosaicfl.core.config). Quando "isotonic",
+        isotonic_calibrators/isotonic_num_classes devem ser passados (ver
+        IsotonicCalibrator.calibrators); quando "temperature", o campo `temperature` já cobre
+        a calibração e isotonic_calibrators deve ficar None."""
 
     @abstractmethod
     def save_round_history(

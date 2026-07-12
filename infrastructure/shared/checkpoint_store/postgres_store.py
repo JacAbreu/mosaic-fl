@@ -2,7 +2,7 @@
 import hashlib
 import logging
 from collections import OrderedDict
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .base import CheckpointStore
 from .serialization import _deserialize, _serialize
@@ -151,10 +151,18 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         temperature: float = 1.0,
         training_id: Optional[int] = None,
         evaluation_json: Optional[Dict] = None,
+        calibration_method: str = "temperature",
+        isotonic_calibrators: Optional[List] = None,
+        isotonic_num_classes: int = 0,
     ) -> None:
         import json as _json
         import sqlalchemy as sa
-        data = _serialize(state_dict, vocab, temperature, checkpoint_round=round_num)
+        data = _serialize(
+            state_dict, vocab, temperature, checkpoint_round=round_num,
+            calibration_method=calibration_method,
+            isotonic_calibrators=isotonic_calibrators,
+            isotonic_num_classes=isotonic_num_classes,
+        )
         sha256 = hashlib.sha256(data).hexdigest()
         eval_json_str = _json.dumps(evaluation_json, ensure_ascii=False) if evaluation_json else None
         if training_id is not None:

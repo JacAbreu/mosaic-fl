@@ -203,6 +203,26 @@ def evaluate(
         temperature: T do checkpoint. Passa 1.0 para ver calibração bruta,
                      passa o T salvo para ver após calibração.
     """
+    all_probs, all_labels = collect_logits(model, loader, device, temperature)
+    return report_from_probs(all_probs, all_labels, class_labels, temperature=temperature, n_bins=n_bins)
+
+
+def report_from_probs(
+    all_probs:    torch.Tensor,
+    all_labels:   torch.Tensor,
+    class_labels: Sequence[str],
+    temperature:  float = 1.0,
+    n_bins:       int = 15,
+) -> EvaluationReport:
+    """
+    Constrói o mesmo `EvaluationReport` de `evaluate()`, mas a partir de probabilidades
+    já calculadas — usado quando a calibração não é um escalar de temperatura (ex.:
+    `IsotonicCalibrator.calibrate_probs()`), que não passa por `collect_logits()`.
+
+    Args:
+        temperature: valor só para registro em `CalibrationResult.temperature`
+                     (ex.: 1.0 quando o calibrador usado não é temperature scaling).
+    """
     try:
         from sklearn.metrics import (
             roc_auc_score, f1_score, precision_score, recall_score,
@@ -211,8 +231,6 @@ def evaluate(
         import numpy as np
     except ImportError as e:
         raise ImportError("scikit-learn é necessário para avaliação clínica.") from e
-
-    all_probs, all_labels = collect_logits(model, loader, device, temperature)
 
     n_classes = all_probs.shape[1]
     predicted = all_probs.argmax(dim=1)

@@ -41,6 +41,36 @@ def _make_checkpoint(round_num: int = 42) -> dict:
     }
 
 
+def _fitted_isotonic_calibrators(num_classes: int = 5) -> list:
+    from sklearn.isotonic import IsotonicRegression
+    calibrators = []
+    for _ in range(num_classes):
+        ir = IsotonicRegression(out_of_bounds="clip")
+        ir.fit([0.0, 0.5, 1.0], [0.0, 0.4, 1.0])
+        calibrators.append(ir)
+    return calibrators
+
+
+def _make_bare_engine() -> InferenceEngine:
+    """Instância mínima de InferenceEngine, sem __init__ real — mesmo padrão usado
+    em TestLoadFromStore."""
+    engine = InferenceEngine.__new__(InferenceEngine)
+    engine.model = SimplifiedBEHRT()
+    engine._vocab = {}
+    engine._temperature = 1.0
+    engine._calibration_method = "temperature"
+    engine._isotonic = None
+    engine._checkpoint_path = None
+    engine._checkpoint_round = None
+    engine._checkpoint_at = None
+    engine._model_version = None
+    engine._alias_cache = {}
+    engine._canonical_refs = {}
+    engine._mc_lock = __import__("threading").Lock()
+    engine.token_mode = "FULL"
+    return engine
+
+
 # ---------------------------------------------------------------------------
 # load_from_store()
 # ---------------------------------------------------------------------------
@@ -331,3 +361,104 @@ class TestGetEngineFallback:
                 engine = state_mod._get_engine()
 
         assert engine._vocab == {}
+
+
+# ---------------------------------------------------------------------------
+# Calibração isotônica — carregamento via load_from_store() e aplicação em predict_proba()
+# ---------------------------------------------------------------------------
+
+class TestLoadCalibrationState:
+    def test_defaults_to_temperature_when_field_absent(self):
+        """Checkpoints salvos antes desta funcionalidade não têm calibration_method —
+        não deve quebrar, deve manter o comportamento prévio (temperature)."""
+        engine = _make_bare_engine()
+        ckpt = _make_checkpoint()
+        engine.load_from_store(ckpt)
+        assert engine._calibration_method == "temperature"
+        assert engine._isotonic is None
+
+    def test_loads_isotonic_calibrator(self):
+        engine = _make_bare_engine()
+        ckpt = _make_checkpoint()
+        ckpt["calibration_method"]   = "isotonic"
+        ckpt["isotonic_calibrators"] = _fitted_isotonic_calibrators(num_classes=5)
+        ckpt["isotonic_num_classes"] = 5
+
+        engine.load_from_store(ckpt)
+
+        assert engine._calibration_method == "isotonic"
+        assert engine._isotonic is not None
+        assert engine._isotonic._fitted is True
+
+    def test_falls_back_to_temperature_when_isotonic_calibrators_missing(self):
+        """calibration_method=isotonic mas sem os calibradores (checkpoint corrompido/parcial)
+        — não deve travar, deve avisar e cair para temperature."""
+        engine = _make_bare_engine()
+        ckpt = _make_checkpoint()
+        ckpt["calibration_method"]   = "isotonic"
+        ckpt["isotonic_calibrators"] = None
+        ckpt["isotonic_num_classes"] = 0
+
+        engine.load_from_store(ckpt)
+
+        assert engine._calibration_method == "temperature"
+        assert engine._isotonic is None
+
+
+class TestPredictProbaIsotonic:
+    """_tokenize() é mockado — o foco aqui é a ramificação isotonic vs. temperature
+    dentro de predict_proba(), não o pipeline de tokenização (já coberto em outros testes)."""
+
+    def _tokenized_input(self, engine):
+        x = torch.zeros((1, 8), dtype=torch.long)
+        mask = (x == 0)
+        engine._tokenize = MagicMock(return_value=(x, mask))
+        return [{"exam_name": "TOKEN_A", "date": "2026-01-01", "value": 1.0}]
+
+    def test_uses_isotonic_when_active(self):
+        """Com calibrador isotônico ativo, predict_proba deve chamar calibrate_probs()
+        em vez de dividir logits por temperatura, e a saída deve seguir sendo uma
+        distribuição de probabilidade válida por classe."""
+        engine = _make_bare_engine()
+        engine._vocab = {"TOKEN_A": 2}
+        engine._calibration_method = "isotonic"
+        engine._isotonic = MagicMock()
+        engine._isotonic.calibrate_probs.side_effect = lambda probs: probs  # passthrough
+
+        records = self._tokenized_input(engine)
+        result = engine.predict_proba(records, mc_samples=3)
+
+        assert engine._isotonic.calibrate_probs.called
+        assert result["mc_samples"] == 3
+        total = sum(v["value"] for v in result["probabilities"].values())
+        assert total == pytest.approx(1.0, abs=0.05)
+
+    def test_calibrated_flag_true_when_isotonic_fitted(self):
+        engine = _make_bare_engine()
+        engine._vocab = {"TOKEN_A": 2}
+        engine._calibration_method = "isotonic"
+        engine._isotonic = MagicMock()
+        engine._isotonic.calibrate_probs.side_effect = lambda probs: probs
+
+        records = self._tokenized_input(engine)
+        result = engine.predict_proba(records, mc_samples=2)
+
+        assert result["calibrated"] is True
+        assert result["calibration_method"] == "isotonic"
+
+    def test_temperature_path_unaffected_by_isotonic_fields(self):
+        """Regressão: garantir que o comportamento prévio (temperature) continua intacto
+        quando calibration_method="temperature" (isotonic nunca é chamado)."""
+        engine = _make_bare_engine()
+        engine._vocab = {"TOKEN_A": 2}
+        engine._temperature = 1.3
+        engine._calibration_method = "temperature"
+        engine._isotonic = MagicMock()  # não deve ser chamado
+
+        records = self._tokenized_input(engine)
+        result = engine.predict_proba(records, mc_samples=2)
+
+        engine._isotonic.calibrate_probs.assert_not_called()
+        assert result["calibration_method"] == "temperature"
+        total = sum(v["value"] for v in result["probabilities"].values())
+        assert total == pytest.approx(1.0, abs=0.05)

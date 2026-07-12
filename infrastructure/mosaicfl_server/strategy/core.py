@@ -333,8 +333,13 @@ class ProductionFedProxStrategy(
         temperature: float,
         report_raw,
         report_cal,
+        calibration_method: str = "temperature",
     ) -> None:
-        """Persiste relatório de avaliação clínica em JSON."""
+        """Persiste relatório de avaliação clínica em JSON.
+
+        temperature: T ajustado quando calibration_method="temperature"; 1.0 (sem
+        significado numérico) quando calibration_method="isotonic" — o calibrador
+        isotônico não tem um escalar equivalente, ver isotonic_calibrators no checkpoint."""
         import dataclasses
 
         def _to_dict(report):
@@ -345,10 +350,11 @@ class ProductionFedProxStrategy(
             return d
 
         payload = {
-            "round":           server_round,
-            "temperature":     round(temperature, 4),
-            "pre_calibration": _to_dict(report_raw),
-            "post_calibration": _to_dict(report_cal),
+            "round":              server_round,
+            "calibration_method": calibration_method,
+            "temperature":        round(temperature, 4),
+            "pre_calibration":    _to_dict(report_raw),
+            "post_calibration":   _to_dict(report_cal),
         }
 
         out_path = LOG_DIR / f"evaluation_round_{server_round}.json"

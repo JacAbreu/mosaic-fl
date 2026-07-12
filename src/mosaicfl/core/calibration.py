@@ -127,6 +127,29 @@ class IsotonicCalibrator:
         self._num_classes: int = 0
         self._fitted: bool = False
 
+    @property
+    def calibrators(self) -> List:
+        """Lista de `sklearn.isotonic.IsotonicRegression` ajustados, um por classe.
+
+        Cada `IsotonicRegression` é picklable — serializável direto via `torch.save`
+        (mesmo mecanismo usado para persistir `model_state`/`vocab` no checkpoint).
+        Use com `IsotonicCalibrator.from_calibrators()` para reconstruir sem refit.
+        """
+        return self._calibrators
+
+    @classmethod
+    def from_calibrators(cls, calibrators: List, num_classes: int) -> "IsotonicCalibrator":
+        """Reconstrói um calibrador já ajustado a partir de calibradores persistidos.
+
+        Usado pela API de inferência ao carregar um checkpoint — evita refazer o fit()
+        (que exige acesso ao calib_loader/modelo) só para aplicar `calibrate()`.
+        """
+        instance = cls()
+        instance._calibrators = list(calibrators)
+        instance._num_classes = num_classes
+        instance._fitted = bool(calibrators)
+        return instance
+
     def fit(
         self,
         model: nn.Module,
@@ -170,15 +193,28 @@ class IsotonicCalibrator:
 
     def calibrate(self, logits: torch.Tensor) -> torch.Tensor:
         """
-        Aplica calibração isotônica e renormaliza para simplex válido.
+        Aplica calibração isotônica sobre logits brutos e renormaliza para simplex válido.
 
         Returns:
             Tensor (N, num_classes) com probabilidades calibradas somando ~1.
         """
+        probs = F.softmax(logits, dim=1).detach().cpu().numpy()
+        return self._calibrate_probs_array(probs)
+
+    def calibrate_probs(self, probs: torch.Tensor) -> torch.Tensor:
+        """
+        Aplica calibração isotônica sobre probabilidades já normalizadas (softmax aplicado
+        previamente, ex.: saída de `evaluation.collect_logits()`) — evita softmax duplicado.
+
+        Returns:
+            Tensor (N, num_classes) com probabilidades calibradas somando ~1.
+        """
+        return self._calibrate_probs_array(probs.detach().cpu().numpy())
+
+    def _calibrate_probs_array(self, probs: "np.ndarray") -> torch.Tensor:
         if not self._fitted:
             raise RuntimeError("IsotonicCalibrator não foi ajustado. Chame fit() primeiro.")
 
-        probs     = F.softmax(logits, dim=1).detach().cpu().numpy()
         cal_probs = np.stack(
             [self._calibrators[c].predict(probs[:, c]) for c in range(self._num_classes)],
             axis=1,

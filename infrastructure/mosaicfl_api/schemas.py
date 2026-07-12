@@ -42,6 +42,7 @@ class ClassProbability(BaseModel):
 class ModelMetadata(BaseModel):
     trained:            bool          = False
     calibrated:         bool          = False
+    calibration_method: str           = "temperature"  # "temperature" | "isotonic" — ver FL_CALIBRATION_METHOD
     uncertainty_method: str           = "mc_dropout"
     mc_samples:         int           = 0
     checkpoint_round:   Optional[int] = None
