@@ -2,24 +2,26 @@ PYTHON   := .venv/bin/python
 PYTEST   := $(PYTHON) -m pytest
 FLWR     := .venv/bin/flwr
 
-# Carrega .env automaticamente (se existir) e exporta tudo para os subprocessos
-# das receitas (python, flwr, scripts/*.sh) — evita depender de `export` manual
-# repetido antes de make superlink/server-app/supernode/fl-server/fl-client, que
-# já causou pelo menos um bug real (FL_LLM_BACKEND/FL_LLM_MODEL caindo no default
-# huggingface/distilgpt2 silenciosamente quando não exportados na sessão do shell).
-# Valores do .env têm prioridade sobre os `?=` abaixo; para sobrescrever pontualmente
-# sem editar o .env, passe na linha de comando: make superlink FL_LLM_BACKEND=huggingface
-ifneq (,$(wildcard .env))
-include .env
-export
-endif
-
 # Configurações do SuperLink (sobrescrevíveis por variável de ambiente)
 FL_TLS_CERT_DIR      ?= certs
 FL_SUPERLINK_ADDRESS ?= localhost:9091
 FL_CLIENT_ID         ?= hospital_dev
 FL_DATA_SOURCE       ?= simulated
 FL_DB_URL            ?= postgresql://mosaicfl:senhaForte@localhost:5432/mosaicfl
+
+# RAG/LLM e calibração — defaults que evitam fallback silencioso (huggingface/distilgpt2
+# em vez de ollama/gemma3:4b) quando ninguém exporta essas variáveis explicitamente —
+# achado real de 2026-07-07, ver docs/Linha_do_Tempo_MOSAIC-FL.md. `?=` respeita
+# variável já exportada no shell ou passada na linha de comando (make alvo VAR=x);
+# só usa fallback abaixo quando nada foi definido. Note: `?=` (diferente de
+# `include .env`) NÃO sobrescreve exports feitos por scripts/tutoriais que definem
+# valores por etapa (ex.: FL_DB_URL variando de porta entre desktop/notebook em
+# docs/Tutorial_Rede_Federada_Real_Desktop_Notebook.md) — testado explicitamente
+# para não repetir esse bug de precedência com um novo mecanismo.
+FL_LLM_BACKEND       ?= ollama
+FL_LLM_MODEL         ?= gemma3:4b
+FL_LLM_HF_MODEL      ?= distilgpt2
+FL_CALIBRATION_METHOD ?= temperature
 PIPELINE_SEQ_LEN     ?= 128
 PIPELINE_SAMPLE      ?= 3
 
@@ -385,7 +387,15 @@ superlink:
 # 2026-07-05 após causar regressão real — ver docs/Linha_do_Tempo_MOSAIC-FL.md).
 # Se você mover FL_TLS_CERT_DIR de lugar, atualize manualmente o caminho em
 # ~/.flwr/config.toml (seção [superlink.production], chave root-certificates).
+# FL_LLM_BACKEND/FL_LLM_MODEL: usados por ClinicalRAG() ao construir a base de
+# conhecimento pós-convergência (core.py:_build_rag_knowledge_base). Sem isso,
+# cai silenciosamente em huggingface/distilgpt2 mesmo com Ollama disponível.
+# FL_CALIBRATION_METHOD: usado por _run_calibration (calibration_mixin.py).
 server-app:
+	FL_LLM_BACKEND=$(FL_LLM_BACKEND) \
+	FL_LLM_MODEL=$(FL_LLM_MODEL) \
+	FL_LLM_HF_MODEL=$(FL_LLM_HF_MODEL) \
+	FL_CALIBRATION_METHOD=$(FL_CALIBRATION_METHOD) \
 	$(FLWR) run . production
 
 # Inicia um SuperNode (cliente) conectando ao SuperLink.
@@ -589,7 +599,13 @@ full-db-setup:
 ##   make api
 ##   make api FL_API_PORT=9000 FL_AUTH_REQUIRED=false
 ##   make api FL_AUTH_REQUIRED=false FL_ENV=development
+## FL_LLM_BACKEND/FL_LLM_MODEL: usados por ClinicalRAG() ao gerar a justificativa
+## do /api/predict. Sem isso, cai silenciosamente em huggingface/distilgpt2 mesmo
+## com Ollama disponível — achado de 2026-07-07, ver docs/Linha_do_Tempo_MOSAIC-FL.md.
 api: db-up
+	FL_LLM_BACKEND=$(FL_LLM_BACKEND) \
+	FL_LLM_MODEL=$(FL_LLM_MODEL) \
+	FL_LLM_HF_MODEL=$(FL_LLM_HF_MODEL) \
 	$(PYTHON) -m infrastructure.mosaicfl_api \
 	    --host $(FL_API_HOST) \
 	    --port $(FL_API_PORT)

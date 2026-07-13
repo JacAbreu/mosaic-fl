@@ -211,6 +211,40 @@ Se quiser conferir depois:
 cat ~/.flwr/config.toml
 ```
 
+### 3.1 Calibração pós-treinamento (`FL_CALIBRATION_METHOD`, 2026-07-12)
+
+O `server-app` agora calibra o modelo automaticamente após a convergência, com o método
+controlado por `FL_CALIBRATION_METHOD` (default do Makefile: `temperature`, comportamento
+histórico do projeto). Para esta rodada de validação, o plano é usar `auto` — treina
+`temperature` e `isotonic` no conjunto de calibração e persiste o de menor ECE, dando um
+primeiro dado real de qual calibrador funciona melhor no dado clínico do MOSAIC-FL:
+
+```bash
+make server-app FL_CALIBRATION_METHOD=auto
+```
+
+Fique de olho nos logs `calibration_complete`/`calibration_auto_selected` — mostram qual
+método venceu e o ECE resultante. Detalhes da implementação em
+`infrastructure/mosaicfl_server/strategy/calibration_mixin.py`.
+
+### 3.2 RAG (`FL_LLM_BACKEND`/`FL_LLM_MODEL`) — já correto por padrão
+
+`server-app` constrói a base de conhecimento do RAG (`ClinicalRAG`) após a convergência, e a
+API (`make api`) gera as justificativas clínicas usando o mesmo backend. Desde 2026-07-12, o
+Makefile já define `FL_LLM_BACKEND=ollama` e `FL_LLM_MODEL=gemma3:4b` como default para os
+dois alvos — **não precisa exportar nada manualmente**. (Achado de 2026-07-07: sem essas
+variáveis, o backend caía silenciosamente para `huggingface`/`distilgpt2`, mesmo com Ollama
+disponível — isso não deve mais acontecer, mas vale conferir os logs de `server-app`/`api`
+se a qualidade das justificativas parecer estranha.)
+
+### 3.3 Duração esperada com `num-rounds=50`
+
+Esta é a primeira vez que o Caminho B roda de ponta a ponta com `num-rounds=50`
+(`pyproject.toml`, alterado em 2026-07-07 — antes era 10, nunca testado nesse valor até agora).
+Com base no tempo por rodada observado em testes anteriores (~1-2 min por rodada do BPSP), um
+treino completo pode levar de **50 minutos a quase 2 horas** por fase, se não convergir antes.
+Não é motivo de alarme se o processo parecer "parado" por vários minutos entre rodadas.
+
 ---
 
 ## Usando GPU no Caminho B (desktop, achado em 2026-07-07)
@@ -296,7 +330,8 @@ make client-load-hsl
 - [ ] Notebook: banco local subido, migrations aplicadas, seed HSL carregado
 - [ ] Notebook: `ca.crt` copiado do desktop
 - [ ] Notebook: `make supernode` conectado ao IP do desktop (deixar aberto num terminal)
-- [ ] Desktop: `make server-app` disparado
+- [ ] Desktop: `make server-app FL_CALIBRATION_METHOD=auto` disparado (ver seção 3.1)
+- [ ] Desktop: Ollama rodando com `gemma3:4b` puxado (`ollama serve` + `ollama list`) — FL_LLM_BACKEND/FL_LLM_MODEL já vêm com default correto, só precisa o serviço estar de pé
 
 ## Se algo der errado
 
