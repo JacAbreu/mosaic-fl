@@ -1,0 +1,7 @@
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      Starting Flower SuperExec
+[93mWARNING [0m:   Connection attempt failed, retrying in 0.79 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 1.01 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 0.95 seconds
+[93mWARNING [0m:   Connection attempt failed, retrying in 2.49 seconds
