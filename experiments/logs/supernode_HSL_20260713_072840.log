@@ -1,0 +1,8 @@
+PYTHONUNBUFFERED=1 GRCP_VERBOSITY=DEBUG GRCP_TRACE=api,connectivity_state,handshaker FL_TLS_CERT_DIR=/home/jacabreu/studies/usp/tcc/simulacao-cliente-federado/certs FL_CLIENT_ID=HSL FL_DATA_SOURCE=sgbd FL_SUPERLINK_ADDRESS=192.168.68.117:9091 bash scripts/iniciar_cliente_fl.sh 2>&1 | tee /tmp/debug_hsl.log | head -100
+Log gravado em: /home/jacabreu/studies/usp/tcc/mosaic-fl/experiments/logs/supernode_HSL_20260713_072840.log
+
+
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 1467182920112036757
+[92mINFO [0m:      Starting Flower SuperExec
