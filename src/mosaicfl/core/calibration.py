@@ -67,7 +67,6 @@ class TemperatureScaler(nn.Module):
         """
         model.eval()
         model.to(device)
-        self.to(device)
 
         logits_list: list = []
         labels_list: list = []
@@ -82,8 +81,24 @@ class TemperatureScaler(nn.Module):
             logger.warning("temperature_scaling_fit: calib_loader vazio — T mantido em 1.0")
             return self
 
-        all_logits = torch.cat(logits_list).to(device)
-        all_labels = torch.cat(labels_list).to(device)
+        return self.fit_from_logits(
+            torch.cat(logits_list), torch.cat(labels_list), device=device, lr=lr, max_iter=max_iter,
+        )
+
+    def fit_from_logits(
+        self,
+        logits: torch.Tensor,
+        labels: torch.Tensor,
+        device: str = "cpu",
+        lr: float = 0.01,
+        max_iter: int = 50,
+    ) -> "TemperatureScaler":
+        """Mesmo ajuste de `fit()`, mas a partir de logits/labels já calculados —
+        evita um segundo forward pass quando o chamador já os tem (ex.: `FedProxClient.
+        evaluate()`, que já percorre o val_loader para accuracy/F1 antes de calibrar)."""
+        self.to(device)
+        all_logits = logits.to(device)
+        all_labels = labels.to(device)
 
         nll = nn.CrossEntropyLoss()
         optimizer = torch.optim.LBFGS([self.log_temperature], lr=lr, max_iter=max_iter)
@@ -158,11 +173,8 @@ class IsotonicCalibrator:
         num_classes: int = 5,
     ) -> "IsotonicCalibrator":
         """Ajusta um IsotonicRegression por classe no calib_loader."""
-        from sklearn.isotonic import IsotonicRegression
-
         model.eval()
         model.to(device)
-        self._num_classes = num_classes
 
         logits_list: List[torch.Tensor] = []
         labels_list: List[torch.Tensor] = []
@@ -176,9 +188,22 @@ class IsotonicCalibrator:
             logger.warning("isotonic_calibration_fit: calib_loader vazio — calibrador não ajustado")
             return self
 
-        all_logits = torch.cat(logits_list)
-        all_labels = torch.cat(labels_list).numpy()
-        probs      = F.softmax(all_logits, dim=1).numpy()
+        return self.fit_from_logits(torch.cat(logits_list), torch.cat(labels_list), num_classes=num_classes)
+
+    def fit_from_logits(
+        self,
+        logits: torch.Tensor,
+        labels: torch.Tensor,
+        num_classes: int = 5,
+    ) -> "IsotonicCalibrator":
+        """Mesmo ajuste de `fit()`, mas a partir de logits/labels já calculados —
+        evita um segundo forward pass quando o chamador já os tem (ex.: `FedProxClient.
+        evaluate()`, que já percorre o val_loader para accuracy/F1 antes de calibrar)."""
+        from sklearn.isotonic import IsotonicRegression
+
+        self._num_classes = num_classes
+        all_labels = labels.numpy()
+        probs      = F.softmax(logits, dim=1).numpy()
 
         self._calibrators = []
         for c in range(num_classes):
@@ -190,6 +215,46 @@ class IsotonicCalibrator:
         self._fitted = True
         logger.info("isotonic_calibration_fit num_classes=%d n_samples=%d", num_classes, len(all_labels))
         return self
+
+    def export_thresholds(self) -> List[List[List[float]]]:
+        """Exporta os breakpoints comprimidos (pós-PAV) de cada `IsotonicRegression` por
+        classe — `[X_thresholds, y_thresholds]` por classe, JSON-serializável.
+
+        São estatísticas agregadas/comprimidas (não dados brutos por amostra) — seguro
+        de transmitir entre cliente e servidor, mesma filosofia de privacidade já usada
+        para F1 e padrões do RAG (ver FedProxClient.evaluate()). Usado para federar a
+        calibração isotônica: cada cliente ajusta localmente e exporta os thresholds;
+        o servidor agrega via `from_pooled_thresholds()`.
+        """
+        return [
+            [ir.X_thresholds_.tolist(), ir.y_thresholds_.tolist()]
+            for ir in self._calibrators
+        ]
+
+    @classmethod
+    def from_pooled_thresholds(
+        cls, pooled_per_class: List[List[List[float]]], num_classes: int,
+    ) -> "IsotonicCalibrator":
+        """Reconstrói um calibrador federado a partir de thresholds já agrupados
+        (concatenados) entre clientes — um `[X_thresholds, y_thresholds]` por classe,
+        cada um já com os pontos de todos os clientes que contribuíram.
+
+        Refit real de um `IsotonicRegression` por classe sobre os pontos agregados
+        (não é aproximação — thresholds pós-PAV são pontos (x,y) válidos para
+        reajuste). Ver `aggregate_calibration()` em federated.py para a etapa que
+        faz a concatenação por classe antes de chamar este método.
+        """
+        from sklearn.isotonic import IsotonicRegression
+
+        instance = cls()
+        instance._num_classes = num_classes
+        instance._calibrators = []
+        for x_list, y_list in pooled_per_class:
+            ir = IsotonicRegression(out_of_bounds="clip")
+            ir.fit(x_list, y_list)
+            instance._calibrators.append(ir)
+        instance._fitted = True
+        return instance
 
     def calibrate(self, logits: torch.Tensor) -> torch.Tensor:
         """

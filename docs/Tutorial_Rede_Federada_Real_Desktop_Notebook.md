@@ -129,6 +129,38 @@ Isso imprime o IP local e o comando pronto para colar no notebook. **Deixe rodan
 > `experiments/logs/superlink_<timestamp>.log` (caminho exato impresso ao subir).
 > Sobrescreva com `FL_LOG_FILE=/caminho/seu.log` se preferir.
 
+### 1.8 Subir o SuperNode do próprio desktop (cliente BPSP) — obrigatório
+
+**Etapa que faltava numa versão anterior deste tutorial** (achado em 2026-07-12, ao notar que
+só o cliente do notebook estava documentado). `pyproject.toml` exige `min-clients = 2` — com
+só o notebook (HSL) conectado, o quórum nunca fecha e o treinamento **nunca começa**, sem erro
+explícito, só fica esperando o segundo cliente. É a mesma estrutura já validada na primeira vez
+que o Caminho B rodou de ponta a ponta (`docs/Linha_do_Tempo_MOSAIC-FL.md`, 2026-07-06/07):
+desktop roda SuperLink **e** um SuperNode local (BPSP); notebook roda o outro SuperNode (HSL).
+
+Em outro terminal do desktop, ainda apontando pro banco BPSP (porta 5433):
+
+```bash
+export FL_TLS_CERT_DIR=/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/certs
+export FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5433/mosaicfl"
+make supernode FL_CLIENT_ID=BPSP FL_SUPERLINK_ADDRESS=localhost:9091 FL_DATA_SOURCE=sgbd
+```
+
+`localhost:9091`, não o IP externo — é o mesmo desktop se conectando ao SuperLink que já está
+rodando nele. Só use `FL_DEVICE=cuda` antes desse comando se o desktop tiver GPU disponível
+(ver seção "Usando GPU no Caminho B" mais abaixo). **Deixe rodando**, junto com o SuperLink.
+
+> **Por que o servidor não usa esse banco BPSP para calibrar/testar centralizado:** já
+> investigado e documentado (`docs/Linha_do_Tempo_MOSAIC-FL.md`, seção sobre F1 federado,
+> 2026-07-07) — dar ao `ServerApp` acesso a um conjunto de teste centralizado (mesmo que
+> hospedado na mesma máquina, neste teste específico) violaria o princípio de privacidade que
+> o Caminho B deveria generalizar para um deploy real, onde o coordenador não fica colado a
+> nenhum hospital. Por isso a calibração pós-treinamento (`FL_CALIBRATION_METHOD`, seção 3.1)
+> **não roda** no Caminho B hoje — fica pulada (`calibration_skipped`) mesmo com o cliente BPSP
+> local conectado. Corrigir isso exige um mecanismo de calibração federada (calibrar no lado do
+> cliente, agregar com preservação de privacidade) — pesquisa já em andamento, não uma correção
+> rápida neste tutorial.
+
 ---
 
 ## Parte 2 — Notebook (Cliente, HSL)
@@ -211,21 +243,31 @@ Se quiser conferir depois:
 cat ~/.flwr/config.toml
 ```
 
-### 3.1 Calibração pós-treinamento (`FL_CALIBRATION_METHOD`, 2026-07-12)
+### 3.1 Calibração pós-treinamento (`FL_CALIBRATION_METHOD`) — agora federada (client-side)
 
-O `server-app` agora calibra o modelo automaticamente após a convergência, com o método
-controlado por `FL_CALIBRATION_METHOD` (default do Makefile: `temperature`, comportamento
-histórico do projeto). Para esta rodada de validação, o plano é usar `auto` — treina
-`temperature` e `isotonic` no conjunto de calibração e persiste o de menor ECE, dando um
-primeiro dado real de qual calibrador funciona melhor no dado clínico do MOSAIC-FL:
+**Atualização de 2026-07-12 (mesma sessão, corrigido no mesmo dia):** o achado original desta
+seção (calibração sempre pulada, porque `superlink.py` nunca constrói um `test_loader`
+centralizado — decisão de privacidade deliberada, ver `docs/Linha_do_Tempo_MOSAIC-FL.md`,
+seção sobre F1 federado, 2026-07-07) continua correto — mas a resposta não é abandonar a
+calibração, é federá-la: cada cliente ajusta o calibrador **localmente**, na última rodada
+configurada (mesmo timing de `extract_rag_patterns`), e devolve só o resultado agregado/
+comprimido (escalar T, ou breakpoints pós-PAV — nunca dado bruto por amostra). O servidor
+combina o que recebeu de cada cliente e persiste o calibrador federado no checkpoint. Mesma
+arquitetura de Cormode & Markov (VLDB 2023) e do FedTemp do Maddock et al. (preprint), já
+pesquisada em `docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md`, seção 9.
+
+Para esta rodada de validação, o plano volta a ser usar `auto` — cada cliente ajusta os dois
+calibradores localmente, o servidor persiste o que tiver menor ECE agregado:
 
 ```bash
 make server-app FL_CALIBRATION_METHOD=auto
 ```
 
-Fique de olho nos logs `calibration_complete`/`calibration_auto_selected` — mostram qual
-método venceu e o ECE resultante. Detalhes da implementação em
-`infrastructure/mosaicfl_server/strategy/calibration_mixin.py`.
+Fique de olho nos logs `local_calibration_fit` (por cliente) e `federated_calibration_persisted`
+(no servidor, ao final). **Esta é a primeira vez que esse mecanismo roda com Flower de verdade**
+— só foi validado com mocks/testes unitários até agora (629 testes, `tests/unit/test_fedprox_client.py`,
+`test_aggregate_calibration.py`, `test_persist_federated_calibration.py`). Se algo falhar aqui,
+é esperado precisar de ajuste — reporte o log de erro completo.
 
 ### 3.2 RAG (`FL_LLM_BACKEND`/`FL_LLM_MODEL`) — já correto por padrão
 
@@ -326,11 +368,12 @@ make client-load-hsl
 - [ ] Desktop: certificados gerados com o IP real, `FL_TLS_CERT_DIR` exportado
 - [ ] Desktop: porta 9091 liberada no firewall
 - [ ] Desktop: `make superlink` rodando (deixar aberto num terminal)
+- [ ] Desktop: `make supernode FL_CLIENT_ID=BPSP FL_SUPERLINK_ADDRESS=localhost:9091 FL_DATA_SOURCE=sgbd` rodando (segundo terminal, ver seção 1.8 — **obrigatório**, sem ele o quórum `min-clients=2` nunca fecha)
 - [ ] Notebook: dependências instaladas (`make setup`)
 - [ ] Notebook: banco local subido, migrations aplicadas, seed HSL carregado
 - [ ] Notebook: `ca.crt` copiado do desktop
 - [ ] Notebook: `make supernode` conectado ao IP do desktop (deixar aberto num terminal)
-- [ ] Desktop: `make server-app FL_CALIBRATION_METHOD=auto` disparado (ver seção 3.1)
+- [ ] Desktop: `make server-app` disparado (ver seção 3.1 — `FL_CALIBRATION_METHOD` não tem efeito no Caminho B ainda, não precisa passar)
 - [ ] Desktop: Ollama rodando com `gemma3:4b` puxado (`ollama serve` + `ollama list`) — FL_LLM_BACKEND/FL_LLM_MODEL já vêm com default correto, só precisa o serviço estar de pé
 
 ## Se algo der errado

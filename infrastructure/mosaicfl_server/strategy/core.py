@@ -203,6 +203,7 @@ class ProductionFedProxStrategy(
         per_class_f1_json = aggregated_metrics.get("per_class_f1_json") if aggregated_metrics else None
         per_class_f1 = json.loads(per_class_f1_json) if per_class_f1_json else None
         rag_patterns_json = aggregated_metrics.get("rag_patterns_json") if aggregated_metrics else None
+        calibration_method = aggregated_metrics.get("calibration_method") if aggregated_metrics else None
 
         self.tracker.check(accuracy)
         self.round_counter = server_round
@@ -312,6 +313,9 @@ class ProductionFedProxStrategy(
         if rag_patterns_json:
             self._build_rag_knowledge_base(rag_patterns_json)
 
+        if calibration_method:
+            self._persist_federated_calibration(server_round, calibration_method, aggregated_metrics)
+
         return aggregated_loss, aggregated_metrics
 
     def _build_rag_knowledge_base(self, patterns_json: str) -> None:
@@ -326,6 +330,60 @@ class ProductionFedProxStrategy(
             logger.info("rag_knowledge_base_built", extra={"n_patterns": len(patterns)})
         except Exception as e:
             logger.warning("rag_knowledge_base_build_error", extra={"error": str(e)})
+
+    def _persist_federated_calibration(
+        self, server_round: int, calibration_method: str, aggregated_metrics: Dict,
+    ) -> None:
+        """Persiste o calibrador federado agregado (ver aggregate_calibration em
+        federated.py) no checkpoint — cada cliente ajusta localmente e envia só
+        estatísticas comprimidas/agregadas (nunca dado bruto por amostra); esta função
+        só combina o que já chegou agregado do lado do cliente, num único calibrador
+        pronto pra InferenceEngine.calibrate()/calibrate_probs() carregar depois.
+        Nunca propaga exceção: calibração é enriquecimento pós-convergência, uma
+        falha aqui não deve invalidar o checkpoint do treino em si."""
+        if self._checkpoint_store is None:
+            return
+        try:
+            isotonic_calibrators = None
+            isotonic_num_classes = 0
+            temperature = 1.0
+
+            if calibration_method == "isotonic":
+                pooled_json = aggregated_metrics.get("isotonic_pooled_thresholds_json")
+                num_classes = aggregated_metrics.get("isotonic_num_classes", 0)
+                if not pooled_json or not num_classes:
+                    logger.warning("federated_calibration_incomplete method=isotonic round=%d", server_round)
+                    return
+                from mosaicfl.core.calibration import IsotonicCalibrator
+                iso = IsotonicCalibrator.from_pooled_thresholds(json.loads(pooled_json), num_classes)
+                isotonic_calibrators = iso.calibrators
+                isotonic_num_classes = num_classes
+            elif calibration_method == "temperature":
+                temperature = float(aggregated_metrics.get("temperature", 1.0))
+            else:
+                logger.warning("federated_calibration_unknown_method method=%s", calibration_method)
+                return
+
+            last_acc = self._last_round_metrics.get("accuracy", 0.0)
+            last_loss = self._last_round_metrics.get("loss", 0.0)
+            self._checkpoint_store.save(
+                round_num=server_round,
+                state_dict=self.global_model.state_dict(),
+                vocab=self.vocab,
+                training_id=self._training_id,
+                accuracy=last_acc,
+                loss=last_loss,
+                calibration_method=calibration_method,
+                temperature=temperature,
+                isotonic_calibrators=isotonic_calibrators,
+                isotonic_num_classes=isotonic_num_classes,
+            )
+            logger.info(
+                "federated_calibration_persisted",
+                extra={"round": server_round, "method": calibration_method, "temperature": temperature},
+            )
+        except Exception as e:
+            logger.warning("federated_calibration_persist_error round=%d error=%s", server_round, e)
 
     def _save_evaluation_report(
         self,

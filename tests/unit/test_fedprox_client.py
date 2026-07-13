@@ -257,3 +257,60 @@ class TestFedProxClient:
         loss_a, _, _ = contract_client.evaluate(params, {})
         loss_b, _, _ = contract_client.evaluate(params, {})
         assert abs(loss_a - loss_b) < 1e-6
+
+    # ── calibração federada (client-side fit, 2026-07-12) ────────────────────
+
+    def test_evaluate_without_calibrate_flag_has_no_calibration_keys(self, contract_client):
+        """Comportamento padrão (config vazio ou calibrate=False): sem overhead,
+        sem chaves de calibração — mesmo contrato de antes desta funcionalidade."""
+        params = contract_client.get_parameters({})
+        _, _, metrics = contract_client.evaluate(params, {})
+        assert "calibration_method" not in metrics
+        assert "temperature" not in metrics
+        assert "isotonic_thresholds_json" not in metrics
+
+    def test_evaluate_calibrate_temperature(self, contract_client):
+        params = contract_client.get_parameters({})
+        _, _, metrics = contract_client.evaluate(
+            params, {"calibrate": True, "calibration_method": "temperature"}
+        )
+        assert metrics["calibration_method"] == "temperature"
+        assert isinstance(metrics["temperature"], float)
+        assert metrics["temperature"] > 0
+
+    def test_evaluate_calibrate_isotonic(self, contract_client):
+        import json
+        params = contract_client.get_parameters({})
+        _, _, metrics = contract_client.evaluate(
+            params, {"calibrate": True, "calibration_method": "isotonic"}
+        )
+        assert metrics["calibration_method"] == "isotonic"
+        thresholds = json.loads(metrics["isotonic_thresholds_json"])
+        assert len(thresholds) == NUM_CLASSES
+        for x_list, y_list in thresholds:
+            assert len(x_list) == len(y_list)
+
+    def test_evaluate_calibrate_defaults_to_temperature_method(self, contract_client):
+        """calibration_method ausente na config, mas calibrate=True — não deve travar,
+        cai no default 'temperature' (mesmo default de FED_CFG.calibration_method)."""
+        params = contract_client.get_parameters({})
+        _, _, metrics = contract_client.evaluate(params, {"calibrate": True})
+        assert metrics["calibration_method"] == "temperature"
+
+    def test_fit_local_calibrator_isotonic_direct(self, client_v2):
+        """Chama _fit_local_calibrator() diretamente com logits/labels sintéticos —
+        evita depender do forward pass completo pra testar só a serialização."""
+        import json
+        logits = torch.randn(20, NUM_CLASSES)
+        labels = torch.randint(0, NUM_CLASSES, (20,))
+        result = client_v2._fit_local_calibrator("isotonic", logits, labels)
+        assert result["calibration_method"] == "isotonic"
+        thresholds = json.loads(result["isotonic_thresholds_json"])
+        assert len(thresholds) == NUM_CLASSES
+
+    def test_fit_local_calibrator_temperature_direct(self, client_v2):
+        logits = torch.randn(20, NUM_CLASSES)
+        labels = torch.randint(0, NUM_CLASSES, (20,))
+        result = client_v2._fit_local_calibrator("temperature", logits, labels)
+        assert result["calibration_method"] == "temperature"
+        assert result["temperature"] > 0

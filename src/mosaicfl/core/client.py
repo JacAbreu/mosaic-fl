@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 from collections import Counter
 
 from mosaicfl.core.model import SimplifiedBEHRT
+from .calibration import IsotonicCalibrator, TemperatureScaler
 from .config import FED_CFG, MODEL_CFG, RUNTIME_CFG
 
 
@@ -222,6 +223,7 @@ class FedProxClient(fl.client.NumPyClient):
         correct, total, loss_sum = 0, 0, 0.0
         all_preds: List[int] = []
         all_labels: List[int] = []
+        all_logits: List[torch.Tensor] = []
         with torch.no_grad():
             for batch_x, batch_y, batch_dia in self.val_loader:
                 batch_x = batch_x.to(RUNTIME_CFG.device)
@@ -235,6 +237,7 @@ class FedProxClient(fl.client.NumPyClient):
                 correct += (predicted == batch_y).sum().item()
                 all_preds.extend(predicted.cpu().tolist())
                 all_labels.extend(batch_y.cpu().tolist())
+                all_logits.append(outputs.detach().cpu())
 
         accuracy = correct / total if total > 0 else 0
         avg_loss = loss_sum / total if total > 0 else 0.0
@@ -277,7 +280,39 @@ class FedProxClient(fl.client.NumPyClient):
         if config.get("extract_rag_patterns", False) and self.vocab:
             metrics["rag_patterns_json"] = json.dumps(self._extract_rag_patterns())
 
+        # Calibração federada — só quando o servidor pede (config, rodada final, mesmo
+        # timing de extract_rag_patterns). Ajusta o calibrador LOCALMENTE (logits já
+        # coletados acima, sem forward pass extra) e devolve só estatísticas agregadas/
+        # comprimidas (escalar T, ou breakpoints pós-PAV — nunca logits/labels brutos por
+        # amostra) — mesma filosofia de privacidade de F1/RAG. Ver
+        # docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md §9 (Cormode &
+        # Markov / Maddock et al. — calibração ajustada no cliente, agregada no servidor).
+        if config.get("calibrate", False) and total > 0:
+            metrics.update(self._fit_local_calibrator(
+                config.get("calibration_method", "temperature"),
+                torch.cat(all_logits),
+                torch.tensor(all_labels),
+            ))
+
         return float(avg_loss), total, metrics
+
+    def _fit_local_calibrator(
+        self, calibration_method: str, logits: torch.Tensor, labels: torch.Tensor,
+    ) -> dict:
+        """Ajusta um calibrador local (temperature ou isotonic) sobre o val_loader deste
+        cliente e devolve o resultado serializado (compatível com flwr.common.Metrics —
+        só escalares/strings, nunca objetos Python brutos)."""
+        if calibration_method == "isotonic":
+            iso = IsotonicCalibrator().fit_from_logits(logits, labels, num_classes=MODEL_CFG.num_classes)
+            logger.info("local_calibration_fit client_id=%s method=isotonic", self.client_id)
+            return {
+                "calibration_method": "isotonic",
+                "isotonic_thresholds_json": json.dumps(iso.export_thresholds()),
+            }
+
+        scaler = TemperatureScaler().fit_from_logits(logits, labels, device=str(RUNTIME_CFG.device))
+        logger.info("local_calibration_fit client_id=%s method=temperature T=%.4f", self.client_id, scaler.T)
+        return {"calibration_method": "temperature", "temperature": scaler.T}
 
     def _extract_rag_patterns(self) -> list:
         """Gera perfis prototípicos por classe (BEHRTPatternExtractor) sobre o

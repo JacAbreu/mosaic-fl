@@ -204,10 +204,18 @@ def _make_server_components(context: Context) -> ServerAppComponents:
         # aceitável dado que a maioria dos runs reais roda até o limite de rodadas mesmo
         # (ver docs/Linha_do_Tempo_MOSAIC-FL.md, treinamentos convergem em média aos 40-46
         # rounds do Caminho A, bem acima do budget típico de testes do Caminho B).
+        # calibrate/calibration_method: pede ao cliente pra ajustar um calibrador local
+        # (temperature ou isotonic, conforme FED_CFG.calibration_method) só na última
+        # rodada configurada — mesmo timing/limitação de extract_rag_patterns acima.
+        # Substitui a calibração server-side (calibration_mixin.py), que exigiria um
+        # test_loader centralizado nunca disponível no Caminho B por design de privacidade
+        # (ver docs/Linha_do_Tempo_MOSAIC-FL.md, seção sobre F1 federado, 2026-07-07).
         on_evaluate_config_fn=lambda rnd: {
             "round": rnd,
             "vocab_json": json.dumps(recovered_vocab),
             "extract_rag_patterns": rnd >= num_rounds,
+            "calibrate": rnd >= num_rounds,
+            "calibration_method": FED_CFG.calibration_method,
         },
     )
 

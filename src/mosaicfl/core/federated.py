@@ -74,7 +74,68 @@ def weighted_average_evaluate_metrics(metrics: List[Tuple[int, Dict[str, Any]]])
     if all_patterns:
         result["rag_patterns_json"] = json.dumps(all_patterns)
 
+    calibration = aggregate_calibration(metrics)
+    if calibration:
+        result.update(calibration)
+
     return result
+
+
+def aggregate_calibration(metrics: List[Tuple[int, Dict[str, Any]]]) -> Optional[Dict[str, Any]]:
+    """Agrega calibradores locais (ajustados em FedProxClient._fit_local_calibrator,
+    só presentes na rodada em que o servidor pediu via config `calibrate`) num único
+    calibrador federado. Retorna None se nenhum cliente enviou dado de calibração
+    (rodadas normais, sem o pedido do servidor).
+
+    temperature: média ponderada do escalar T entre clientes (mesmo princípio do
+    FedTemp — Maddock, Cormode & Maple, "Private Federated Multiclass Post-hoc
+    Calibration", preprint arXiv:2510.01987, 2025 ***— sem revisão por pares, ver
+    docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md §9.1).
+
+    isotonic: concatena os breakpoints pós-PAV (X_thresholds/y_thresholds — estatísticas
+    comprimidas, não dado bruto por amostra) de cada cliente por classe, e refaz o fit
+    sobre o conjunto agregado — mesmo espírito do histograma agregável do Cormode &
+    Markov ("Federated Calibration and Evaluation of Binary Classifiers", VLDB 2023,
+    §9.2), adaptado para thresholds isotônicos em vez de contagens de histograma.
+    """
+    calib_entries = [(n, m) for n, m in metrics if "calibration_method" in m]
+    if not calib_entries:
+        return None
+
+    method = calib_entries[0][1]["calibration_method"]
+
+    if method == "temperature":
+        total = sum(n for n, m in calib_entries if "temperature" in m)
+        if total == 0:
+            return None
+        temperature = sum(n * m["temperature"] for n, m in calib_entries if "temperature" in m) / total
+        return {
+            "calibration_method": "temperature",
+            "temperature": temperature,
+        }
+
+    if method == "isotonic":
+        per_class_pooled: Dict[int, Tuple[list, list]] = {}
+        num_classes = 0
+        for _, m in calib_entries:
+            if "isotonic_thresholds_json" not in m:
+                continue
+            thresholds = json.loads(m["isotonic_thresholds_json"])
+            num_classes = max(num_classes, len(thresholds))
+            for c, (x_list, y_list) in enumerate(thresholds):
+                x_all, y_all = per_class_pooled.setdefault(c, ([], []))
+                x_all.extend(x_list)
+                y_all.extend(y_list)
+        if not per_class_pooled:
+            return None
+        pooled_per_class = [list(per_class_pooled.get(c, ([], []))) for c in range(num_classes)]
+        return {
+            "calibration_method": "isotonic",
+            "isotonic_pooled_thresholds_json": json.dumps(pooled_per_class),
+            "isotonic_num_classes": num_classes,
+        }
+
+    return None
 
 
 def weighted_average_loss(metrics: List[Tuple[int, Dict[str, Any]]]) -> Dict[str, float]:

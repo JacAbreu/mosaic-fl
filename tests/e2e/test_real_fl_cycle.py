@@ -38,17 +38,29 @@ from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _make_loader(n: int = 40, seed: int = 0) -> DataLoader:
+    """dia (3º tensor) é obrigatório desde que DiaRelativoEmbedding foi introduzido em
+    client.py (`for batch_x, batch_y, batch_dia in self.train_loader`) — achado 2026-07-12,
+    este helper nunca foi atualizado (mesma causa-raiz de test_checkpoints_persisted_in_store,
+    ver _make_strategy(): este arquivo e2e ficou sem rodar por um tempo)."""
     torch.manual_seed(seed)
     x = torch.randint(0, 100, (n, 10))
     y = torch.randint(0, 2, (n,))
-    return DataLoader(TensorDataset(x, y), batch_size=16, shuffle=False)
+    dia = torch.randint(0, 30, (n, 10))
+    return DataLoader(TensorDataset(x, y, dia), batch_size=16, shuffle=False)
 
 
 def _make_strategy(tmp_path, tracker, history):
+    """checkpoint_store: SQLiteCheckpointStore real (não mock) — CustomFedProxStrategy
+    persiste via CheckpointStore desde a refatoração de organização de classes
+    (commit 0dc13f2); save_dir/round_*.pt não existem mais (achado 2026-07-12,
+    este teste e2e estava quebrado há algum tempo sem ninguém notar, porque
+    `make test-e2e` não roda por padrão)."""
+    from infrastructure.shared.checkpoint_store.sqlite_store import SQLiteCheckpointStore
+    checkpoint_store = SQLiteCheckpointStore(db_path=str(tmp_path / "checkpoints" / "experiment.db"))
     return CustomFedProxStrategy(
         tracker=tracker,
         history=history,
-        save_dir=str(tmp_path / "checkpoints"),
+        checkpoint_store=checkpoint_store,
         fraction_fit=1.0,
         fraction_evaluate=1.0,
         min_fit_clients=3,
@@ -136,8 +148,10 @@ class TestRealFLCycle:
         assert all(0.0 <= acc <= 1.0 for acc in history["accuracy"])
         assert all(mb > 0 for mb in history["communication_mb"])
 
-    def test_checkpoints_created_on_disk(self, tmp_path):
-        """Checkpoint real é gravado em disco a cada round."""
+    def test_checkpoints_persisted_in_store(self, tmp_path):
+        """Checkpoint real é gravado no CheckpointStore a cada round — persistência
+        vai via CheckpointStore desde a refatoração (não mais round_*.pt em disco,
+        ver _make_strategy())."""
         clients = [FedProxClient(i, _make_loader(seed=i), _make_loader(seed=i)) for i in range(3)]
         tracker = ConvergenceTracker(threshold=0.5, patience=1)
         history = {"rounds": [], "accuracy": [], "communication_mb": [], "last_checkpoint": None}
@@ -145,14 +159,14 @@ class TestRealFLCycle:
 
         _run_fl_protocol(clients, strategy, num_rounds=2)
 
-        ckpt_dir = tmp_path / "checkpoints"
-        assert ckpt_dir.exists()
-        pt_files = list(ckpt_dir.glob("round_*.pt"))
-        assert len(pt_files) >= 1, "Nenhum checkpoint de round gravado"
+        loaded = strategy.checkpoint_store.load_latest()
+        assert loaded is not None, "Nenhum checkpoint persistido no CheckpointStore"
+        assert "model_state" in loaded
+        assert history["last_checkpoint"] is not None
 
-    def test_convergence_detected_and_final_checkpoint_saved(self, tmp_path):
+    def test_convergence_detected_and_checkpoint_saved(self, tmp_path):
         """
-        Convergência detectada → final.pt criado e converged_round preenchido.
+        Convergência detectada → checkpoint persistido e converged_round preenchido.
 
         threshold=0.5 garante convergência rápida com dados sintéticos:
         qualquer Δ < 0.5 na accuracy entre rounds consecutivos converge.
@@ -166,7 +180,7 @@ class TestRealFLCycle:
 
         assert converged_at is not None, "Não convergiu em 5 rounds com threshold=0.5"
         assert tracker.converged_round is not None
-        assert (tmp_path / "checkpoints" / "final.pt").exists()
+        assert strategy.checkpoint_store.load_latest() is not None
 
     def test_fedprox_proximal_term_applied(self, tmp_path):
         """
