@@ -2,6 +2,18 @@ PYTHON   := .venv/bin/python
 PYTEST   := $(PYTHON) -m pytest
 FLWR     := .venv/bin/flwr
 
+# Carrega .env automaticamente (se existir) e exporta tudo para os subprocessos
+# das receitas (python, flwr, scripts/*.sh) — evita depender de `export` manual
+# repetido antes de make superlink/server-app/supernode/fl-server/fl-client, que
+# já causou pelo menos um bug real (FL_LLM_BACKEND/FL_LLM_MODEL caindo no default
+# huggingface/distilgpt2 silenciosamente quando não exportados na sessão do shell).
+# Valores do .env têm prioridade sobre os `?=` abaixo; para sobrescrever pontualmente
+# sem editar o .env, passe na linha de comando: make superlink FL_LLM_BACKEND=huggingface
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
 # Configurações do SuperLink (sobrescrevíveis por variável de ambiente)
 FL_TLS_CERT_DIR      ?= certs
 FL_SUPERLINK_ADDRESS ?= localhost:9091
