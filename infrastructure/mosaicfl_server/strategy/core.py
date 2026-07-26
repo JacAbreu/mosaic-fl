@@ -12,6 +12,7 @@ import logging
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
@@ -19,7 +20,7 @@ from typing import Callable, Dict, List, Optional
 import flwr as fl
 import torch
 
-from mosaicfl.core.config import FED_CFG
+from mosaicfl.core.config import FED_CFG, MODEL_CFG, RUNTIME_CFG
 from mosaicfl.core.convergence import ConvergenceTracker
 from mosaicfl.core.federated import weighted_average_accuracy, weighted_average_loss
 
@@ -33,17 +34,6 @@ from .watchdog_mixin import _WatchdogMixin
 
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
 LOG_DIR = Path(os.getenv("FL_LOG_DIR", "logs"))
-
-# Mesmo arquivo que experiments/training/core/orchestrator.py (Caminho A) já escreve
-# ao final de make training-full — a API (infrastructure/mosaicfl_api/state.py,
-# _resolve_inference_training_id) lê daqui pra saber qual training_id carregar
-# automaticamente sem parâmetro manual. Antes desta correção (achado 2026-07-25), só
-# o Caminho A escrevia este arquivo — qualquer treino real via SuperLink/SuperNode
-# (Caminho B, produção) terminava e a API continuava presa ao último training_id do
-# Caminho A, por mais antigo/pior que fosse (validado: API carregou um checkpoint de
-# 3 semanas atrás, accuracy=0.37, enquanto um treino Caminho B daquele mesmo dia
-# tinha acabado de terminar com accuracy=0.79 no melhor round).
-FEDERATED_ID_FILE = Path("experiments/last_federated_training_id.txt")
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +64,7 @@ class ProductionFedProxStrategy(
     _best_macro_auc     = None  # fallback para __new__ em testes
     _best_criterion_value = 0.0  # fallback para __new__ em testes
     _training_completed = False  # fallback para __new__ em testes
+    _last_round_resources_json = None  # fallback para __new__ em testes
 
     def __init__(
         self,
@@ -141,6 +132,11 @@ class ProductionFedProxStrategy(
         self._peak_ram_mb: float = 0.0
         self._cpu_pct_samples: List[float] = []
         self._train_start_time: float = time.time()
+        # Detalhamento por cliente da rodada atual (energia/CPU/RAM antes da
+        # agregação) — capturado em aggregate_fit(), consumido em aggregate_evaluate()
+        # pra persistir junto com o resto do histórico da rodada (achado 2026-07-26:
+        # antes só existia em log, nunca em banco — ver migration 025).
+        self._last_round_resources_json: Optional[str] = None
 
         self._training_id = training_id
         self._num_rounds = num_rounds
@@ -182,6 +178,121 @@ class ProductionFedProxStrategy(
         self._current_state.last_checkpoint = str(CHECKPOINT_DIR / f"round_{server_round}.pt")
         self._state_store.save(self._current_state)
 
+    def initialize_parameters(self, client_manager):
+        """Roda uma única vez, antes da Rodada 1 — nunca de novo durante o treino.
+
+        Ponto de extensão oficial do Flower pra isso: se retornar um valor não-None,
+        o fallback nativo ("pedir parâmetros de um cliente aleatório") nunca dispara
+        (ver flwr/server/server.py::_get_initial_parameters). Aproveitado aqui pra
+        rodar a descoberta de vocabulário bidirecional ANTES de delegar pro
+        comportamento padrão — vocabulário federado (self.vocab) fica decidido e
+        congelado antes de qualquer rodada de treino de verdade começar, exatamente
+        como a autora pediu (2026-07-26): "o vocabulário inserido a ser considerado
+        pode ser o que foi inserido até o início do treinamento".
+        """
+        self._discover_and_curate_vocab(client_manager)
+        return super().initialize_parameters(client_manager)
+
+    def _discover_and_curate_vocab(self, client_manager) -> None:
+        """Pede a cada cliente conectado os analitos locais que o vocab atual não
+        cobre (FedProxClient.evaluate(discover_vocab_only=True) — reaproveita o RPC
+        evaluate() já existente, não inventa mensagem nova), mescla as contribuições
+        (soma n_records, conta n_hospitals = nº de clientes que reportaram o mesmo
+        analito), aplica o mesmo critério de scripts/discover_analyte_catalog_gaps.py
+        e atualiza self.vocab — que a partir daqui é a única fonte usada em
+        configure_fit()/configure_evaluate() (ver fit_config_mixin.py) pro resto do
+        treino inteiro.
+
+        Nunca propaga exceção: descoberta de vocabulário é enriquecimento, uma falha
+        aqui (cliente fora do ar, timeout, erro de SQL) não pode travar o treino —
+        self.vocab simplesmente permanece como estava.
+        """
+        try:
+            from flwr.common import EvaluateIns, ndarrays_to_parameters
+
+            min_clients = getattr(self, "min_available_clients", 1) or 1
+            timeout = float(os.getenv("FL_VOCAB_DISCOVERY_TIMEOUT", "120"))
+            if not client_manager.wait_for(min_clients, timeout=int(timeout)):
+                logger.warning(
+                    "vocab_discovery_wait_timeout",
+                    extra={"min_clients": min_clients, "timeout_s": timeout},
+                )
+                return
+
+            clients = list(client_manager.all().values())
+            if not clients:
+                return
+
+            ins = EvaluateIns(
+                parameters=ndarrays_to_parameters([]),
+                config={"discover_vocab_only": True, "vocab_json": json.dumps(self.vocab)},
+            )
+
+            per_client_candidates: List[list] = []
+            with ThreadPoolExecutor(max_workers=len(clients)) as executor:
+                futures = {
+                    executor.submit(c.evaluate, ins, timeout, 0): c for c in clients
+                }
+                for future in as_completed(futures):
+                    try:
+                        res = future.result()
+                        cands = json.loads(res.metrics.get("vocab_candidates_json", "[]"))
+                        per_client_candidates.append(cands)
+                    except Exception as e:
+                        logger.warning("vocab_discovery_client_error error=%s", e)
+
+            merged: Dict[str, dict] = {}
+            for cands in per_client_candidates:
+                for c in cands:
+                    entry = merged.setdefault(
+                        c["analyte"], {"analyte": c["analyte"], "n_records": 0,
+                                       "n_hospitals": 0, "has_real_ref": False}
+                    )
+                    entry["n_records"] += c.get("n_records", 0)
+                    entry["n_hospitals"] += 1
+                    entry["has_real_ref"] = entry["has_real_ref"] or bool(c.get("has_real_ref"))
+
+            if not merged:
+                logger.info("vocab_discovery_no_candidates")
+                return
+
+            from scripts.discover_analyte_catalog_gaps import select_insertable, insert_candidates
+            from scripts.build_standard_vocab import build_standard_vocab
+
+            selected = select_insertable(list(merged.values()))
+            if not selected:
+                logger.info(
+                    "vocab_discovery_candidates_rejected",
+                    extra={"n_candidates": len(merged)},
+                )
+                return
+
+            import sqlalchemy as sa
+            engine = sa.create_engine(RUNTIME_CFG.db_url)
+            with engine.connect() as conn:
+                n_inserted = insert_candidates(conn, selected)
+
+            new_vocab = build_standard_vocab(RUNTIME_CFG.db_url)
+            if len(new_vocab) > MODEL_CFG.vocab_size:
+                logger.error(
+                    "vocab_discovery_overflow tokens=%d vocab_size=%d — mantendo vocab anterior",
+                    len(new_vocab), MODEL_CFG.vocab_size,
+                )
+                return
+
+            old_size = len(self.vocab)
+            self.vocab = new_vocab
+            logger.info(
+                "vocab_discovery_curated",
+                extra={
+                    "analitos_inseridos": n_inserted,
+                    "vocab_antes": old_size,
+                    "vocab_depois": len(self.vocab),
+                },
+            )
+        except Exception as e:
+            logger.warning("vocab_discovery_error error=%s", e)
+
     def aggregate_fit(self, server_round, results, failures):
         """Agrega pesos e salva checkpoint. Cancela watchdog do round."""
         self._cancel_round_watchdog()
@@ -203,6 +314,7 @@ class ProductionFedProxStrategy(
             if round_avg_cpu is not None:
                 self._cpu_pct_samples.append(round_avg_cpu)
             if "resource_per_client_json" in aggregated_metrics:
+                self._last_round_resources_json = aggregated_metrics["resource_per_client_json"]
                 logger.info(
                     "round_resources",
                     extra={
@@ -212,6 +324,8 @@ class ProductionFedProxStrategy(
                         "per_client": aggregated_metrics["resource_per_client_json"],
                     },
                 )
+            else:
+                self._last_round_resources_json = None
 
         if aggregated_parameters is not None:
             self._load_global_weights(aggregated_parameters)
@@ -262,6 +376,21 @@ class ProductionFedProxStrategy(
         rag_patterns_json = aggregated_metrics.get("rag_patterns_json") if aggregated_metrics else None
         calibration_method = aggregated_metrics.get("calibration_method") if aggregated_metrics else None
 
+        # Calibração por cliente ANTES da agregação — só o T/isotônico federado final
+        # (pós-agregação) ia pro checkpoint; o valor individual de cada hospital só
+        # existia no log do próprio cliente (local_calibration_fit). Extraído de
+        # "results" (raw, per-cliente) porque aggregated_metrics já é o resultado
+        # combinado — achado 2026-07-26, ver migration 025.
+        per_client_calibration = []
+        for _, evaluate_res in results:
+            m = getattr(evaluate_res, "metrics", None) or {}
+            if "calibration_method" in m:
+                entry = {"client_id": m.get("client_id"), "method": m["calibration_method"]}
+                if m["calibration_method"] == "temperature" and "temperature" in m:
+                    entry["temperature"] = m["temperature"]
+                per_client_calibration.append(entry)
+        calibration_per_client_json = json.dumps(per_client_calibration) if per_client_calibration else None
+
         self.tracker.check(accuracy)
         self.round_counter = server_round
 
@@ -283,6 +412,30 @@ class ProductionFedProxStrategy(
         self._history_losses.append(aggregated_loss)
         self._history_f1_macros.append(f1_macro)
         self._history_per_class_f1.append(per_class_f1 or [])
+
+        # Persistência incremental — a cada rodada, não só no fim do treino. Achado
+        # 2026-07-26: antes, fl_round_history só recebia dados via save_round_history()
+        # em lote, uma única vez, ao concluir o treino — se o processo caísse no meio,
+        # o histórico rodada-a-rodada só sobrevivia em logs/round_N_metrics.json
+        # (arquivo), nunca no banco. Nunca propaga exceção — persistência de histórico
+        # é enriquecimento, não deve travar o treino.
+        if self._checkpoint_store is not None and self._training_id is not None:
+            try:
+                self._checkpoint_store.save_round_history(
+                    training_id=self._training_id,
+                    rounds=[server_round],
+                    accuracies=[accuracy],
+                    losses=[aggregated_loss],
+                    f1_macros=[f1_macro],
+                    per_class_f1s=[per_class_f1 or []],
+                    resource_per_client_jsons=[self._last_round_resources_json],
+                    calibration_per_client_jsons=[calibration_per_client_json],
+                )
+            except Exception as e:
+                logger.warning(
+                    "round_history_incremental_save_error",
+                    extra={"training_id": self._training_id, "round": server_round, "error": str(e)},
+                )
 
         # Critério de melhor rodada segue FED_CFG.checkpoint_criterion (já declarado
         # em fl_trainings.checkpoint_criterion, ver register_training() em
@@ -415,20 +568,18 @@ class ProductionFedProxStrategy(
         return aggregated_loss, aggregated_metrics
 
     def _save_federated_training_id_marker(self) -> None:
-        """Grava FEDERATED_ID_FILE com self._training_id — mesmo mecanismo do Caminho A
-        (orchestrator.py), pra API descobrir automaticamente qual training_id carregar.
-        Nunca propaga exceção: é um atalho de conveniência, não uma dependência crítica
-        do treino (sem o arquivo, a API só cai no fallback de maior accuracy global)."""
+        """Marca self._training_id como o modelo ativo em fl_trainings.is_active_model
+        (CheckpointStore.mark_active_model) — a API de inferência lê essa coluna em vez
+        de um arquivo local (experiments/last_federated_training_id.txt, achado
+        2026-07-25/26: arquivo não é fonte de verdade compartilhada entre processos/
+        máquinas físicas diferentes, ver migration 024). Nunca propaga exceção: é um
+        atalho de conveniência, não uma dependência crítica do treino (sem isso, a API
+        só cai no fallback de maior accuracy global)."""
         try:
-            FEDERATED_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
-            FEDERATED_ID_FILE.write_text(str(self._training_id), encoding="utf-8")
-            logger.info(
-                "federated_training_id_saved",
-                extra={"training_id": self._training_id, "path": str(FEDERATED_ID_FILE)},
-            )
+            self._checkpoint_store.mark_active_model(self._training_id)
         except Exception as e:
             logger.warning(
-                "federated_training_id_save_error",
+                "active_model_mark_error",
                 extra={"training_id": self._training_id, "error": str(e)},
             )
 

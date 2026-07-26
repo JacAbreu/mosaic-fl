@@ -15,8 +15,8 @@ from mosaicfl.core.model import SimplifiedBEHRT
 from ..config_loader import get_config_loader
 from ..strategy import ProductionFedProxStrategy
 from infrastructure.shared.checkpoint_store import get_checkpoint_store
+from scripts.build_standard_vocab import build_standard_vocab
 
-from .checkpoint_io import _load_standard_vocab
 from .config import CHECKPOINT_DIR, LOG_DIR, SERVER_ADDRESS, _health
 from .health import write_health_status
 
@@ -162,9 +162,13 @@ class FederatedServer:
             except Exception as exc:
                 logger.warning("legacy_checkpoint_load_error", extra={"error": str(exc)})
 
-        # Fallback: se não há checkpoint ou vocab ausente, carrega standard_vocab.json
+        # Fallback: se não há checkpoint ou vocab ausente, reconstrói direto do banco
+        # (não de arquivo local — ver mesma correção em superlink.py, achado 2026-07-26).
         if not recovered_vocab:
-            recovered_vocab = _load_standard_vocab()
+            try:
+                recovered_vocab = build_standard_vocab(RUNTIME_CFG.db_url)
+            except Exception as exc:
+                logger.warning("vocab_boot_rebuild_error", extra={"error": str(exc)})
 
         strategy = ProductionFedProxStrategy(
             global_model=self.global_model,

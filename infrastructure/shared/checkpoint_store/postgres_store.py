@@ -141,6 +141,26 @@ class PostgreSQLCheckpointStore(CheckpointStore):
             total_duration_s, peak_ram_mb, avg_cpu_pct,
         )
 
+    def mark_active_model(self, training_id: int) -> None:
+        import sqlalchemy as sa
+        with self._engine.begin() as conn:
+            conn.execute(sa.text(
+                "UPDATE metrics.fl_trainings SET is_active_model=FALSE WHERE is_active_model=TRUE"
+            ))
+            conn.execute(
+                sa.text("UPDATE metrics.fl_trainings SET is_active_model=TRUE WHERE id=:training_id"),
+                {"training_id": training_id},
+            )
+        logger.info("active_model_marked_postgres training_id=%d", training_id)
+
+    def get_active_training_id(self) -> Optional[int]:
+        import sqlalchemy as sa
+        with self._engine.connect() as conn:
+            row = conn.execute(sa.text(
+                "SELECT id FROM metrics.fl_trainings WHERE is_active_model=TRUE LIMIT 1"
+            )).fetchone()
+        return row[0] if row is not None else None
+
     def save(
         self,
         round_num: int,
@@ -257,13 +277,17 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         f1_macros: Optional[list] = None,
         per_class_f1s: Optional[list] = None,
         round_durations: Optional[list] = None,
+        resource_per_client_jsons: Optional[list] = None,
+        calibration_per_client_jsons: Optional[list] = None,
     ) -> None:
         import json as _json
         import sqlalchemy as sa
-        _tau  = tau_effs        if tau_effs        is not None else [None] * len(rounds)
-        _f1   = f1_macros       if f1_macros       is not None else [None] * len(rounds)
-        _pcf1 = per_class_f1s   if per_class_f1s   is not None else [None] * len(rounds)
-        _dur  = round_durations if round_durations  is not None else [None] * len(rounds)
+        _tau   = tau_effs                     if tau_effs                     is not None else [None] * len(rounds)
+        _f1    = f1_macros                    if f1_macros                    is not None else [None] * len(rounds)
+        _pcf1  = per_class_f1s                if per_class_f1s                is not None else [None] * len(rounds)
+        _dur   = round_durations              if round_durations              is not None else [None] * len(rounds)
+        _res   = resource_per_client_jsons    if resource_per_client_jsons    is not None else [None] * len(rounds)
+        _calib = calibration_per_client_jsons if calibration_per_client_jsons is not None else [None] * len(rounds)
         rows = [
             {
                 "training_id":     training_id,
@@ -274,26 +298,35 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                 "f1_macro":        float(f)   if f   is not None else None,
                 "per_class_f1":    _json.dumps(pc) if pc is not None else None,
                 "round_duration_s": float(d)  if d   is not None else None,
+                "resource_per_client_json":    res   if res   is not None else None,
+                "calibration_per_client_json": calib if calib is not None else None,
             }
-            for r, a, l, t, f, pc, d in zip(rounds, accuracies, losses, _tau, _f1, _pcf1, _dur)
+            for r, a, l, t, f, pc, d, res, calib in zip(
+                rounds, accuracies, losses, _tau, _f1, _pcf1, _dur, _res, _calib
+            )
         ]
         if not rows:
             return
         sql = sa.text(
             "INSERT INTO metrics.fl_round_history "
-            "(training_id, round, accuracy, loss, tau_eff, f1_macro, per_class_f1, round_duration_s) "
+            "(training_id, round, accuracy, loss, tau_eff, f1_macro, per_class_f1, round_duration_s, "
+            "resource_per_client_json, calibration_per_client_json) "
             "VALUES (:training_id, :round, :accuracy, :loss, :tau_eff, :f1_macro, "
-            "cast(:per_class_f1 as jsonb), :round_duration_s) "
+            "cast(:per_class_f1 as jsonb), :round_duration_s, "
+            "cast(:resource_per_client_json as jsonb), cast(:calibration_per_client_json as jsonb)) "
             "ON CONFLICT (training_id, round) DO UPDATE SET "
             "accuracy=EXCLUDED.accuracy, loss=EXCLUDED.loss, tau_eff=EXCLUDED.tau_eff, "
             "f1_macro=EXCLUDED.f1_macro, per_class_f1=EXCLUDED.per_class_f1, "
-            "round_duration_s=EXCLUDED.round_duration_s"
+            "round_duration_s=EXCLUDED.round_duration_s, "
+            "resource_per_client_json=COALESCE(EXCLUDED.resource_per_client_json, metrics.fl_round_history.resource_per_client_json), "
+            "calibration_per_client_json=COALESCE(EXCLUDED.calibration_per_client_json, metrics.fl_round_history.calibration_per_client_json)"
         )
         with self._engine.begin() as conn:
             conn.execute(sql, rows)
         logger.info(
-            "round_history_saved training_id=%d rounds=%d tau=%s f1=%s per_class=%s dur=%s",
+            "round_history_saved training_id=%d rounds=%d tau=%s f1=%s per_class=%s dur=%s resources=%s calibration=%s",
             training_id, len(rows),
             tau_effs is not None, f1_macros is not None,
             per_class_f1s is not None, round_durations is not None,
+            resource_per_client_jsons is not None, calibration_per_client_jsons is not None,
         )

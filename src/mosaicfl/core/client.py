@@ -70,6 +70,7 @@ class FedProxClient(fl.client.NumPyClient):
         train_loader: Optional[DataLoader] = None,
         val_loader: Optional[DataLoader] = None,
         loader_factory: Optional[Callable[[str], Tuple[DataLoader, DataLoader]]] = None,
+        vocab_discovery_fn: Optional[Callable[[dict], list]] = None,
     ):
         """
         train_loader/val_loader: uso direto (simulação/testes) — dados já carregados.
@@ -78,11 +79,16 @@ class FedProxClient(fl.client.NumPyClient):
             disponível (ver _ensure_data). Recebe o vocab_json (str) e devolve
             (train_loader, val_loader) — quem cacheia entre rounds é o chamador
             (supernode.py), não este cliente (um FedProxClient novo é criado por round).
+        vocab_discovery_fn: DataSource.find_vocab_candidates (ver supernode.py::_client_fn) —
+            usado só quando evaluate() recebe config["discover_vocab_only"]=True (ver
+            ProductionFedProxStrategy.initialize_parameters, roda antes da Rodada 1, não
+            em toda rodada). None em fontes sem hospital real (simulated/csv/testes).
         """
         self.client_id = client_id
         self.train_loader = train_loader
         self.val_loader = val_loader
         self._loader_factory = loader_factory
+        self._vocab_discovery_fn = vocab_discovery_fn
         self.vocab: Optional[Dict[str, int]] = None  # setado em _ensure_data(); usado por extract_rag_patterns()
         self.model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
         self._eval_criterion = torch.nn.CrossEntropyLoss()  # sem peso para comparação entre rounds
@@ -289,6 +295,23 @@ class FedProxClient(fl.client.NumPyClient):
         }
 
     def evaluate(self, parameters: List[np.ndarray], config: Dict) -> Tuple[float, int, Dict]:
+        # Descoberta de vocabulário bidirecional — chamada síncrona da estratégia
+        # (ProductionFedProxStrategy._discover_and_curate_vocab) ANTES da Rodada 1,
+        # nunca durante o treino normal. Sai cedo, antes de _ensure_data()/
+        # set_parameters(): não carrega dado de treino, não toca no modelo — é
+        # barato e rápido de propósito, não é uma avaliação de verdade.
+        if config.get("discover_vocab_only", False):
+            candidates = []
+            if self._vocab_discovery_fn is not None:
+                try:
+                    vocab = json.loads(config.get("vocab_json", "{}"))
+                    candidates = self._vocab_discovery_fn(vocab)
+                except Exception as e:
+                    logger.warning(
+                        "vocab_discovery_error client_id=%s error=%s", self.client_id, e,
+                    )
+            return 0.0, 0, {"vocab_candidates_json": json.dumps(candidates)}
+
         self._ensure_data(config)
         self.set_parameters(parameters)
         self.model.eval()

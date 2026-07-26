@@ -87,10 +87,24 @@ embedding passa a representar tokens diferentes em cada cliente: a agregação
 federada (média dos pesos) fica sem sentido semântico, em silêncio — as rodadas
 rodam sem erro nos dois lados, mas o resultado agregado é lixo.
 
+> **Achado 2026-07-26 — o catálogo curado (`knowledge.term_dictionary`) cobre só
+> 15 analitos de um painel COVID escolhido à mão, mas os dados reais têm centenas
+> de analitos distintos.** Qualquer exame fora desses 15 vira `<UNK>` na
+> tokenização — não some, mas perde toda a informação clínica. Antes de gerar o
+> vocab, rode a descoberta de lacunas do catálogo (idempotente, seguro de repetir):
+> ```bash
+> export FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5433/mosaicfl"
+> python3 scripts/discover_analyte_catalog_gaps.py --dry-run   # revisa a lista antes
+> python3 scripts/discover_analyte_catalog_gaps.py             # grava
+> ```
+> Precisa rodar **depois** de `server-load-bpsp`/`client-load-hsl` (que já fazem o
+> backfill de `classification` automaticamente) — sem isso, boa parte dos
+> candidatos de alto volume aparece sem `classification` válida e fica de fora.
+
 ```bash
 export FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5433/mosaicfl"
 mkdir -p checkpoints
-.venv/bin/python scripts/build_standard_vocab.py --output checkpoints/standard_vocab.json
+python3 scripts/build_standard_vocab.py --output checkpoints/standard_vocab.json
 ```
 
 **Só precisa existir no desktop.** O servidor (`ServerApp`) lê esse arquivo e
@@ -98,6 +112,16 @@ distribui o vocab automaticamente a cada cliente, embutido na config de cada
 rodada (`vocab_json`) — não precisa copiar pro notebook. Se o servidor não tiver
 um vocab pra mandar (arquivo ausente e nenhum checkpoint anterior), o `ServerApp`
 agora falha ao subir, em vez de deixar os clientes com vocabulários incompatíveis.
+
+> **Cuidado com checkpoint velho sobrepondo o vocab novo.** O `ServerApp` carrega
+> o vocab embutido no último checkpoint (via `logs/training_state.json` →
+> `last_checkpoint`) **sem checar se é de uma sessão de treino diferente** — se
+> esse arquivo existir e apontar pra um `.pt` válido, ele silenciosamente ganha do
+> `standard_vocab.json` que você acabou de reconstruir. Depois de rodar
+> `discover_analyte_catalog_gaps.py`/`build_standard_vocab.py`, confira
+> `logs/training_state.json`: se `last_checkpoint` existir em disco e for de um
+> treino anterior à correção, mova ou apague esse arquivo antes do próximo
+> `flwr run` pra garantir que o vocab novo seja usado.
 
 ### 1.5 Gerar certificados TLS com o IP real do desktop
 
@@ -202,7 +226,9 @@ make client-load-hsl
 > propositalmente `NULL` — ver comentário em `scripts/db/generate_hsl_seed.py` — e a consulta
 > que carrega os dados no treino exige `classification IS NOT NULL`). O alvo roda
 > `scripts/compute_analyte_references.py` automaticamente logo após a carga, usando o
-> `FL_DB_URL` exportado acima — não precisa de passo manual separado.
+> `FL_DB_URL` exportado acima — não precisa de passo manual separado. Desde a correção de
+> 2026-07-26, esse script também garante `NO_REF` (em vez de `NULL` permanente) pra
+> qualquer analito sem referência institucional válida em hospital nenhum.
 
 ### 2.5 Copiar o certificado CA do desktop
 

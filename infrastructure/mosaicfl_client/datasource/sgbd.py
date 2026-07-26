@@ -124,6 +124,55 @@ class SGBDDataSource(DataSource):
         )
         return loader
 
+    def find_vocab_candidates(self, vocab: dict, min_records: int = 100) -> list:
+        """Analitos deste hospital, com volume mínimo local, que o `vocab` recebido
+        do servidor ainda não cobre — mesma lógica de "referência real" já usada em
+        scripts/discover_analyte_catalog_gaps.py::find_candidates(), só que escopo
+        de um hospital só (sem JOIN entre hospitais — já é local por natureza) e
+        comparando contra o `vocab` recebido em vez de knowledge.term_dictionary
+        diretamente (o vocab É o resultado já curado da rodada anterior).
+
+        Não precisa consultar term_dictionary — o "gap" que importa aqui é "o que
+        esse hospital tem e o vocab atual não cobre", não "o que esse hospital tem
+        e nunca foi catalogado em lugar nenhum" (isso é achado offline, ver
+        scripts/discover_analyte_catalog_gaps.py, caminho separado).
+        """
+        if not self.connection_string or not self.hospital_id:
+            return []
+        try:
+            import sqlalchemy
+            engine = sqlalchemy.create_engine(self.connection_string)
+            with engine.connect() as conn:
+                rows = conn.execute(sqlalchemy.text("""
+                    SELECT e.analyte, count(*) AS n_records,
+                           bool_or(
+                               ar.source = 'MEDIA_HOSPITAIS_PARTICIPANTES'
+                               AND ar.ref_low IS NOT NULL
+                               AND NOT (ar.ref_low = 0.0 AND ar.ref_high = 0.0)
+                           ) AS has_real_ref
+                    FROM metrics.exam_records e
+                    JOIN clinical.attendances a ON a.attendance_id = e.attendance_id
+                    LEFT JOIN knowledge.analyte_references ar
+                           ON ar.canonical = e.analyte AND ar.sex IS NULL
+                    WHERE a.hospital_id = :hospital_id
+                      AND e.analyte IS NOT NULL
+                    GROUP BY e.analyte
+                    HAVING count(*) >= :min_records
+                """), {"hospital_id": self.hospital_id, "min_records": min_records}).fetchall()
+        except Exception as exc:
+            logger.warning("[SGBD] find_vocab_candidates falhou hospital=%s: %s", self.hospital_id, exc)
+            return []
+
+        known_analytes = {
+            token.rsplit("_", 1)[0] if token.rsplit("_", 1)[-1] in ("HIGH", "NORMAL", "LOW") else token
+            for token in vocab
+        }
+        return [
+            {"analyte": r.analyte, "n_records": int(r.n_records), "has_real_ref": bool(r.has_real_ref)}
+            for r in rows
+            if r.analyte not in known_analytes
+        ]
+
     def get_metadata(self) -> dict:
         return {
             "type":        "sgbd",

@@ -111,6 +111,15 @@ class SQLiteCheckpointStore(CheckpointStore):
             dp_noise_multiplier, dp_max_grad_norm, dp_epsilon_simple, dp_epsilon_rdp,
         )
 
+    def mark_active_model(self, training_id: int) -> None:
+        # SQLite é o backend de simulação — não alimenta a API de inferência de
+        # produção (que só lê PostgreSQLCheckpointStore). No-op documentado, mesmo
+        # padrão já usado para save_round_history()/update_evaluation_metrics() aqui.
+        logger.debug("mark_active_model: no-op no SQLiteCheckpointStore (training_id=%d)", training_id)
+
+    def get_active_training_id(self) -> Optional[int]:
+        return None
+
     def save(
         self,
         round_num: int,
@@ -210,6 +219,8 @@ class SQLiteCheckpointStore(CheckpointStore):
         f1_macros: Optional[list] = None,
         per_class_f1s: Optional[list] = None,
         round_durations: Optional[list] = None,
+        resource_per_client_jsons: Optional[list] = None,
+        calibration_per_client_jsons: Optional[list] = None,
     ) -> None:
         # SQLite é o backend de simulação — fl_round_history existe apenas no PostgreSQL (migration 013).
         logger.debug("save_round_history: no-op no SQLiteCheckpointStore (training_id=%d)", training_id)

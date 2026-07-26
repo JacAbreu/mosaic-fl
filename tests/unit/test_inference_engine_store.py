@@ -309,9 +309,9 @@ class TestGetEngineFallback:
 
         monkeypatch.setattr(state_mod, "_CHECKPOINT_DIR", tmp_path)
         monkeypatch.setattr(state_mod, "_CHECKPOINT_SOURCE", "db")
-        monkeypatch.setattr(state_mod, "_INFERENCE_TRAINING_ID", 5)
         monkeypatch.setattr(state_mod, "_engine", None)
         monkeypatch.setenv("FL_DB_URL", "postgresql://fake/test")
+        monkeypatch.setenv("FL_TRAINING_ID", "5")
 
         with patch(
             "infrastructure.shared.checkpoint_store.get_checkpoint_store",

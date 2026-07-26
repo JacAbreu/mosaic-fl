@@ -147,6 +147,22 @@ def main() -> None:
     logger.info("tokens clínicos  : %d", len(vocab) - len(_SPECIAL))
     logger.info("vocab total      : %d tokens", len(vocab))
 
+    # Guarda contra overflow silencioso do índice de embedding — com o catálogo de
+    # term_dictionary crescendo (discover_analyte_catalog_gaps.py), um vocab maior
+    # que MODEL_CFG.vocab_size quebraria a camada de embedding sem erro claro em
+    # tempo de construção. Não dispara hoje (819 analitos × 3 tokens ~2.460, contra
+    # vocab_size=10.000), mas converte um overflow futuro numa falha explícita aqui.
+    sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+    from mosaicfl.core.config import MODEL_CFG
+    if len(vocab) > MODEL_CFG.vocab_size:
+        logger.error(
+            "vocab_overflow tokens=%d vocab_size=%d — embedding layer não comporta; "
+            "aumente MODEL_CFG.vocab_size ou aperte os critérios de "
+            "discover_analyte_catalog_gaps.py",
+            len(vocab), MODEL_CFG.vocab_size,
+        )
+        sys.exit(1)
+
     if args.dry_run:
         logger.info("--dry-run: arquivo não salvo")
         return

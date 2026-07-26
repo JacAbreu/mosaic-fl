@@ -32,3 +32,15 @@ class DataSource(ABC):
     def validate(self) -> Tuple[bool, str]:
         """Valida se a fonte está acessível. Retorna (ok, mensagem)."""
         return True, "Validação padrão: OK"
+
+    def find_vocab_candidates(self, vocab: dict, min_records: int = 100) -> list:
+        """Analitos presentes localmente com volume mínimo, ainda fora de `vocab`.
+
+        Usado pela descoberta de vocabulário bidirecional (ProductionFedProxStrategy.
+        initialize_parameters, antes da Rodada 1) — cada cliente reporta o que vê
+        localmente e não está no vocab que o servidor mandou; o servidor decide
+        os índices e redistribui. Default no-op (fontes sem hospital real, como
+        simulated/csv, não têm o que contribuir). Ver SGBDDataSource pra implementação
+        real. Formato de retorno: [{"analyte": str, "n_records": int, "has_real_ref": bool}].
+        """
+        return []

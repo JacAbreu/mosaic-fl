@@ -99,9 +99,24 @@ class CheckpointStore(ABC):
         f1_macros: Optional[list] = None,
         per_class_f1s: Optional[list] = None,
         round_durations: Optional[list] = None,
+        resource_per_client_jsons: Optional[list] = None,
+        calibration_per_client_jsons: Optional[list] = None,
     ) -> None:
-        """Persiste accuracy, loss, f1_macro, τ_eff, per_class_f1 e round_duration_s por rodada.
-        tau_effs é None por elemento quando o algoritmo é FedAvg."""
+        """Persiste accuracy, loss, f1_macro, τ_eff, per_class_f1, round_duration_s e o
+        detalhamento por cliente (recurso/calibração, ambos já serializados como string
+        JSON por elemento) por rodada. tau_effs é None por elemento quando o algoritmo é
+        FedAvg. UPSERT por (training_id, round) — chamar a cada rodada é seguro."""
+
+    @abstractmethod
+    def mark_active_model(self, training_id: int) -> None:
+        """Marca training_id como o modelo ativo (is_active_model=TRUE) — desmarca
+        qualquer outro. Substitui experiments/last_federated_training_id.txt: a API
+        de inferência lê get_active_training_id() em vez de um arquivo local, que
+        não é compartilhado entre processos/máquinas físicas diferentes."""
+
+    @abstractmethod
+    def get_active_training_id(self) -> Optional[int]:
+        """training_id marcado como ativo (mark_active_model), ou None se nenhum."""
 
     @abstractmethod
     def load_latest(self) -> Optional[Dict]:

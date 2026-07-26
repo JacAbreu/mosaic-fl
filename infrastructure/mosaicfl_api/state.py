@@ -27,26 +27,25 @@ _OUTPUT_DIR        = Path(os.getenv("FL_CLINICALPATH_OUTPUT", "data/clinicalpath
 _CHECKPOINT_SOURCE = os.getenv("FL_CHECKPOINT_SOURCE", "db")
 
 # FL_TRAINING_ID (opcional) — carrega o checkpoint de um training_id específico.
-# Se não definido, tenta ler experiments/last_federated_training_id.txt gravado
-# automaticamente pelo make training-full (fase 3/4, federado BPSP+HSL).
-# Sem nenhuma das duas fontes, load_best() usa o checkpoint com maior accuracy
-# global, que pode pertencer a qualquer fase (BPSP-only, HSL-only, etc.).
-_FEDERATED_ID_FILE = Path("experiments/last_federated_training_id.txt")
-
-def _resolve_inference_training_id() -> Optional[int]:
+# Se não definido, consulta fl_trainings.is_active_model (marcado por
+# ProductionFedProxStrategy._save_federated_training_id_marker ao fim do treino —
+# ver CheckpointStore.mark_active_model/get_active_training_id). Substitui
+# experiments/last_federated_training_id.txt (achado 2026-07-25/26: arquivo local
+# não é fonte de verdade compartilhada entre processos/máquinas físicas diferentes,
+# ver migration 024). Sem nenhuma das duas fontes, load_best() usa o checkpoint com
+# maior accuracy global, que pode pertencer a qualquer fase (BPSP-only, HSL-only, etc.).
+def _resolve_inference_training_id(db_url: Optional[str]) -> Optional[int]:
     raw = os.getenv("FL_TRAINING_ID")
     if raw:
         return int(raw)
-    if _FEDERATED_ID_FILE.exists():
-        try:
-            val = _FEDERATED_ID_FILE.read_text(encoding="utf-8").strip()
-            if val.isdigit():
-                return int(val)
-        except Exception:
-            pass
-    return None
-
-_INFERENCE_TRAINING_ID: Optional[int] = _resolve_inference_training_id()
+    if not db_url:
+        return None
+    try:
+        from infrastructure.shared.checkpoint_store import get_checkpoint_store
+        return get_checkpoint_store(db_url).get_active_training_id()
+    except Exception as exc:
+        logger.warning("active_training_id_lookup_failed: %s", exc)
+        return None
 
 # ── Integration: ClinicalPath (módulo com hífen — não é package Python) ──────
 _INTEGRATION_DIR = Path(__file__).parent.parent.parent / "integration" / "clinical-path"
@@ -155,15 +154,16 @@ def _get_engine() -> "InferenceEngine":
     global _engine
     if _engine is None:
         db_url  = os.getenv("FL_DB_URL")
+        inference_training_id = _resolve_inference_training_id(db_url)
         # Inicializa sem pesos — carrega referências clínicas do banco independente da fonte do modelo
         _engine = InferenceEngine(checkpoint_path=None, db_url=db_url)
 
         if _CHECKPOINT_SOURCE == "db":
-            primary   = lambda: _load_from_store(_engine, db_url, _INFERENCE_TRAINING_ID) if db_url else False
+            primary   = lambda: _load_from_store(_engine, db_url, inference_training_id) if db_url else False
             secondary = lambda: _load_from_file(_engine)
         else:
             primary   = lambda: _load_from_file(_engine)
-            secondary = lambda: _load_from_store(_engine, db_url, _INFERENCE_TRAINING_ID) if db_url else False
+            secondary = lambda: _load_from_store(_engine, db_url, inference_training_id) if db_url else False
 
         loaded = primary() or secondary()
 

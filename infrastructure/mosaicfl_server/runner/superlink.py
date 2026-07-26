@@ -21,8 +21,8 @@ from ..config_loader import get_config_loader
 from ..state_store import TrainingStateStore
 from ..strategy import ProductionFedProxStrategy
 from infrastructure.shared.checkpoint_store import get_checkpoint_store
+from scripts.build_standard_vocab import build_standard_vocab
 
-from .checkpoint_io import _load_standard_vocab
 from .config import LOG_DIR, _health
 from .health import write_health_status
 
@@ -112,7 +112,7 @@ def _make_server_components(context: Context) -> ServerAppComponents:
                     state_dict = ckpt
                     logger.warning(
                         "checkpoint_legacy_format — vocab ausente; "
-                        "tentando carregar standard_vocab.json como fallback"
+                        "tentando reconstruir do banco como fallback"
                     )
                 model.load_state_dict(state_dict, strict=False)
                 initial_parameters = fl.common.ndarrays_to_parameters(
@@ -129,9 +129,18 @@ def _make_server_components(context: Context) -> ServerAppComponents:
             except Exception as exc:
                 logger.warning("checkpoint_load_error", extra={"error": str(exc)})
 
-    # Fallback: se o checkpoint não trouxe vocab (primeiro round ou legado), carrega standard_vocab
+    # Fallback: se o checkpoint não trouxe vocab (primeiro round ou legado), reconstrói
+    # direto de knowledge.term_dictionary/analyte_references — não de um arquivo local.
+    # Um arquivo (checkpoints/standard_vocab.json) ficaria desatualizado silenciosamente
+    # toda vez que o vocabulário federado bidirecional inserisse algo novo entre um treino
+    # e o próximo (ver strategy/core.py::_discover_and_curate_vocab) — exatamente o tipo de
+    # "alguém esquece de regenerar" que motivou o desenho automático em primeiro lugar
+    # (achado 2026-07-26, mesma sessão). Banco é fonte única de verdade também no boot.
     if not recovered_vocab:
-        recovered_vocab = _load_standard_vocab()
+        try:
+            recovered_vocab = build_standard_vocab(RUNTIME_CFG.db_url)
+        except Exception as exc:
+            logger.warning("vocab_boot_rebuild_error", extra={"error": str(exc)})
 
     # Sem vocab nenhum, o servidor enviaria vocab_json vazio pra todos os clientes — cada um
     # cairia de volta a construir seu próprio vocab local (mesmo problema que motivou distribuir
@@ -140,8 +149,8 @@ def _make_server_components(context: Context) -> ServerAppComponents:
     if not recovered_vocab:
         raise RuntimeError(
             "Nenhum vocabulário padrão disponível (nem checkpoint anterior, nem "
-            "checkpoints/standard_vocab.json). Execute scripts/build_standard_vocab.py "
-            "antes de iniciar o ServerApp."
+            "reconstrução a partir de knowledge.term_dictionary/analyte_references). "
+            "Confira se há analitos ativos no catálogo (knowledge.term_dictionary)."
         )
 
     config_loader = get_config_loader()
@@ -188,14 +197,16 @@ def _make_server_components(context: Context) -> ServerAppComponents:
         initial_parameters=initial_parameters,
         evaluate_metrics_aggregation_fn=weighted_average_evaluate_metrics,
         fit_metrics_aggregation_fn=weighted_average_loss,
-        # vocab_json: distribui o vocabulário canônico a cada rodada, direto pelo protocolo FL —
-        # sem isso, cada cliente construía seu próprio vocab local (tamanhos incompatíveis entre
-        # hospitais), causando falha silenciosa na agregação. Ver FedProxClient._ensure_data().
+        # vocab_json NÃO é montado aqui — _FitConfigMixin._inject_current_vocab() sobrescreve
+        # com self.vocab (mutável, atualizado só uma vez em initialize_parameters(), antes da
+        # Rodada 1 — ver strategy/core.py::_discover_and_curate_vocab). Essa closure não
+        # conseguiria referenciar self.vocab de qualquer forma: a estratégia ainda não existe
+        # no momento em que este lambda é definido. `recovered_vocab` aqui só alimenta o valor
+        # INICIAL de self.vocab (constructor abaixo), não o vocab_json de cada rodada.
         on_fit_config_fn=lambda rnd: {
             "proximal_mu": proximal_mu,
             "local_epochs": local_epochs,
             "round": rnd,
-            "vocab_json": json.dumps(recovered_vocab),
         },
         # extract_rag_patterns: pede ao cliente pra extrair perfis prototípicos (RAG) só
         # na última rodada configurada — caro pra repetir a cada round (forward com atenção
@@ -212,7 +223,6 @@ def _make_server_components(context: Context) -> ServerAppComponents:
         # (ver docs/Linha_do_Tempo_MOSAIC-FL.md, seção sobre F1 federado, 2026-07-07).
         on_evaluate_config_fn=lambda rnd: {
             "round": rnd,
-            "vocab_json": json.dumps(recovered_vocab),
             "extract_rag_patterns": rnd >= num_rounds,
             "calibrate": rnd >= num_rounds,
             "calibration_method": FED_CFG.calibration_method,

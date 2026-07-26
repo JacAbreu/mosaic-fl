@@ -95,7 +95,11 @@ def _client_fn(context: Context) -> fl.client.Client:
                 logger.debug("data_cache_hit source=%s hospital_id=%s", data_source_type, hospital_id)
             return _loader_cache[cache_key]
 
-        return FedProxClient(client_id=client_id_int, loader_factory=_loader_factory).to_client()
+        return FedProxClient(
+            client_id=client_id_int,
+            loader_factory=_loader_factory,
+            vocab_discovery_fn=source.find_vocab_candidates,
+        ).to_client()
 
     if cache_key not in _loader_cache:
         logger.info(

@@ -76,10 +76,6 @@ class FederatedTraining:
         self.client_loaders, self.test_loader, self.vocab_map, self.total = \
             prepare_dataloaders(df_raw, preprocessor)
 
-    # Caminho onde o training_id do treinamento federado é gravado após cada make training-full.
-    # Lido pela API na inicialização para carregar automaticamente o modelo federado correto.
-    _FEDERATED_ID_FILE = Path("experiments/last_federated_training_id.txt")
-
     def train(self) -> None:
         self.history, self.global_model = run_federated_learning(
             self.client_loaders,
@@ -92,18 +88,19 @@ class FederatedTraining:
         )
         self._training_id = (self.history or {}).get("training_id")
 
-        # Quando há mais de 1 cliente é a fase federada do make training-full.
-        # Grava o training_id para que a API o consuma automaticamente, sem parâmetro manual.
+        # Quando há mais de 1 cliente é a fase federada do make training-full. Marca
+        # como modelo ativo (fl_trainings.is_active_model) pra API consumir
+        # automaticamente, sem parâmetro manual — substitui
+        # experiments/last_federated_training_id.txt (achado 2026-07-25/26: arquivo
+        # local não é fonte de verdade compartilhada entre processos/máquinas físicas
+        # diferentes, ver migration 024 e CheckpointStore.mark_active_model).
         if self._training_id is not None and self.client_loaders and len(self.client_loaders) > 1:
             try:
-                self._FEDERATED_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
-                self._FEDERATED_ID_FILE.write_text(str(self._training_id), encoding="utf-8")
-                logger.info(
-                    "federated_training_id_saved id=%d path=%s",
-                    self._training_id, self._FEDERATED_ID_FILE,
-                )
+                from infrastructure.shared.checkpoint_store import get_checkpoint_store
+                get_checkpoint_store(self.db_url).mark_active_model(self._training_id)
+                logger.info("active_model_marked id=%d", self._training_id)
             except Exception as exc:
-                logger.warning("Falha ao gravar %s: %s", self._FEDERATED_ID_FILE, exc)
+                logger.warning("Falha ao marcar modelo ativo (id=%d): %s", self._training_id, exc)
 
         if self.history and "rounds" in self.history and self.history["rounds"]:
             self._last_round = self.history["rounds"][-1]

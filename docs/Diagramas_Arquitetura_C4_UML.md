@@ -478,7 +478,7 @@ sequenceDiagram
     FL->>CK: checkpoint guloso
     FL->>RAG: extract_top_patterns() + build_knowledge_base()\n(pós-convergência)
     RAG-->>FL: Precision@3
-    O-->>R: resultado fase 3\n+ last_federated_training_id.txt
+    O-->>R: resultado fase 3\n+ fl_trainings.is_active_model=TRUE
 
     M->>R: fase 4/4 — BEHRT Pooled + RF baseline
     R->>O: train() (sem privacidade, budget equivalente)

@@ -7,6 +7,10 @@ Metodologia — média em dois níveis:
   2. Entre hospitais: AVG das médias anteriores para cada analito
   Cada hospital tem peso igual, independente do volume de registros.
 
+Além disso, garante um placeholder NO_REF para analitos sem nenhuma referência
+institucional válida em hospital nenhum — sem isso, classification fica NULL
+para sempre nesses casos (achado 2026-07-26, ver insert_no_ref_placeholders()).
+
 Uso:
     python3 scripts/compute_analyte_references.py
     python3 scripts/compute_analyte_references.py --dry-run   # só exibe, não grava
@@ -80,7 +84,14 @@ def compute(conn, min_hospitals: int = 1) -> list[dict]:
 
 
 def persist(conn, entries: list[dict]) -> int:
-    """Grava as entradas em knowledge.analyte_references (upsert)."""
+    """Grava as entradas em knowledge.analyte_references (upsert).
+
+    ON CONFLICT (canonical) WHERE sex IS NULL — não (canonical, sex): SQL nunca
+    considera NULL = NULL para fins de unicidade, então "ON CONFLICT (canonical,
+    sex)" nunca detectava conflito quando sex é NULL (todas as entradas de
+    compute() usam sex=None). Cada reexecução inseria uma linha duplicada em vez
+    de atualizar — achado 2026-07-26, corrigido junto com a migration 023
+    (índice único parcial + dedup das linhas já duplicadas)."""
     from sqlalchemy import text
 
     upserted = 0
@@ -89,7 +100,7 @@ def persist(conn, entries: list[dict]) -> int:
             INSERT INTO knowledge.analyte_references
                 (canonical, sex, ref_low, ref_high, n_hospitals, source, computed_at)
             VALUES (:canonical, :sex, :ref_low, :ref_high, :n_hospitals, :source, NOW())
-            ON CONFLICT (canonical, sex)
+            ON CONFLICT (canonical) WHERE sex IS NULL
             DO UPDATE SET
                 ref_low     = EXCLUDED.ref_low,
                 ref_high    = EXCLUDED.ref_high,
@@ -101,6 +112,65 @@ def persist(conn, entries: list[dict]) -> int:
 
     conn.commit()
     return upserted
+
+
+def insert_no_ref_placeholders(conn, dry_run: bool = False) -> list[str]:
+    """
+    Garante uma linha em knowledge.analyte_references para todo analito presente em
+    metrics.exam_records, mesmo quando nenhum hospital jamais reportou ref_low/ref_high
+    válidos (>0) para ele. Sem isso, compute() nunca produz linha nenhuma pra esses
+    analitos (o filtro "(e.ref_low > 0 OR e.ref_high > 0)" é correto — não dá pra
+    calcular média de zeros-placeholder) e backfill_classifications() nunca encontra
+    join — classification fica NULL para sempre, mesmo classify() e o CASE abaixo já
+    reconhecendo ref_low=0/ref_high=0 como 'NO_REF'.
+
+    Achado 2026-07-26: 526 analitos, 865.552 registros no BPSP, presos assim.
+
+    Insere ref_low=0.0, ref_high=0.0 — exatamente a condição que classify() e o CASE
+    de backfill_classifications() já tratam como 'NO_REF'. Nenhuma mudança necessária
+    nessas duas funções. Idempotente (ON CONFLICT + NOT EXISTS) — nunca sobrescreve
+    uma referência real já calculada por compute()/persist().
+
+    Deve rodar depois de persist() (para não competir com refs reais) e antes de
+    backfill_classifications() (que depende da linha já existir).
+    """
+    from sqlalchemy import text
+
+    if dry_run:
+        n = conn.execute(text("""
+            SELECT COUNT(DISTINCT e.analyte)
+            FROM metrics.exam_records e
+            WHERE e.analyte IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM knowledge.analyte_references r
+                  WHERE r.canonical = e.analyte AND r.sex IS NULL
+              )
+        """)).scalar_one()
+        log.info(f"  [dry-run] {n} analitos receberiam placeholder NO_REF.")
+        return []
+
+    rows = conn.execute(text("""
+        INSERT INTO knowledge.analyte_references
+            (canonical, sex, ref_low, ref_high, n_hospitals, source, computed_at)
+        SELECT DISTINCT e.analyte, NULL, 0.0, 0.0, 0,
+               'SEM_REFERENCIA_INSTITUCIONAL', NOW()
+        FROM metrics.exam_records e
+        WHERE e.analyte IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM knowledge.analyte_references r
+              WHERE r.canonical = e.analyte AND r.sex IS NULL
+          )
+        ON CONFLICT (canonical) WHERE sex IS NULL DO NOTHING
+        RETURNING canonical
+    """)).fetchall()
+    conn.commit()
+
+    canonicals = [r.canonical for r in rows]
+    log.info(
+        f"  {len(canonicals)} placeholders NO_REF inseridos "
+        f"(analitos sem referência institucional válida em nenhum hospital)."
+    )
+    return canonicals
 
 
 def classify(value: float, ref_low: float | None, ref_high: float | None) -> str:
@@ -190,11 +260,14 @@ def main() -> None:
         print_report(entries)
 
         if args.dry_run:
+            insert_no_ref_placeholders(conn, dry_run=True)
             log.info("Modo dry-run — nenhum dado gravado.")
             return
 
         n = persist(conn, entries)
         log.info(f"  {n} entradas gravadas em knowledge.analyte_references.")
+
+        insert_no_ref_placeholders(conn)
 
         if not args.no_backfill:
             backfill_classifications(conn)

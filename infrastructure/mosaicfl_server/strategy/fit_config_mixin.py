@@ -1,4 +1,5 @@
 """fit_config_mixin.py — Configuração de round (leitura de config dinâmica) e carregamento de pesos agregados."""
+import json
 import logging
 import time
 from collections import OrderedDict
@@ -13,6 +14,18 @@ logger = logging.getLogger(__name__)
 class _FitConfigMixin:
     """Requer os atributos definidos em ProductionFedProxStrategy.__init__ (config_loader, global_model,
     on_round_start, proximal_mu) e o método _start_round_watchdog (de _WatchdogMixin)."""
+
+    def _inject_current_vocab(self, instructions: List[Tuple]) -> List[Tuple]:
+        """Sobrescreve vocab_json em cada (ClientProxy, Ins) com self.vocab — fonte
+        única e mutável (atualizada só em initialize_parameters(), antes da Rodada 1,
+        ver strategy/core.py::_discover_and_curate_vocab). Os lambdas
+        on_fit_config_fn/on_evaluate_config_fn (superlink.py) não têm como referenciar
+        self.vocab diretamente (a estratégia ainda não existe no momento em que são
+        definidos) — por isso a injeção acontece aqui, depois que o Flower já monta
+        a config base a partir deles."""
+        for _, ins in instructions:
+            ins.config["vocab_json"] = json.dumps(self.vocab)
+        return instructions
 
     def configure_fit(
         self, server_round: int, parameters, client_manager
@@ -51,7 +64,17 @@ class _FitConfigMixin:
                 logger.warning("round_start_callback_error", extra={"round": server_round, "error": str(e)})
 
         self._start_round_watchdog(server_round)
-        return super().configure_fit(server_round, parameters, client_manager)
+        instructions = super().configure_fit(server_round, parameters, client_manager)
+        return self._inject_current_vocab(instructions)
+
+    def configure_evaluate(
+        self, server_round: int, parameters, client_manager
+    ) -> List[Tuple]:
+        """Mesma injeção de self.vocab que configure_fit() já faz — sem isso, a
+        Rodada de avaliação usaria o vocab capturado por closure em superlink.py
+        (achado 2026-07-26, ver initialize_parameters/_discover_and_curate_vocab)."""
+        instructions = super().configure_evaluate(server_round, parameters, client_manager)
+        return self._inject_current_vocab(instructions)
 
     def _load_global_weights(self, parameters) -> None:
         """Carrega pesos agregados no modelo global (compatível com client).
