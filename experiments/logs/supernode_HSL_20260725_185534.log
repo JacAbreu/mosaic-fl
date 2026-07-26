@@ -1,0 +1,8 @@
+╭────────────────── Update available ───────────────────╮
+│ A newer Flower version is available: 1.30.0 -> 1.32.1 │
+│ Upgrade: python -m pip install -U flwr                │
+╰───────────────────────────────────────────────────────╯
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 14771793386431387617
+[92mINFO [0m:      Starting Flower SuperExec

@@ -1,0 +1,287 @@
+[92mINFO [0m:      Starting Flower SuperNode
+[92mINFO [0m:      Flower Deployment Runtime: Starting ClientAppIo API on 0.0.0.0:9094
+[92mINFO [0m:      SuperNode ID: 10731583834877257920
+[92mINFO [0m:      Starting Flower SuperExec
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 1]
+[92mINFO [0m:      Receiving: train message (ID: 5957c8052432cd2cb6cd496b73d276e85b302d81f370812d46883a41a7a1e861)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+Successfully installed mosaicfl to /home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3.
+[FACTORY] Validação falhou: Connection string não configurada. Defina FL_DB_URL.
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/runner/supernode.py", line 47, in _client_fn
+    source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/datasource/factory.py", line 53, in create
+    raise RuntimeError(f"Fonte de dados inválida: {msg}")
+RuntimeError: Fonte de dados inválida: Connection string não configurada. Defina FL_DB_URL.
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 1]
+[92mINFO [0m:      Sending: train message (ID: 907ffff5b91ba81b388552a257c8144f704fa5af96937e4f0c652e6b23474bec)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 1]
+[92mINFO [0m:      Receiving: evaluate message (ID: c72d99cf75ac441b143054ee08b711fe6b64d1289d4dcb52313849b76ad97066)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[FACTORY] Validação falhou: Connection string não configurada. Defina FL_DB_URL.
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/runner/supernode.py", line 47, in _client_fn
+    source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/datasource/factory.py", line 53, in create
+    raise RuntimeError(f"Fonte de dados inválida: {msg}")
+RuntimeError: Fonte de dados inválida: Connection string não configurada. Defina FL_DB_URL.
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 1]
+[92mINFO [0m:      Sending: evaluate message (ID: 2782b45d7eab410623150e4838245704bc4699a18c816498aac8273d2cf7a95f)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 2]
+[92mINFO [0m:      Receiving: train message (ID: f05d094efbd11d2326e7e141d19bf92456f22dc6c0fb310e7779e10ec397bcbc)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[FACTORY] Validação falhou: Connection string não configurada. Defina FL_DB_URL.
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/runner/supernode.py", line 47, in _client_fn
+    source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/datasource/factory.py", line 53, in create
+    raise RuntimeError(f"Fonte de dados inválida: {msg}")
+RuntimeError: Fonte de dados inválida: Connection string não configurada. Defina FL_DB_URL.
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 2]
+[92mINFO [0m:      Sending: train message (ID: 7200aa1e0d2d0e2edf3b42f3abd474d0d7e701d51ae2af4ad9e93c131d9601ae)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 2]
+[92mINFO [0m:      Receiving: evaluate message (ID: 05f713fa0708f2ddb20a8453c17e1674f425baf9b3bfa6c9d834af725dc97514)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[FACTORY] Validação falhou: Connection string não configurada. Defina FL_DB_URL.
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/runner/supernode.py", line 47, in _client_fn
+    source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/datasource/factory.py", line 53, in create
+    raise RuntimeError(f"Fonte de dados inválida: {msg}")
+RuntimeError: Fonte de dados inválida: Connection string não configurada. Defina FL_DB_URL.
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 2]
+[92mINFO [0m:      Sending: evaluate message (ID: 49446eb1a5cb0e47e8854b956fa4def383cb840f1b6473aadc03ec4d4666d6f5)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 3]
+[92mINFO [0m:      Receiving: train message (ID: f5eb837401b7a6a9ca799897ffd3061967692ca8873275da238b5b95214edb65)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[FACTORY] Validação falhou: Connection string não configurada. Defina FL_DB_URL.
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/runner/supernode.py", line 47, in _client_fn
+    source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/datasource/factory.py", line 53, in create
+    raise RuntimeError(f"Fonte de dados inválida: {msg}")
+RuntimeError: Fonte de dados inválida: Connection string não configurada. Defina FL_DB_URL.
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 3]
+[92mINFO [0m:      Sending: train message (ID: 49479cc2b800ce9f486693d81c749ebfce67cc945c5d196e02e76eb547b04973)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 3]
+[92mINFO [0m:      Receiving: evaluate message (ID: a26330f499ea9fff517449152bb65184431ee6e09de17bb698761b550d565152)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[FACTORY] Validação falhou: Connection string não configurada. Defina FL_DB_URL.
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/runner/supernode.py", line 47, in _client_fn
+    source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/datasource/factory.py", line 53, in create
+    raise RuntimeError(f"Fonte de dados inválida: {msg}")
+RuntimeError: Fonte de dados inválida: Connection string não configurada. Defina FL_DB_URL.
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 3]
+[92mINFO [0m:      Sending: evaluate message (ID: 2c599032a7c5830a100c899af9de3176c18fa5e601e99f4fbb480a970d7a7bd7)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 4]
+[92mINFO [0m:      Receiving: train message (ID: def1559c68814059df8f6ba1701cd89b93f4c4dc8090a2493ccfdf995c4fb9f3)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[FACTORY] Validação falhou: Connection string não configurada. Defina FL_DB_URL.
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/runner/supernode.py", line 47, in _client_fn
+    source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/datasource/factory.py", line 53, in create
+    raise RuntimeError(f"Fonte de dados inválida: {msg}")
+RuntimeError: Fonte de dados inválida: Connection string não configurada. Defina FL_DB_URL.
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 4]
+[92mINFO [0m:      Sending: train message (ID: f51dc1f90c2e1f86671cbeadfad6e8de79a5837b3193908e30beb84650365d67)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 4]
+[92mINFO [0m:      Receiving: evaluate message (ID: f24c236fbbc3f20bbe97f27b5d9bd2474eb449a7df1a95b8035d96d757d43402)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[FACTORY] Validação falhou: Connection string não configurada. Defina FL_DB_URL.
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/runner/supernode.py", line 47, in _client_fn
+    source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/datasource/factory.py", line 53, in create
+    raise RuntimeError(f"Fonte de dados inválida: {msg}")
+RuntimeError: Fonte de dados inválida: Connection string não configurada. Defina FL_DB_URL.
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 4]
+[92mINFO [0m:      Sending: evaluate message (ID: a7e0e285a710ee4b44e978ba72c04aa2c97cc99339b51b17f6cac1b5a7b347f1)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 5]
+[92mINFO [0m:      Receiving: train message (ID: 80be8ef44f82891ba459a522524c99aaf1137ba0664dfcfffbf4b6c92332d9f6)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[FACTORY] Validação falhou: Connection string não configurada. Defina FL_DB_URL.
+[91mERROR [0m:     ClientApp raised an exception
+Traceback (most recent call last):
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/supernode/runtime/run_clientapp.py", line 173, in run_clientapp
+    reply_message = client_app(message=message, context=context)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 144, in __call__
+    return self._call(message, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/clientapp/client_app.py", line 128, in ffn
+    out_message = handle_legacy_message_from_msgtype(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/studies/usp/tcc/mosaic-fl/.venv/lib/python3.12/site-packages/flwr/client/message_handler/message_handler.py", line 97, in handle_legacy_message_from_msgtype
+    client = client_fn(context)
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/runner/supernode.py", line 47, in _client_fn
+    source = DataSourceFactory.create(data_source_type, hospital_id=hospital_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jacabreu/.flwr/apps/mosaic-fl.mosaicfl.0.2.0.ec749db3/infrastructure/mosaicfl_client/datasource/factory.py", line 53, in create
+    raise RuntimeError(f"Fonte de dados inválida: {msg}")
+RuntimeError: Fonte de dados inválida: Connection string não configurada. Defina FL_DB_URL.
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 5]
+[92mINFO [0m:      Sending: train message (ID: 739b9311ab25e0c91390a6ab29cca8e02f1a9ae21a47049c901b1bc46f5a7bf8)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 15994887216917386584, ROUND 5]
+[92mINFO [0m:      Receiving: evaluate message (ID: 32cec89a760d73a918315162cf980751396543cd12e2e03074458caf28304287)
