@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
@@ -69,6 +70,8 @@ class ProductionFedProxStrategy(
     _run_id             = None  # fallback para __new__ em testes
     _best_round         = 0     # fallback para __new__ em testes
     _best_accuracy      = 0.0   # fallback para __new__ em testes
+    _best_f1_macro      = 0.0   # fallback para __new__ em testes
+    _best_macro_auc     = None  # fallback para __new__ em testes
     _best_criterion_value = 0.0  # fallback para __new__ em testes
     _training_completed = False  # fallback para __new__ em testes
 
@@ -130,12 +133,22 @@ class ProductionFedProxStrategy(
         # potência é amostrada por rodada e usada pra média/pico ao final.
         self._gpu_energy_wh_total: float = 0.0
         self._gpu_power_samples: List[float] = []
+        # peak_ram_mb/avg_cpu_pct de fl_trainings ficavam sempre em 0.0 no Caminho B —
+        # a captura por cliente/rodada (resource_per_client_json) já existia, mas nunca
+        # tinha sido acumulada em nível de treino nem passada pro complete_training()
+        # (só a energia da GPU tinha esse acúmulo). Achado 2026-07-26, mesma sessão que
+        # consertou o mesmo tipo de lacuna pra energia.
+        self._peak_ram_mb: float = 0.0
+        self._cpu_pct_samples: List[float] = []
+        self._train_start_time: float = time.time()
 
         self._training_id = training_id
         self._num_rounds = num_rounds
         self._run_id = run_id
         self._best_round = 0
         self._best_accuracy = 0.0
+        self._best_f1_macro: float = 0.0
+        self._best_macro_auc: Optional[float] = None
         self._training_completed = False
 
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
@@ -183,6 +196,12 @@ class ProductionFedProxStrategy(
             round_gpu_avg_power = aggregated_metrics.get("resource_round_gpu_avg_power_w")
             if round_gpu_avg_power is not None:
                 self._gpu_power_samples.append(round_gpu_avg_power)
+            round_peak_ram = aggregated_metrics.get("resource_round_peak_ram_mb")
+            if round_peak_ram is not None:
+                self._peak_ram_mb = max(self._peak_ram_mb, round_peak_ram)
+            round_avg_cpu = aggregated_metrics.get("resource_round_avg_cpu_pct")
+            if round_avg_cpu is not None:
+                self._cpu_pct_samples.append(round_avg_cpu)
             if "resource_per_client_json" in aggregated_metrics:
                 logger.info(
                     "round_resources",
@@ -237,6 +256,7 @@ class ProductionFedProxStrategy(
 
         accuracy = aggregated_metrics.get("accuracy", 0.0) if aggregated_metrics else 0.0
         f1_macro = aggregated_metrics.get("f1_macro", 0.0) if aggregated_metrics else 0.0
+        macro_auc = aggregated_metrics.get("macro_auc") if aggregated_metrics else None
         per_class_f1_json = aggregated_metrics.get("per_class_f1_json") if aggregated_metrics else None
         per_class_f1 = json.loads(per_class_f1_json) if per_class_f1_json else None
         rag_patterns_json = aggregated_metrics.get("rag_patterns_json") if aggregated_metrics else None
@@ -273,6 +293,8 @@ class ProductionFedProxStrategy(
         if criterion_value > self._best_criterion_value:
             self._best_criterion_value = criterion_value
             self._best_accuracy = accuracy
+            self._best_f1_macro = f1_macro
+            self._best_macro_auc = macro_auc
             self._best_round = server_round
 
         metrics_file = LOG_DIR / f"round_{server_round}_metrics.json"
@@ -314,12 +336,17 @@ class ProductionFedProxStrategy(
             gpu_avg_power_w  = sum(self._gpu_power_samples) / len(self._gpu_power_samples) if self._gpu_power_samples else None
             gpu_peak_power_w = max(self._gpu_power_samples) if self._gpu_power_samples else None
             gpu_energy_wh    = self._gpu_energy_wh_total if self._gpu_energy_wh_total > 0 else None
+            total_duration_s = time.time() - self._train_start_time
+            avg_cpu_pct      = sum(self._cpu_pct_samples) / len(self._cpu_pct_samples) if self._cpu_pct_samples else 0.0
             self._checkpoint_store.complete_training(
                 training_id=self._training_id,
                 n_rounds_done=server_round,
                 best_round=self._best_round,
                 best_accuracy=self._best_accuracy,
                 converged=converged,
+                total_duration_s=total_duration_s,
+                peak_ram_mb=self._peak_ram_mb,
+                avg_cpu_pct=avg_cpu_pct,
                 gpu_avg_power_w=gpu_avg_power_w,
                 gpu_peak_power_w=gpu_peak_power_w,
                 gpu_energy_wh=gpu_energy_wh,
@@ -332,12 +359,34 @@ class ProductionFedProxStrategy(
                     "best_round": self._best_round,
                     "best_accuracy": self._best_accuracy,
                     "converged": converged,
+                    "total_duration_s": total_duration_s,
+                    "peak_ram_mb": self._peak_ram_mb,
+                    "avg_cpu_pct": avg_cpu_pct,
                     "gpu_avg_power_w": gpu_avg_power_w,
                     "gpu_peak_power_w": gpu_peak_power_w,
                     "gpu_energy_wh": gpu_energy_wh,
                 },
             )
             self._save_federated_training_id_marker()
+            try:
+                self._checkpoint_store.update_evaluation_metrics(
+                    training_id=self._training_id,
+                    macro_f1=self._best_f1_macro,
+                    macro_auc=self._best_macro_auc,
+                )
+                logger.info(
+                    "evaluation_metrics_updated",
+                    extra={
+                        "training_id": self._training_id,
+                        "macro_f1": self._best_f1_macro,
+                        "macro_auc": self._best_macro_auc,
+                    },
+                )
+            except Exception as e:
+                logger.warning(
+                    "evaluation_metrics_update_error",
+                    extra={"training_id": self._training_id, "error": str(e)},
+                )
             try:
                 self._checkpoint_store.save_round_history(
                     training_id=self._training_id,

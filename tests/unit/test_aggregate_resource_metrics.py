@@ -88,3 +88,34 @@ class TestWeightedAverageLossIntegration:
         result = weighted_average_loss(metrics)
         assert abs(result["loss"] - 0.4) < 1e-9
         assert "resource_per_client_json" not in result
+
+
+class TestAggregateResourceMetricsRamCpu:
+    """peak_ram_mb/avg_cpu_pct de fl_trainings ficavam sempre em 0.0 no Caminho B —
+    a captura por cliente existia mas nunca era resumida em nível de rodada. Achado
+    2026-07-26, mesma classe de lacuna já corrigida pra energia da GPU."""
+
+    def test_peak_ram_is_max_not_average(self):
+        metrics = [
+            (100, {"resource_duration_s": 60.0, "resource_cpu_pct": 200.0, "resource_ram_mb": 500.0}),
+            (100, {"resource_duration_s": 60.0, "resource_cpu_pct": 400.0, "resource_ram_mb": 1200.0}),
+        ]
+        result = aggregate_resource_metrics(metrics)
+        assert result["resource_round_peak_ram_mb"] == 1200.0
+
+    def test_avg_cpu_is_mean_of_samples(self):
+        metrics = [
+            (100, {"resource_duration_s": 60.0, "resource_cpu_pct": 200.0, "resource_ram_mb": 500.0}),
+            (100, {"resource_duration_s": 60.0, "resource_cpu_pct": 400.0, "resource_ram_mb": 500.0}),
+        ]
+        result = aggregate_resource_metrics(metrics)
+        assert result["resource_round_avg_cpu_pct"] == 300.0
+
+    def test_present_even_without_gpu(self):
+        """RAM/CPU são amostrados independente de GPU existir — não devem ficar
+        condicionados à presença de resource_gpu_power_w."""
+        metrics = [(100, {"resource_duration_s": 60.0, "resource_cpu_pct": 250.0, "resource_ram_mb": 600.0})]
+        result = aggregate_resource_metrics(metrics)
+        assert "resource_round_gpu_energy_wh" not in result
+        assert result["resource_round_peak_ram_mb"] == 600.0
+        assert result["resource_round_avg_cpu_pct"] == 250.0

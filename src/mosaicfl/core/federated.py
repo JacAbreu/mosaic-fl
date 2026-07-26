@@ -63,6 +63,15 @@ def weighted_average_evaluate_metrics(metrics: List[Tuple[int, Dict[str, Any]]])
         ]
         result["per_class_f1_json"] = json.dumps(per_class_f1)
 
+    # macro_auc: nem todo cliente necessariamente envia (ver _macro_auc_ovr em client.py —
+    # omitido quando nenhuma classe tem as duas categorias presentes localmente). Média
+    # ponderada só entre quem enviou, com o peso de amostras de quem enviou — não do total
+    # geral, senão um cliente sem AUC "puxaria a média pra baixo" silenciosamente.
+    auc_entries = [(n, m["macro_auc"]) for n, m in metrics if m.get("macro_auc") is not None]
+    if auc_entries:
+        auc_total = sum(n for n, _ in auc_entries)
+        result["macro_auc"] = sum(n * v for n, v in auc_entries) / auc_total
+
     # Padrões pro RAG (rag_patterns_json) — só presentes na rodada em que o servidor
     # pediu (config extract_rag_patterns). Diferente de accuracy/F1, NÃO se faz média —
     # são perfis independentes por hospital, concatenados numa base de conhecimento
@@ -158,12 +167,18 @@ def aggregate_resource_metrics(metrics: List[Tuple[int, Dict[str, Any]]]) -> Opt
     per_client: list = []
     total_gpu_energy_wh = 0.0
     gpu_power_samples: List[float] = []
+    ram_samples: List[float] = []
+    cpu_samples: List[float] = []
     for _, m in resource_entries:
         entry = {
             "duration_s": m.get("resource_duration_s"),
             "cpu_pct":    m.get("resource_cpu_pct"),
             "ram_mb":     m.get("resource_ram_mb"),
         }
+        if entry["ram_mb"] is not None:
+            ram_samples.append(entry["ram_mb"])
+        if entry["cpu_pct"] is not None:
+            cpu_samples.append(entry["cpu_pct"])
         if "resource_gpu_power_w" in m:
             entry["gpu_power_w"] = m["resource_gpu_power_w"]
             gpu_power_samples.append(m["resource_gpu_power_w"])
@@ -178,6 +193,16 @@ def aggregate_resource_metrics(metrics: List[Tuple[int, Dict[str, Any]]]) -> Opt
     if gpu_power_samples:
         result["resource_round_gpu_avg_power_w"]  = sum(gpu_power_samples) / len(gpu_power_samples)
         result["resource_round_gpu_peak_power_w"] = max(gpu_power_samples)
+    # peak (não média) — o pico entre clientes é o que importa pra provisionamento de RAM,
+    # mesmo raciocínio da energia da GPU. cpu_pct já é um "%" (pode passar de 100% com
+    # múltiplas threads); manter como média simples entre as amostras deste round é uma
+    # aproximação aceitável — hardware heterogêneo entre clientes (BPSP com GPU, HSL sem)
+    # torna qualquer agregado único imperfeito, mas fl_trainings.avg_cpu_pct só tem espaço
+    # pra um escalar (o detalhamento fino continua em resource_per_client_json acima).
+    if ram_samples:
+        result["resource_round_peak_ram_mb"] = max(ram_samples)
+    if cpu_samples:
+        result["resource_round_avg_cpu_pct"] = sum(cpu_samples) / len(cpu_samples)
     return result
 
 

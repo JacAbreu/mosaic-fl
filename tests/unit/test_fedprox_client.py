@@ -385,3 +385,78 @@ class TestFedProxClientResourceMetrics:
             assert "resource_gpu_energy_wh" not in metrics
         finally:
             object.__setattr__(FED_CFG, "collect_resource_metrics", original)
+
+
+class TestMacroAucOvr:
+    """_macro_auc_ovr() — AUC-ROC macro (one-vs-rest) calculado localmente no cliente.
+    Achado 2026-07-26: fl_trainings.macro_auc/macro_f1 sempre NULL no Caminho B porque
+    AUC nunca era calculado em lugar nenhum (diferente de F1, que já era calculado no
+    cliente desde a implementação do RAG federado)."""
+
+    def test_perfect_separation_gives_auc_one(self):
+        from mosaicfl.core.client import _macro_auc_ovr
+        # classe 0: alta prob pra classe 0; classe 1: alta prob pra classe 1 — separação perfeita
+        probs = torch.tensor([
+            [0.9, 0.1], [0.8, 0.2], [0.1, 0.9], [0.2, 0.8],
+        ])
+        labels = [0, 0, 1, 1]
+        auc = _macro_auc_ovr(probs, labels, num_classes=2)
+        assert auc == pytest.approx(1.0)
+
+    def test_returns_none_when_all_classes_missing_or_degenerate(self):
+        from mosaicfl.core.client import _macro_auc_ovr
+        # só a classe 0 está presente (100% das amostras) — as duas categorias
+        # (positivo/negativo) nunca coexistem pra nenhuma classe
+        probs = torch.tensor([[0.9, 0.05, 0.05]] * 4)
+        labels = [0, 0, 0, 0]
+        auc = _macro_auc_ovr(probs, labels, num_classes=3)
+        assert auc is None
+
+    def test_skips_missing_classes_averages_only_valid_ones(self):
+        from mosaicfl.core.client import _macro_auc_ovr
+        # classe 2 nunca aparece localmente (cenário real: HSL sem melhora_pronto) —
+        # não deve derrubar o cálculo pras classes 0 e 1, que têm as duas categorias
+        probs = torch.tensor([
+            [0.9, 0.05, 0.05], [0.8, 0.1, 0.1],
+            [0.1, 0.85, 0.05], [0.2, 0.75, 0.05],
+        ])
+        labels = [0, 0, 1, 1]
+        auc = _macro_auc_ovr(probs, labels, num_classes=3)
+        assert auc is not None
+        assert 0.0 <= auc <= 1.0
+
+    def test_never_raises_on_degenerate_input(self):
+        from mosaicfl.core.client import _macro_auc_ovr
+        probs = torch.full((3, 5), 0.2)
+        labels = [0, 0, 0]
+        auc = _macro_auc_ovr(probs, labels, num_classes=5)  # não deve levantar exceção
+        assert auc is None
+
+
+class TestEvaluateMacroAuc:
+    def test_evaluate_includes_macro_auc_when_computable(self):
+        """Rótulos cobrindo pelo menos 2 classes com as duas categorias presentes —
+        macro_auc deve aparecer e estar em [0,1]."""
+        from mosaicfl.core.client import FedProxClient
+        seq_len = 8
+        x   = torch.randint(1, VOCAB_SIZE, (12, seq_len))
+        y   = torch.tensor([0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1])
+        dia = torch.randint(0, 100, (12, seq_len))
+        loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
+        client = FedProxClient(0, loader, loader)
+        params = client.get_parameters({})
+        _, _, metrics = client.evaluate(params, {})
+        assert "macro_auc" in metrics
+        assert 0.0 <= metrics["macro_auc"] <= 1.0
+
+    def test_evaluate_does_not_crash_with_degenerate_labels(self):
+        from mosaicfl.core.client import FedProxClient
+        seq_len = 8
+        x = torch.randint(1, VOCAB_SIZE, (4, seq_len))
+        y = torch.zeros(4, dtype=torch.long)  # todas as amostras são da mesma classe
+        dia = torch.randint(0, 100, (4, seq_len))
+        loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
+        client = FedProxClient(0, loader, loader)
+        params = client.get_parameters({})
+        _, _, metrics = client.evaluate(params, {})  # não deve levantar exceção
+        assert "macro_auc" not in metrics

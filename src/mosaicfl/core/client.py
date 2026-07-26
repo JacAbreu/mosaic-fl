@@ -18,6 +18,7 @@ import time
 import numpy as np
 import psutil
 import torch
+import torch.nn.functional as F
 import flwr as fl
 from torch.utils.data import DataLoader, TensorDataset
 from collections import OrderedDict
@@ -31,6 +32,35 @@ from mosaicfl.core.model import SimplifiedBEHRT
 from .calibration import IsotonicCalibrator, TemperatureScaler
 from .config import FED_CFG, MODEL_CFG, RUNTIME_CFG
 from .resources import sample_gpu_power_w
+
+
+def _macro_auc_ovr(probs: torch.Tensor, labels: List[int], num_classes: int) -> Optional[float]:
+    """AUC-ROC macro (one-vs-rest), calculado localmente no cliente — mesma filosofia
+    de privacidade do F1 (client.py::evaluate): só o escalar agregado sai do hospital,
+    nunca probabilidade/rótulo bruto por amostra.
+
+    Diferente de F1 (zero_division=0 é uma convenção válida), AUC não tem convenção
+    de "classe ausente" — uma classe com 0 exemplos positivos no val_loader local
+    deixa a sub-tarefa binária "classe c vs. resto" matematicamente indefinida, não
+    zero. BPSP e HSL têm distribuições de classe muito diferentes (ver
+    docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md) — é esperado que
+    um cliente não tenha nenhum exemplo de alguma classe rara localmente. Pula essas
+    classes em vez de propagar ValueError do sklearn; retorna None (chave omitida na
+    agregação, nunca um 0.0 que mascararia "AUC ruim" com "AUC não calculável").
+    """
+    from sklearn.metrics import roc_auc_score
+    y_true = np.asarray(labels)
+    y_score = probs.numpy()
+    aucs: List[float] = []
+    for c in range(num_classes):
+        y_true_bin = (y_true == c).astype(int)
+        if len(np.unique(y_true_bin)) < 2:
+            continue
+        try:
+            aucs.append(float(roc_auc_score(y_true_bin, y_score[:, c])))
+        except ValueError:
+            continue
+    return float(np.mean(aucs)) if aucs else None
 
 
 class FedProxClient(fl.client.NumPyClient):
@@ -312,6 +342,17 @@ class FedProxClient(fl.client.NumPyClient):
             "f1_macro": f1_macro,
             "per_class_f1_json": json.dumps(per_class_f1),
         }
+
+        # AUC-ROC macro (one-vs-rest) — mesmo padrão de privacidade do F1: calculado
+        # localmente a partir dos logits já coletados acima (reaproveita o forward
+        # pass, não faz um novo), só o escalar agregado sai do hospital. Chave omitida
+        # (não 0.0) quando nenhuma classe tem as duas categorias presentes localmente —
+        # ver _macro_auc_ovr().
+        if total > 0:
+            probs = F.softmax(torch.cat(all_logits), dim=-1)
+            macro_auc = _macro_auc_ovr(probs, all_labels, num_classes)
+            if macro_auc is not None:
+                metrics["macro_auc"] = macro_auc
 
         # Extração de padrões pro RAG — só quando o servidor pede (config, rodada final),
         # nunca em toda rodada: generate_all_profiles() roda o forward com atenção sobre
