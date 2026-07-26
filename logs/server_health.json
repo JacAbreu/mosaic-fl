@@ -1,7 +1,7 @@
 {
   "status": "running",
-  "timestamp": "2026-07-06T23:00:11.787253",
-  "round": 10,
+  "timestamp": "2026-07-25T21:12:18.024142",
+  "round": 50,
   "connected_clients": 0,
   "address": "0.0.0.0:8080"
 }

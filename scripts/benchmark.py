@@ -14,8 +14,8 @@ Saídas:
 
 Uso:
     source .venv/bin/activate
-    python benchmark.py
-    python benchmark.py --samples 2000 --rounds 5 --clients 3
+    python3 benchmark.py
+    python3 benchmark.py --samples 2000 --rounds 5 --clients 3
 
 Requisitos adicionais:
     pip install psutil matplotlib

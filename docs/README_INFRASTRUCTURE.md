@@ -103,7 +103,7 @@ bash publicar_pacote_servidor.sh
 O script:
 1. Entra em `infrastructure/server/`
 2. Limpa builds antigos
-3. Roda `python -m build`
+3. Roda `python3 -m build`
 4. Publica no PyPI (ou instala localmente para teste)
 
 ### Publicar client

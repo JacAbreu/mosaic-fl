@@ -3,14 +3,14 @@
 migrate_sqlite.py — Migra PatientDB do SQLite para PostgreSQL.
 
 Uso:
-    python scripts/db/migrate_sqlite.py \\
+    python3 scripts/db/migrate_sqlite.py \\
         --sqlite data/mosaicfl_api.db \\
         --pg "postgresql://mosaicfl:senha@localhost:5432/mosaicfl"
 
 Ou via variáveis de ambiente:
     FL_SQLITE_PATH=data/mosaicfl_api.db \\
     FL_DB_URL=postgresql://... \\
-    python scripts/db/migrate_sqlite.py
+    python3 scripts/db/migrate_sqlite.py
 
 Idempotente: pode ser executado múltiplas vezes sem duplicar dados.
 """

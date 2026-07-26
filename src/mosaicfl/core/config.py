@@ -122,6 +122,15 @@ class FedConfig:
     # onde S=dp_max_grad_norm (sensitivity) e n=num_clients.
     dp_noise_multiplier: float = field(default_factory=lambda: float(os.getenv("FL_DP_NOISE", "0.0")))
     dp_max_grad_norm:    float = field(default_factory=lambda: float(os.getenv("FL_DP_CLIP",  "1.0")))
+    # Amostragem de custo computacional por cliente (CPU/RAM via psutil, potência GPU
+    # via nvidia-smi — ver mosaicfl.core.resources). Ligado por padrão (é o que sustenta
+    # a análise de viabilidade/provisionamento do TCC), mas parametrizável — quem roda o
+    # MOSAIC-FL fora deste contexto pode desligar (FL_COLLECT_RESOURCE_METRICS=0) para
+    # evitar o custo de subprocess por rodada (nvidia-smi) sem alterar nenhum outro
+    # comportamento do treino.
+    collect_resource_metrics: bool = field(
+        default_factory=lambda: os.getenv("FL_COLLECT_RESOURCE_METRICS", "1").strip() == "1"
+    )
 
 
 @dataclass

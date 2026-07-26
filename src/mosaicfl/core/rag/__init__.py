@@ -45,6 +45,20 @@ class ClinicalRAG:
         self._llm_was_fallback = False
 
         requested_backend = LLM_BACKEND
+        # Diagnóstico: sem esta linha, "requested_backend" != "ollama" (env var não
+        # propagada pela cadeia de subprocessos make → flwr run → superlink/superexec →
+        # flwr-serverapp, ou nunca exportada) e "ollama indisponível" são indistinguíveis
+        # no log — os dois terminam silenciosamente em huggingface, sem o warning abaixo
+        # (que só dispara quando requested_backend JÁ chegou como "ollama"). Achado
+        # 2026-07-25: validação de produção caiu em huggingface/distilgpt2 mesmo com
+        # Ollama rodando há 18 dias no desktop — a causa só ficou clara depois de
+        # inspecionar o valor de FED_CFG.llm_backend/default do código (RuntimeConfig
+        # default é "huggingface", Makefile default é "ollama" — se a env var se perde
+        # na cadeia de subprocessos, os dois defaults divergem sem aviso nenhum).
+        logger.info(
+            "RAG backend requisitado: %r (env FL_LLM_BACKEND=%r)",
+            requested_backend, os.getenv("FL_LLM_BACKEND"),
+        )
         if requested_backend == "ollama" and not _check_ollama_available():
             hf_fallback = RUNTIME_CFG.llm_hf_model
             self._llm_was_fallback = True

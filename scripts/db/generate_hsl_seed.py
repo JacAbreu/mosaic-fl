@@ -16,7 +16,7 @@ o notebook cliente e carregado com:
     make client-load-hsl
 
 Uso:
-    python scripts/db/generate_hsl_seed.py \\
+    python3 scripts/db/generate_hsl_seed.py \\
         --data-dir ~/data/Dados/Covid-19 \\
         [--output  scripts/db/seeds/hsl_seed.sql.gz] \\
         [--db-url  postgresql://mosaicfl:senha@localhost:5432/mosaicfl]

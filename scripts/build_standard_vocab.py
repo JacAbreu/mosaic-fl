@@ -13,10 +13,10 @@ Não depende de dados de pacientes. Execute:
   3. Distribua o arquivo gerado a todos os clientes FL
 
 Uso:
-    python scripts/build_standard_vocab.py
-    python scripts/build_standard_vocab.py --output models/vocab.json
-    python scripts/build_standard_vocab.py --dry-run     # exibe stats, não salva
-    python scripts/build_standard_vocab.py --token-mode FULL  (padrão)
+    python3 scripts/build_standard_vocab.py
+    python3 scripts/build_standard_vocab.py --output models/vocab.json
+    python3 scripts/build_standard_vocab.py --dry-run     # exibe stats, não salva
+    python3 scripts/build_standard_vocab.py --token-mode FULL  (padrão)
 """
 from __future__ import annotations
 

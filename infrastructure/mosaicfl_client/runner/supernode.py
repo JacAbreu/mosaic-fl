@@ -5,6 +5,8 @@ Entry point para: flower-supernode --superlink <addr> ... (executa flwr-clientap
 import json
 import logging
 import os
+from datetime import datetime
+from pathlib import Path
 
 import flwr as fl
 from flwr.client import ClientApp
@@ -23,6 +25,36 @@ logger = logging.getLogger(__name__)
 _VOCAB_DEPENDENT_SOURCES = {"sgbd"}
 
 
+def _setup_clientapp_logging(client_id_str: str) -> None:
+    """flwr-clientapp roda como subprocesso próprio a cada rodada (spawnado pelo
+    flower-supernode) — sem nenhum handler configurado nesse processo. Sem handler,
+    logger.info() do Python cai no logging.lastResort (só WARNING+ sobrevive, via
+    stderr herdado do processo pai) — todo log INFO da lógica de treino real
+    (client_fit, local_calibration_fit, client_resources em mosaicfl.core.client)
+    é descartado silenciosamente. Só sobrevivem os "[pipeline] ..." porque usam
+    print() além de logger.info() (ver sequence_pipeline.py::_log), e os warning/
+    error (ex: erro de conexão do datasource) via lastResort.
+
+    Mesmo gap já achado e corrigido do lado do servidor em 2026-07-05/06 (ver
+    infrastructure/mosaicfl_server/runner/superlink.py) — aqui é a mesma causa raiz,
+    achada em 2026-07-25 ao investigar por que local_calibration_fit nunca aparecia
+    em nenhum log capturado apesar da calibração federada funcionar de ponta a ponta.
+    """
+    root_logger = logging.getLogger()
+    if any(isinstance(h, logging.FileHandler) and getattr(h, "_mosaicfl_clientapp", False)
+           for h in root_logger.handlers):
+        return
+    log_dir = Path("experiments/logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"clientapp_{client_id_str}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler._mosaicfl_clientapp = True
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s | %(message)s"))
+    root_logger.addHandler(file_handler)
+    root_logger.setLevel(logging.INFO)
+    logger.info("clientapp_log_file_iniciado path=%s", log_file)
+
+
 def _client_fn(context: Context) -> fl.client.Client:
     """
     Factory chamada pelo SuperNode a cada round.
@@ -35,6 +67,7 @@ def _client_fn(context: Context) -> fl.client.Client:
     ocorre apenas no primeiro round. Dados não mudam durante uma sessão de treinamento.
     """
     client_id_str    = str(context.node_config.get("client-id", str(context.node_id)))
+    _setup_clientapp_logging(client_id_str)
     data_source_type = str(
         context.node_config.get("data-source", os.getenv("FL_DATA_SOURCE", "simulated"))
     )

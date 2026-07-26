@@ -215,7 +215,17 @@ export FL_TLS_CERT_DIR="$(pwd)/certs"
 
 ### 2.6 Conectar o SuperNode ao SuperLink do desktop
 
+> **Terminal novo? Reexporte tudo.** As variáveis dos passos 2.3–2.5
+> (`FL_DB_URL`, `FL_TLS_CERT_DIR`) só valem para o terminal onde foram
+> exportadas. Se você fechou o terminal ou abriu um novo para rodar o
+> `make supernode`, exporte as duas variáveis de novo antes do comando —
+> **sem `FL_DB_URL` o cliente sobe, conecta ao SuperLink, mas falha ao
+> tentar ler os dados** com `RuntimeError: Fonte de dados inválida:
+> Connection string não configurada. Defina FL_DB_URL.`
+
 ```bash
+export FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5432/mosaicfl"
+export FL_TLS_CERT_DIR="$(pwd)/certs"
 make supernode FL_CLIENT_ID=HSL FL_SUPERLINK_ADDRESS=<IP_DO_DESKTOP>:9091 FL_DATA_SOURCE=sgbd
 ```
 

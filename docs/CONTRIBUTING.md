@@ -96,7 +96,7 @@ Para testar o fluxo completo com exames sintéticos:
 ```bash
 # Gera JSONs de pacientes
 cd wire-production/seed
-python generate_data.py --output-dir ../incoming
+python3 generate_data.py --output-dir ../incoming
 
 # Copia para o volume monitorado pela API
 docker compose cp incoming/. mosaic-fl-wire-api-1:/app/data/incoming/

@@ -17,7 +17,7 @@ rm -rf build dist *.egg-info
 pip install --quiet build twine
 
 # Build
-python -m build
+python3 -m build
 
 # Publica (descomente para PyPI real)
 # twine upload dist/*

@@ -10,7 +10,7 @@ dias é um bom separador estatístico ou um valor arbitrário.
 
 Uso:
     export FL_DB_URL="postgresql://user:pass@localhost:PORTA/BANCO"
-    python scripts/auditar_classes_atuais.py
+    python3 scripts/auditar_classes_atuais.py
 """
 from __future__ import annotations
 

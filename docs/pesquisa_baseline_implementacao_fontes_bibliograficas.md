@@ -444,6 +444,67 @@ O limiar prático para convergência de transformers em centralizado é ~1–3 s
 
 ---
 
+## 10. Achado Empírico — Assimetria de Qualidade de Dados Demográficos (age/birth_year) entre BPSP e HSL
+
+Não é literatura — é um achado nos dados reais do projeto, registrado aqui por ser diretamente relevante à discussão de heterogeneidade não-IID das seções 7 e 8 (a assimetria não é só de volume/distribuição de classes entre os dois hospitais, é também de **qualidade/completude de atributo**, algo que a literatura consultada até agora não cobre).
+
+**Contexto:** `SequencePipeline` (`src/mosaicfl/core/preprocessor/sequence_pipeline.py`) constrói `demographics[:, 0]` ("age_norm") como `(2021 − birth_year) / 100`, com `fillna(0.5)` quando `birth_year` é `NULL` (linha 382). Validando a rodada de produção real (desktop+notebook, 2026-07-25), o log do BPSP mostrou `age_mean=0.51` — valor suspeito por estar quase idêntico ao default de ausência (0,5).
+
+**Investigação (consulta direta ao banco, coorte exato usado pelo pipeline — mesmos `JOIN`s de `attendances`/`clinical_outcomes`/`exam_records`):**
+
+| Hospital | `birth_year` NULL | % do coorte |
+|---|---|---|
+| BPSP | ~11.845 de 16.346 pacientes | **~72%** |
+| HSL | 289 de 8.971 pacientes | **~3,2%** |
+
+O `age_mean=0.51` do BPSP é, portanto, majoritariamente o valor-default de ausência, não idade real — enquanto o HSL carrega sinal de idade real para quase toda sua população. Confirmado que a lógica de parsing é **idêntica** para os dois hospitais (`integration/fapesp/transforms.py:143-154`, `parse_birth_year()` — trata `"AAAA"`/`"YYYY"` como anonimização, igual nos dois ETLs `generate_bpsp_seed.py`/`generate_hsl_seed.py`) — não é bug de código, é diferença real na política de anonimização/completude da fonte FAPESP entre as duas instituições.
+
+**Hipótese de correção avaliada e descartada — `age` como sinônimo/fallback de `birth_year`:** a autora levantou a hipótese de usar a coluna `age` (também presente em `clinical.patients`) como fonte alternativa quando `birth_year` falta. Testado empiricamente: `age = birth_year_to_age(birth_year)` é calculado **no mesmo passo do ETL** (`integration/fapesp/transforms.py:157-161`), e `birth_year_to_age(None) → 0.0`. Consulta ao banco confirma que a relação é **determinística e sem exceção**:
+- 28.350/28.350 linhas com `birth_year IS NULL` (BPSP) têm `age = 0.0` exatamente.
+- 10.650/10.650 linhas com `birth_year IS NOT NULL` (BPSP) têm `age = 2021 − birth_year` exatamente.
+
+Ou seja, `age` não é uma segunda fonte independente de informação — é uma função determinística de `birth_year` computada no mesmo momento do carregamento. Usar `age` como fallback não recuperaria nenhum dado ausente; reproduziria a mesma lacuna disfarçada de valor numérico plausível (`0.0` anos, pior que `NULL`/default 0,5 normalizado, porque pode ser mal-interpretado como "recém-nascido" em vez de "desconhecido").
+
+**Implicação para o TCC:** heterogeneidade não-IID entre BPSP e HSL não é só de volume de amostras (razão que já motivou a adoção do FedNova, seção 8.3) — é também de **completude de atributo por cliente**, um eixo de heterogeneidade que nenhuma das fontes das seções 7-9 trata diretamente. Se `age_norm`/`sex_bin` alimentam o late-fusion do ablation study, o gradiente de idade do BPSP carrega majoritariamente ruído (valor-constante 0,5), enquanto o do HSL carrega sinal real — um confundimento entre "diferença clínica real" e "diferença de qualidade de dado" que precisa constar explicitamente na seção de limitações.
+
+**A ausência de `birth_year` não se concentra numa classe de prognóstico específica (BPSP, mesmas 5 classes finais de `_map_outcome()`):**
+
+| Classe | Total | `birth_year` NULL | % |
+|---|---|---|---|
+| 0 `curado_pronto` | 15.892 | 11.661 | 73,4% |
+| 1 `curado_internado` | 318 | 230 | 72,3% |
+| 2 `melhora_pronto` | 120 | 66 | 55,0% |
+| 3 `melhora_internado_breve` | 9.448 | 6.749 | 71,4% |
+| 4 `melhora_internado_grave` | 2.821 | 2.083 | 73,8% |
+
+Quatro das cinco classes ficam homogêneas entre 71-74%; a classe 2 (55%) é a de menor volume (n=120) e a diferença pode ser ruído amostral, não sinal real. Ou seja, ausência de idade não funciona hoje como uma "subclasse disfarçada" de um desfecho específico — é um problema estrutural do hospital como um todo, não isolável a um subconjunto de casos.
+
+**Ideia registrada para trabalho futuro (autora, 2026-07-25) — se houver volume suficiente de dados, tratar "idade ausente" como uma subclasse/ramo explícito do modelo**, em vez de imputação silenciosa (`fillna(0.5)`) ou de um flag binário simples somado à feature contínua. A intuição: em vez de o modelo aprender uma única distribuição de probabilidade condicionada a um valor de idade potencialmente falso (0,5), ter um ramo/cabeça de decisão dedicado para "paciente sem idade informada" permitiria à predição convergir para a probabilidade mais correta dado *apenas* o que de fato foi enviado — sem o modelo tentar extrair sinal de um valor que é constante por construção. Não implementado ainda; depende de (a) volume suficiente por classe pra sustentar um ramo separado sem overfitting (a classe 2, com n=120, provavelmente não sustentaria), e (b) desenho de arquitetura ainda não especificado (branch condicional? mistura de especialistas? um `IsotonicCalibrator` por sub-população idade-conhecida/desconhecida, reaproveitando a infraestrutura de calibração já federada, seção 9?). Fica como linha de pesquisa aberta, não como mitigação imediata.
+
+---
+
+## 11. Avaliação de Viabilidade — Pré-processamento Condicionado à Arquitetura do Classificador
+
+Padrão observado em pipelines comparativos de NLP (benchmarks que avaliam lado a lado modelos neurais pré-treinados tipo BERT e classificadores simbólicos baseados em léxico): em vez de um pipeline único de limpeza/normalização textual aplicado a todos os classificadores, cada modelo declara seu próprio conjunto de passos de pré-processamento (remoção de URL/emoji/menção, normalização de caixa, remoção de stopwords, lematização etc.), escolhido empiricamente via busca sobre combinações de passos, avaliada por uma métrica de concordância com o rótulo de referência. Arquiteturas neurais pré-treinadas tendem a usar pipelines mínimos (poucos passos), enquanto classificadores simbólicos/léxicos tendem a se beneficiar de normalização mais agressiva (lematização, remoção de stopwords) para casar com entradas de dicionário. Estruturalmente, isso é implementado como um *Strategy pattern*: uma interface abstrata comum (`preprocess(texto) -> texto`) com uma implementação concreta por classificador, desacoplando a lógica de limpeza da lógica de inferência.
+
+**Fundamentação na literatura:** Camacho-Collados & Pilehvar, "On the Role of Text Preprocessing in Neural Network Architectures: An Evaluation Study on Text Categorization and Sentiment Analysis" (EMNLP 2018, Workshop BlackboxNLP, pp. 40–46) — mostram empiricamente que decisões de pré-processamento (tokenização, lematização, lowercasing, agrupamento de multiwords) têm impacto variável e não-desprezível no desempenho de classificadores neurais em categorização de texto e análise de sentimento, e defendem que o pré-processamento deve ser tratado como uma escolha de design avaliada empiricamente — não um passo neutro fixo — especialmente ao comparar modelos diferentes entre si.
+
+**Avaliação de viabilidade para o MOSAIC-FL:**
+
+**A favor (o princípio geral se aplica):**
+1. **Já existe precedente implícito no projeto.** `SequencePipeline` (`src/mosaicfl/core/preprocessor/sequence_pipeline.py`) já toma decisões de tokenização específicas do BEHRT — discretiza valores de exame em bins categóricos, não usa valor contínuo cru — diferente do que uma baseline clássica (regressão logística sobre features tabulares, por exemplo) exigiria. Formalizar isso como interface explícita por modelo generalizaria um padrão que o projeto já usa sem nomear.
+2. Camacho-Collados & Pilehvar sustentam a tese de que comparações entre modelos (BEHRT federado vs. ablation late-fusion vs. baselines futuras) devem tratar o pipeline de tokenização/binning como escolha de design por modelo, avaliada empiricamente, não fixa.
+3. Conecta diretamente com o achado da seção 10: a ideia de "subclasse para idade ausente" é, na prática, uma decisão de pré-processamento/roteamento condicionada ao modelo consumidor — mesmo princípio geral (pré-processamento como hiperparâmetro por classificador), aplicado a *missingness* em vez de normalização textual.
+
+**Contra (o mecanismo específico não porta sem adaptação):**
+1. **Incompatibilidade de escopo.** A técnica original explora divergência entre famílias de modelo fundamentalmente diferentes (neural pré-treinado vs. simbólico/léxico). No MOSAIC-FL hoje, todos os modelos são da mesma família (transformer + variações de late-fusion) — o espaço de pré-processamento que divergiria de fato entre eles é bem mais estreito.
+2. **Restrição federada que o cenário original não tem.** A técnica original escolhe UMA pipeline ótima, centralizada, offline, contra um conjunto de validação único e pooled. O MOSAIC-FL tem como premissa que dado bruto nunca sai do hospital. Aplicar uma busca em grade por "classificador" exigiria: (a) buscar localmente em cada hospital, arriscando cada cliente convergir pra um vocabulário/tokenização diferente — o que quebra a premissa de vocabulário compartilhado necessária pra a agregação federada fazer sentido (os pesos do embedding representam posições de um vocabulário comum; se cada hospital escolhe um diferente, a média federada perde significado); ou (b) fazer a escolha uma vez, fora do loop federado, como estudo preliminar separado. Ye, Fang, Du, Yuen & Tao, "Heterogeneous Federated Learning: State-of-the-art and Research Challenges" (ACM Computing Surveys, vol. 56, n. 3, 2024, DOI 10.1145/3625558) categorizam formalmente esse tipo de tensão como heterogeneidade estatística de espaço de features entre clientes — problema geral e reconhecido na literatura de FL, não peculiaridade do projeto, mas que confirma não ser trivial de resolver dentro do paradigma federado.
+3. **Custo experimental.** Busca em grade por modelo, replicada por hospital, sob FedNova+DP (já ~1-2h por rodada completa de 50 rounds) multiplicaria um orçamento experimental já apertado — limitação prática, não teórica.
+
+**Síntese:** o *princípio* (pré-processamento como decisão empírica condicionada ao modelo consumidor, não pipeline fixo) transfere bem e já está implícito no MOSAIC-FL — é literalmente o que a ideia de subclasse de idade ausente (seção 10) propõe fazer. O *mecanismo* específico (busca em grade centralizada comparando famílias de modelo bem diferentes) não porta diretamente, porque esbarra na restrição central de privacidade do projeto (vocabulário compartilhado federado) e porque o MOSAIC-FL tem hoje menos diversidade arquitetural entre seus modelos pra justificar a busca.
+
+---
+
 ## 6. Regulatório
 
 ### 6.1 ANVISA — RDC 657/2022

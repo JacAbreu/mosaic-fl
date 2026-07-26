@@ -138,9 +138,57 @@ def aggregate_calibration(metrics: List[Tuple[int, Dict[str, Any]]]) -> Optional
     return None
 
 
-def weighted_average_loss(metrics: List[Tuple[int, Dict[str, Any]]]) -> Dict[str, float]:
-    """Média ponderada de loss — para fit_metrics_aggregation_fn."""
-    return _weighted_average(metrics, "loss")
+def aggregate_resource_metrics(metrics: List[Tuple[int, Dict[str, Any]]]) -> Optional[Dict[str, Any]]:
+    """Agrega custo computacional por cliente nesta rodada (FedProxClient.fit(), só
+    presente quando FL_COLLECT_RESOURCE_METRICS=1 — ver mosaicfl.core.config.FedConfig).
+    Retorna None se nenhum cliente enviou dado de recurso (coleta desligada, ou config
+    antiga do cliente).
+
+    Energia da GPU é SOMADA entre clientes, não uma média ponderada — cada cliente roda
+    em hardware físico distinto (ex: BPSP com GPU dedicada, HSL sem), e o que interessa
+    para provisionamento é o custo total de infraestrutura desta rodada, não uma média
+    que misturaria potências de máquinas diferentes. CPU/RAM ficam só no detalhamento
+    por cliente (resource_per_client_json) pelo mesmo motivo — média entre hardwares
+    heterogêneos não é uma grandeza útil.
+    """
+    resource_entries = [(n, m) for n, m in metrics if "resource_duration_s" in m]
+    if not resource_entries:
+        return None
+
+    per_client: list = []
+    total_gpu_energy_wh = 0.0
+    gpu_power_samples: List[float] = []
+    for _, m in resource_entries:
+        entry = {
+            "duration_s": m.get("resource_duration_s"),
+            "cpu_pct":    m.get("resource_cpu_pct"),
+            "ram_mb":     m.get("resource_ram_mb"),
+        }
+        if "resource_gpu_power_w" in m:
+            entry["gpu_power_w"] = m["resource_gpu_power_w"]
+            gpu_power_samples.append(m["resource_gpu_power_w"])
+        if "resource_gpu_energy_wh" in m:
+            entry["gpu_energy_wh"] = m["resource_gpu_energy_wh"]
+            total_gpu_energy_wh += m["resource_gpu_energy_wh"]
+        per_client.append(entry)
+
+    result: Dict[str, Any] = {"resource_per_client_json": json.dumps(per_client)}
+    if total_gpu_energy_wh > 0:
+        result["resource_round_gpu_energy_wh"] = total_gpu_energy_wh
+    if gpu_power_samples:
+        result["resource_round_gpu_avg_power_w"]  = sum(gpu_power_samples) / len(gpu_power_samples)
+        result["resource_round_gpu_peak_power_w"] = max(gpu_power_samples)
+    return result
+
+
+def weighted_average_loss(metrics: List[Tuple[int, Dict[str, Any]]]) -> Dict[str, Any]:
+    """Média ponderada de loss — para fit_metrics_aggregation_fn. Também agrega custo
+    computacional por rodada (aggregate_resource_metrics) quando os clientes enviam."""
+    result = _weighted_average(metrics, "loss")
+    resources = aggregate_resource_metrics(metrics)
+    if resources:
+        result.update(resources)
+    return result
 
 
 # Alias mantido para compatibilidade com código existente

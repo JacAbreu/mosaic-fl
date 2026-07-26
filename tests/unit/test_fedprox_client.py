@@ -314,3 +314,74 @@ class TestFedProxClient:
         result = client_v2._fit_local_calibrator("temperature", logits, labels)
         assert result["calibration_method"] == "temperature"
         assert result["temperature"] > 0
+
+
+class TestFedProxClientResourceMetrics:
+    """FL_COLLECT_RESOURCE_METRICS (FED_CFG.collect_resource_metrics) — ligado por
+    padrão (sustenta a análise de custo/provisionamento do TCC), mas parametrizável:
+    quem roda o MOSAIC-FL fora deste contexto pode desligar sem afetar o treino em si.
+    FED_CFG é um dataclass frozen — object.__setattr__ contorna isso só para o teste,
+    sempre restaurado no finally para não vazar estado entre testes (singleton de módulo).
+    """
+
+    SEQ_LEN = 16
+
+    @pytest.fixture
+    def loader(self):
+        x   = torch.randint(1, VOCAB_SIZE, (8, self.SEQ_LEN))
+        y   = torch.randint(0, NUM_CLASSES, (8,))
+        dia = torch.randint(0, 100, (8, self.SEQ_LEN))
+        return DataLoader(TensorDataset(x, y, dia), batch_size=4)
+
+    def test_fit_includes_resource_metrics_when_enabled(self, loader):
+        from mosaicfl.core.client import FedProxClient
+        from mosaicfl.core.config import FED_CFG
+        original = FED_CFG.collect_resource_metrics
+        object.__setattr__(FED_CFG, "collect_resource_metrics", True)
+        try:
+            client = FedProxClient(0, loader, loader)
+            params = client.get_parameters({})
+            _, _, metrics = client.fit(params, {})
+            assert "resource_duration_s" in metrics
+            assert "resource_cpu_pct" in metrics
+            assert "resource_ram_mb" in metrics
+            assert metrics["resource_duration_s"] >= 0.0
+        finally:
+            object.__setattr__(FED_CFG, "collect_resource_metrics", original)
+
+    def test_fit_omits_resource_metrics_when_disabled(self, loader):
+        from mosaicfl.core.client import FedProxClient
+        from mosaicfl.core.config import FED_CFG
+        original = FED_CFG.collect_resource_metrics
+        object.__setattr__(FED_CFG, "collect_resource_metrics", False)
+        try:
+            client = FedProxClient(0, loader, loader)
+            params = client.get_parameters({})
+            _, _, metrics = client.fit(params, {})
+            assert "resource_duration_s" not in metrics
+            assert "resource_cpu_pct" not in metrics
+            assert "resource_ram_mb" not in metrics
+            assert "resource_gpu_power_w" not in metrics
+            # loss/tau continuam presentes — desligar a coleta não afeta o resto do contrato
+            assert "loss" in metrics
+        finally:
+            object.__setattr__(FED_CFG, "collect_resource_metrics", original)
+
+    def test_fit_omits_gpu_keys_when_no_gpu_available(self, loader, monkeypatch):
+        """Máquina sem GPU NVIDIA (ex.: notebook do HSL) — sample_gpu_power_w() retorna
+        None, chaves resource_gpu_* devem ficar ausentes (nunca None — Flower Metrics
+        só aceita escalares)."""
+        from mosaicfl.core.client import FedProxClient
+        from mosaicfl.core.config import FED_CFG
+        monkeypatch.setattr("mosaicfl.core.client.sample_gpu_power_w", lambda: None)
+        original = FED_CFG.collect_resource_metrics
+        object.__setattr__(FED_CFG, "collect_resource_metrics", True)
+        try:
+            client = FedProxClient(0, loader, loader)
+            params = client.get_parameters({})
+            _, _, metrics = client.fit(params, {})
+            assert "resource_duration_s" in metrics
+            assert "resource_gpu_power_w" not in metrics
+            assert "resource_gpu_energy_wh" not in metrics
+        finally:
+            object.__setattr__(FED_CFG, "collect_resource_metrics", original)

@@ -22,32 +22,12 @@ from mosaicfl.core.config import (
     DP_NOISE_MULTIPLIER, DP_MAX_GRAD_NORM,
 )
 from mosaicfl.core.model import SimplifiedBEHRT
+from mosaicfl.core.resources import sample_gpu_power_w as _sample_gpu_power_w
 
 from .aggregation import aggregate_fedavg, aggregate_fednova, apply_dp_noise
 from .evaluation import evaluate_global_model
 
 logger = logging.getLogger(__name__)
-
-
-def _sample_gpu_power_w() -> Optional[float]:
-    """Amostra a potência instantânea da GPU (Watts) via nvidia-smi.
-
-    Retorna None em qualquer falha (sem GPU NVIDIA, driver ausente, timeout) —
-    nunca interrompe o treinamento por causa de coleta de métrica de energia.
-    Relevante para viabilidade de implantação em ambientes com energia/água
-    limitadas para resfriamento — custo energético real, não estimado.
-    """
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=power.draw", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=2.0,
-        )
-        if result.returncode != 0:
-            return None
-        return float(result.stdout.strip().splitlines()[0])
-    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, IndexError):
-        return None
 
 
 def _evaluate_subgroups(

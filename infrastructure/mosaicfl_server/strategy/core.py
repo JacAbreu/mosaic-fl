@@ -33,6 +33,17 @@ from .watchdog_mixin import _WatchdogMixin
 CHECKPOINT_DIR = Path(os.getenv("FL_CHECKPOINT_DIR", "checkpoints"))
 LOG_DIR = Path(os.getenv("FL_LOG_DIR", "logs"))
 
+# Mesmo arquivo que experiments/training/core/orchestrator.py (Caminho A) já escreve
+# ao final de make training-full — a API (infrastructure/mosaicfl_api/state.py,
+# _resolve_inference_training_id) lê daqui pra saber qual training_id carregar
+# automaticamente sem parâmetro manual. Antes desta correção (achado 2026-07-25), só
+# o Caminho A escrevia este arquivo — qualquer treino real via SuperLink/SuperNode
+# (Caminho B, produção) terminava e a API continuava presa ao último training_id do
+# Caminho A, por mais antigo/pior que fosse (validado: API carregou um checkpoint de
+# 3 semanas atrás, accuracy=0.37, enquanto um treino Caminho B daquele mesmo dia
+# tinha acabado de terminar com accuracy=0.79 no melhor round).
+FEDERATED_ID_FILE = Path("experiments/last_federated_training_id.txt")
+
 logger = logging.getLogger(__name__)
 
 
@@ -112,6 +123,14 @@ class ProductionFedProxStrategy(
         self._history_per_class_f1: List[list] = []
         self._best_criterion_value: float = 0.0
 
+        # Acumula custo computacional entre rodadas (mesmo padrão de manual_loop.py,
+        # Caminho A) — só recebe valores quando os clientes enviam resource_* em
+        # aggregate_fit() (ver FED_CFG.collect_resource_metrics/aggregate_resource_metrics
+        # em federated.py). Energia é somada (custo real acumulado do treino inteiro);
+        # potência é amostrada por rodada e usada pra média/pico ao final.
+        self._gpu_energy_wh_total: float = 0.0
+        self._gpu_power_samples: List[float] = []
+
         self._training_id = training_id
         self._num_rounds = num_rounds
         self._run_id = run_id
@@ -156,6 +175,24 @@ class ProductionFedProxStrategy(
         aggregated_parameters, aggregated_metrics = super().aggregate_fit(
             server_round, results, failures
         )
+
+        if aggregated_metrics:
+            round_gpu_energy = aggregated_metrics.get("resource_round_gpu_energy_wh")
+            if round_gpu_energy:
+                self._gpu_energy_wh_total += round_gpu_energy
+            round_gpu_avg_power = aggregated_metrics.get("resource_round_gpu_avg_power_w")
+            if round_gpu_avg_power is not None:
+                self._gpu_power_samples.append(round_gpu_avg_power)
+            if "resource_per_client_json" in aggregated_metrics:
+                logger.info(
+                    "round_resources",
+                    extra={
+                        "round": server_round,
+                        "gpu_energy_wh": round_gpu_energy,
+                        "gpu_avg_power_w": round_gpu_avg_power,
+                        "per_client": aggregated_metrics["resource_per_client_json"],
+                    },
+                )
 
         if aggregated_parameters is not None:
             self._load_global_weights(aggregated_parameters)
@@ -274,12 +311,18 @@ class ProductionFedProxStrategy(
             and self._training_id is not None
         ):
             self._training_completed = True
+            gpu_avg_power_w  = sum(self._gpu_power_samples) / len(self._gpu_power_samples) if self._gpu_power_samples else None
+            gpu_peak_power_w = max(self._gpu_power_samples) if self._gpu_power_samples else None
+            gpu_energy_wh    = self._gpu_energy_wh_total if self._gpu_energy_wh_total > 0 else None
             self._checkpoint_store.complete_training(
                 training_id=self._training_id,
                 n_rounds_done=server_round,
                 best_round=self._best_round,
                 best_accuracy=self._best_accuracy,
                 converged=converged,
+                gpu_avg_power_w=gpu_avg_power_w,
+                gpu_peak_power_w=gpu_peak_power_w,
+                gpu_energy_wh=gpu_energy_wh,
             )
             logger.info(
                 "training_completed",
@@ -289,8 +332,12 @@ class ProductionFedProxStrategy(
                     "best_round": self._best_round,
                     "best_accuracy": self._best_accuracy,
                     "converged": converged,
+                    "gpu_avg_power_w": gpu_avg_power_w,
+                    "gpu_peak_power_w": gpu_peak_power_w,
+                    "gpu_energy_wh": gpu_energy_wh,
                 },
             )
+            self._save_federated_training_id_marker()
             try:
                 self._checkpoint_store.save_round_history(
                     training_id=self._training_id,
@@ -317,6 +364,24 @@ class ProductionFedProxStrategy(
             self._persist_federated_calibration(server_round, calibration_method, aggregated_metrics)
 
         return aggregated_loss, aggregated_metrics
+
+    def _save_federated_training_id_marker(self) -> None:
+        """Grava FEDERATED_ID_FILE com self._training_id — mesmo mecanismo do Caminho A
+        (orchestrator.py), pra API descobrir automaticamente qual training_id carregar.
+        Nunca propaga exceção: é um atalho de conveniência, não uma dependência crítica
+        do treino (sem o arquivo, a API só cai no fallback de maior accuracy global)."""
+        try:
+            FEDERATED_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
+            FEDERATED_ID_FILE.write_text(str(self._training_id), encoding="utf-8")
+            logger.info(
+                "federated_training_id_saved",
+                extra={"training_id": self._training_id, "path": str(FEDERATED_ID_FILE)},
+            )
+        except Exception as e:
+            logger.warning(
+                "federated_training_id_save_error",
+                extra={"training_id": self._training_id, "error": str(e)},
+            )
 
     def _build_rag_knowledge_base(self, patterns_json: str) -> None:
         """Constrói a base de conhecimento do RAG com os perfis prototípicos enviados

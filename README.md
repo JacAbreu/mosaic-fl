@@ -471,7 +471,7 @@ FL_NUM_CLASSES=5               # deve ser 5 para o schema atual
 
 ```bash
 source .venv/bin/activate
-python experiments/training_runner/run_experiments_simulation.py
+python3 experiments/training_runner/run_experiments_simulation.py
 ```
 
 Tenta carregar dados nesta ordem: **SGBD → CSV → sintético**.
@@ -480,7 +480,7 @@ Se nenhuma fonte real estiver disponível, usa dados sintéticos com aviso expl�
 ```bash
 # Conectar ao PostgreSQL em modo desenvolvimento
 export FL_DB_URL="postgresql://user:pass@localhost:5432/mosaicfl"
-python experiments/training_runner/run_experiments_simulation.py
+python3 experiments/training_runner/run_experiments_simulation.py
 ```
 
 ### Simulação FL local (sem SuperLink)
@@ -496,10 +496,10 @@ make sim
 
 ```bash
 # Configuração padrão: 1000 amostras, 10 rodadas, 5 clientes
-python scripts/benchmark.py
+python3 scripts/benchmark.py
 
 # Configuração customizada
-python scripts/benchmark.py --samples 2000 --rounds 5 --clients 3 --output meus_resultados
+python3 scripts/benchmark.py --samples 2000 --rounds 5 --clients 3 --output meus_resultados
 ```
 
 Artefatos gerados em `benchmark_results/`: métricas JSON por rodada + 6 gráficos PNG.
@@ -621,10 +621,10 @@ Para testes locais sem infraestrutura de TLS:
 
 ```bash
 # Terminal 1 — Servidor
-python -m infrastructure.mosaicfl_server --port 8080 --min-clients 1 --rounds 3
+python3 -m infrastructure.mosaicfl_server --port 8080 --min-clients 1 --rounds 3
 
 # Terminal 2 — Cliente
-python -m infrastructure.mosaicfl_client --server localhost:8080 --client-id hospital_a
+python3 -m infrastructure.mosaicfl_client --server localhost:8080 --client-id hospital_a
 ```
 
 ### API de Inferência
@@ -650,7 +650,7 @@ curl -s -X POST http://localhost:8000/api/predict \
   -d '{"patient_id": "TEST-001", "exams": [
         {"exam_name": "LEUCOCITOS", "date": "2020-04-01", "value": 12.5, "unit": "10^3/uL"},
         {"exam_name": "PCR",        "date": "2020-04-01", "value": 48.0, "unit": "mg/L"}
-      ]}' | python -m json.tool
+      ]}' | python3 -m json.tool
 ```
 
 **RAG (justificativa diagnóstica) integrado à resposta:** por padrão (`explain=true`), o `/api/predict`
@@ -1342,10 +1342,10 @@ O scheduler verifica periodicamente quais hospitais estão online e registra con
 
 ```bash
 # Modo daemon — verifica a cada 6h
-python -m infrastructure.mosaicfl_scheduler --interval 6 --min-clients 3 --max-rounds 20
+python3 -m infrastructure.mosaicfl_scheduler --interval 6 --min-clients 3 --max-rounds 20
 
 # Modo one-shot (cron)
-python infrastructure/mosaicfl_scheduler/scheduler_cli.py --once
+python3 infrastructure/mosaicfl_scheduler/scheduler_cli.py --once
 
 # Via crontab (2h da manhã)
 0 2 * * * /path/to/.venv/bin/python /path/to/infrastructure/mosaicfl_scheduler/scheduler_cli.py --once

@@ -53,7 +53,7 @@ pip install apscheduler
 ### 1. Modo daemon (fica rodando)
 
 ```bash
-python scheduler_daemon.py
+python3 scheduler_daemon.py
 ```
 
 O scheduler acorda a cada 6 horas (configurável), verifica clientes e dispara rounds.
@@ -61,14 +61,14 @@ O scheduler acorda a cada 6 horas (configurável), verifica clientes e dispara r
 ### 2. Modo cron (executa 1 vez)
 
 ```bash
-python scheduler_daemon.py --once
+python3 scheduler_daemon.py --once
 ```
 
 Ideal para crontab:
 
 ```cron
 # Rodar às 2h e 14h todos os dias
-0 2,14 * * * cd /opt/mosaic-fl && python scheduler_daemon.py --once >> logs/scheduler_cron.log 2>&1
+0 2,14 * * * cd /opt/mosaic-fl && python3 scheduler_daemon.py --once >> logs/scheduler_cron.log 2>&1
 ```
 
 ### 3. Variáveis de ambiente
@@ -86,7 +86,7 @@ export FL_SCHEDULER_LOG=logs/scheduler.log
 ### 4. Argumentos CLI
 
 ```bash
-python scheduler_daemon.py --once --interval 1 --min-clients 2 --max-rounds 10
+python3 scheduler_daemon.py --once --interval 1 --min-clients 2 --max-rounds 10
 ```
 
 | Flag | Descrição |

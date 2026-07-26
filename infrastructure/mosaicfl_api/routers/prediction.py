@@ -24,6 +24,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _build_model_metadata_note(proba: dict) -> str:
+    """Texto de aviso em model_metadata.note — precisa refletir o "calibrated" real
+    da resposta. Achado 2026-07-25: antes desta correção, ModelMetadata.note tinha um
+    default estático fixo dizendo "Modelo sem calibração pós-treinamento", mesmo quando
+    calibrated=True — a calibração federada (client-side fit + agregação, ver
+    aggregate_calibration em federated.py) passou a rodar de verdade em produção sem que
+    esse texto fosse atualizado, gerando uma resposta com campos contraditórios entre si."""
+    if not proba.get("calibrated", False):
+        return (
+            "Probabilidades estimadas via MC Dropout. Modelo sem calibração pós-treinamento: "
+            "os valores refletem confiança relativa entre classes, não frequência empírica calibrada. "
+            "Não usar como probabilidade clínica absoluta sem avaliação profissional."
+        )
+    method = proba.get("calibration_method", "temperature")
+    if method == "isotonic":
+        detalhe = "calibradas via regressão isotônica (uma curva por classe, ajustada e agregada entre os hospitais federados)"
+    else:
+        temperature = proba.get("temperature", 1.0)
+        detalhe = f"calibradas via temperature scaling (T={temperature:.2f}, agregado entre os hospitais federados)"
+    return (
+        f"Probabilidades estimadas via MC Dropout e {detalhe} — refletem uma aproximação de "
+        "frequência empírica, não apenas confiança relativa entre classes. Ainda assim, não usar "
+        "como probabilidade clínica absoluta sem avaliação profissional."
+    )
+
+
 def _to_record(e: ExamInput) -> ExamRecord:
     try:
         phase = ClinicalPhase.from_str(e.phase)
@@ -185,6 +211,7 @@ async def _run_ingest(request: IngestRequest, token_fp: str) -> IngestResponse:
             checkpoint_round=proba.get("checkpoint_round"),
             checkpoint_at=proba.get("checkpoint_at"),
             model_version=proba.get("model_version"),
+            note=_build_model_metadata_note(proba),
         ),
     )
 
@@ -251,6 +278,7 @@ async def predict(
             checkpoint_round=proba.get("checkpoint_round"),
             checkpoint_at=proba.get("checkpoint_at"),
             model_version=proba.get("model_version"),
+            note=_build_model_metadata_note(proba),
         ),
         rag_explanation=rag_explanation,
     )

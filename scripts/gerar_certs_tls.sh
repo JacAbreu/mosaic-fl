@@ -13,11 +13,11 @@
 #
 # Uso com o MOSAIC-FL:
 #   export FL_TLS_CERT_DIR="$OUT_DIR"
-#   python infrastructure/mosaicfl_server/runner.py --address 0.0.0.0:8080
+#   python3 infrastructure/mosaicfl_server/runner.py --address 0.0.0.0:8080
 #
 #   # Em cada máquina cliente (copiar só ca.crt):
 #   export FL_TLS_CERT_DIR="/path/to/dir/com/ca.crt"
-#   python infrastructure/mosaicfl_client/runner.py --server SERVIDOR_IP:8080
+#   python3 infrastructure/mosaicfl_client/runner.py --server SERVIDOR_IP:8080
 #
 # Validade: 365 dias (desenvolvimento). Para produção, usar CA institucional.
 
@@ -101,12 +101,12 @@ echo "Para usar com o MOSAIC-FL:"
 echo ""
 echo "  # Servidor (precisa de ca.crt + server.crt + server.key):"
 echo "  export FL_TLS_CERT_DIR=\"$(realpath "$OUT_DIR")\""
-echo "  python infrastructure/mosaicfl_server/runner.py"
+echo "  python3 infrastructure/mosaicfl_server/runner.py"
 echo ""
 echo "  # Cliente (precisa apenas de ca.crt):"
 echo "  # Copie ca.crt para a maquina do cliente e aponte:"
 echo "  export FL_TLS_CERT_DIR=\"/caminho/para/pasta/com/ca.crt\""
-echo "  python infrastructure/mosaicfl_client/runner.py --server IP_SERVIDOR:8080"
+echo "  python3 infrastructure/mosaicfl_client/runner.py --server IP_SERVIDOR:8080"
 echo ""
 echo "AVISO: ca.key e server.key sao chaves privadas."
 echo "Nunca os envie pelo repositorio ou por canais inseguros."

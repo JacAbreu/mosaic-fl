@@ -3,9 +3,9 @@ Exporta o melhor checkpoint do CheckpointStore (SQLite ou PostgreSQL)
 para um arquivo .pt que a API pode carregar via FL_CHECKPOINT_DIR.
 
 Uso:
-    python scripts/export_checkpoint.py
-    FL_TRAINING_ID=5 python scripts/export_checkpoint.py
-    FL_DB_URL=postgresql://... python scripts/export_checkpoint.py
+    python3 scripts/export_checkpoint.py
+    FL_TRAINING_ID=5 python3 scripts/export_checkpoint.py
+    FL_DB_URL=postgresql://... python3 scripts/export_checkpoint.py
 
 Saída: checkpoints/best_model.pt
 """

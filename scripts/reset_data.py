@@ -17,8 +17,8 @@ O que NÃO é apagado (curadoria do operador):
 Sequência de TRUNCATE respeita as dependências de FK (ordem inversa de inserção).
 
 Uso:
-    python scripts/reset_data.py --db-url postgresql://...
-    python scripts/reset_data.py --db-url postgresql://... --confirm
+    python3 scripts/reset_data.py --db-url postgresql://...
+    python3 scripts/reset_data.py --db-url postgresql://... --confirm
 """
 import argparse
 import logging

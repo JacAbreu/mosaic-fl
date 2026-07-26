@@ -8,9 +8,9 @@ Metodologia — média em dois níveis:
   Cada hospital tem peso igual, independente do volume de registros.
 
 Uso:
-    python scripts/compute_analyte_references.py
-    python scripts/compute_analyte_references.py --dry-run   # só exibe, não grava
-    python scripts/compute_analyte_references.py --min-hospitals 2
+    python3 scripts/compute_analyte_references.py
+    python3 scripts/compute_analyte_references.py --dry-run   # só exibe, não grava
+    python3 scripts/compute_analyte_references.py --min-hospitals 2
 
 Reexecute sempre que um novo hospital entrar na federação.
 Após reexecutar, identifique registros com classificação desatualizada:

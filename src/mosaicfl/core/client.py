@@ -14,7 +14,9 @@ A loss local é CrossEntropy + termo proximal FedProx: (μ/2)·‖w_local − w_
 """
 import json
 import logging
+import time
 import numpy as np
+import psutil
 import torch
 import flwr as fl
 from torch.utils.data import DataLoader, TensorDataset
@@ -28,6 +30,7 @@ from collections import Counter
 from mosaicfl.core.model import SimplifiedBEHRT
 from .calibration import IsotonicCalibrator, TemperatureScaler
 from .config import FED_CFG, MODEL_CFG, RUNTIME_CFG
+from .resources import sample_gpu_power_w
 
 
 class FedProxClient(fl.client.NumPyClient):
@@ -155,6 +158,20 @@ class FedProxClient(fl.client.NumPyClient):
         # Seed por rodada × cliente — garante reprodutibilidade entre runs independentes
         torch.manual_seed(FED_CFG.random_seed + current_round * FED_CFG.num_clients + self.client_id)
 
+        # Amostragem de custo computacional (Caminho B — cada cliente roda em processo/
+        # máquina física separada, diferente do Caminho A onde um único processo media
+        # tudo). Parametrizável via FL_COLLECT_RESOURCE_METRICS (ligado por padrão neste
+        # projeto, mas quem roda o MOSAIC-FL fora deste contexto pode desligar). Quando
+        # ligado, cpu_percent(interval=None) precisa de 2 chamadas para ser útil: a 1ª
+        # (aqui) calibra e é descartada, a 2ª (fim do fit) retorna a média real do
+        # intervalo — ver docs do psutil. Nunca deve interromper o treino por falha de
+        # amostragem (GPU ausente é o caso normal em máquinas sem NVIDIA).
+        _collect_resources = FED_CFG.collect_resource_metrics
+        _proc = psutil.Process() if _collect_resources else None
+        if _proc is not None:
+            _proc.cpu_percent(interval=None)
+        _fit_start = time.time()
+
         self.set_parameters(parameters)
         self.model.train()
         epoch_losses: List[float] = []
@@ -212,8 +229,33 @@ class FedProxClient(fl.client.NumPyClient):
             "client_fit client_id=%s loss=%.4f grad_norm=%.4f tau=%d dp_update_norm=%.4f",
             self.client_id, avg_loss, avg_grad_norm, tau, dp_update_norm,
         )
+
+        # flwr.common.Metrics só aceita valores escalares — todos os campos abaixo são
+        # float, nunca None (chave omitida quando a amostra não existe, ex: sem GPU,
+        # ou quando FL_COLLECT_RESOURCE_METRICS=0 desliga a coleta inteira).
+        resource_metrics: Dict = {}
+        if _proc is not None:
+            _fit_duration_s = time.time() - _fit_start
+            _cpu_pct = _proc.cpu_percent(interval=None)
+            _ram_mb = _proc.memory_info().rss / (1024 ** 2)
+            _gpu_power_w = sample_gpu_power_w()
+            resource_metrics = {
+                "resource_duration_s": _fit_duration_s,
+                "resource_cpu_pct": _cpu_pct,
+                "resource_ram_mb": _ram_mb,
+            }
+            if _gpu_power_w is not None:
+                resource_metrics["resource_gpu_power_w"] = _gpu_power_w
+                resource_metrics["resource_gpu_energy_wh"] = _gpu_power_w * (_fit_duration_s / 3600)
+            logger.info(
+                "client_resources client_id=%s duration_s=%.2f cpu_pct=%.1f ram_mb=%.0f gpu_power_w=%s",
+                self.client_id, _fit_duration_s, _cpu_pct, _ram_mb,
+                f"{_gpu_power_w:.1f}" if _gpu_power_w is not None else "n/a",
+            )
+
         return self.get_parameters(config), total_samples, {
             "loss": avg_loss, "tau": tau, "grad_norm": avg_grad_norm, "dp_update_norm": dp_update_norm,
+            **resource_metrics,
         }
 
     def evaluate(self, parameters: List[np.ndarray], config: Dict) -> Tuple[float, int, Dict]:

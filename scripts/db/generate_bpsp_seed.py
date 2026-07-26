@@ -21,7 +21,7 @@ Por que BPSP e não Einstein?
   com maior volume de dados dentre os que possuem desfechos.
 
 Uso:
-    python scripts/db/generate_bpsp_seed.py \\
+    python3 scripts/db/generate_bpsp_seed.py \\
         --data-dir ~/data/Dados/Covid-19 \\
         [--output  scripts/db/seeds/bpsp_seed.sql.gz] \\
         [--db-url  postgresql://mosaicfl:senha@localhost:5432/mosaicfl]
