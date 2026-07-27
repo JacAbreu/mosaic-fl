@@ -43,7 +43,12 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from integration.column_resolver import CLINICAL_SEMANTIC_MAP, ColumnResolver, normalize
+from integration.column_resolver import (
+    CLINICAL_SEMANTIC_MAP,
+    ColumnResolver,
+    looks_like_valid_analyte_name,
+    normalize,
+)
 from integration.fapesp.transforms import (
     birth_year_to_age,
     classify_outcome,
@@ -299,6 +304,14 @@ def generate_exams(
     out.write((header + "\n").encode())
 
     total  = 0
+    # Canonicals suspeitos (não parecem nome de exame real — ex: "183", código
+    # bruto de laboratório nunca traduzido) vistos durante esta geração de seed.
+    # Este script NÃO passa por scan_analytes()/term_manager (achado 2026-07-26 —
+    # a guarda de lá só protege integration/fapesp/loader.py, não este pipeline,
+    # que é o que os targets client-generate-seed/server-generate-seed realmente
+    # usam). Sem uma etapa de revisão prévia, o melhor que dá pra fazer aqui é
+    # avisar alto — revise este log ANTES de rodar server-load-bpsp.
+    suspicious_seen: set[str] = set()
     stream = _open(zip_path, entry)
     try:
         mapping: Optional[dict] = None
@@ -373,6 +386,20 @@ def generate_exams(
             canonical = raw_ana.apply(lambda n: _resolve_canonical(n, alias_cache))
             phase_s   = origin_s.apply(infer_phase)
 
+            new_suspicious = {
+                c for c in canonical.unique()
+                if c not in suspicious_seen and not looks_like_valid_analyte_name(c)
+            }
+            if new_suspicious:
+                suspicious_seen |= new_suspicious
+                logger.warning(
+                    "canonical_suspeito_detectado canonicals=%s — não parece nome de exame "
+                    "real (provável código bruto não traduzido). Revise/corrija em "
+                    "knowledge.term_dictionary ANTES de rodar server-load-bpsp, ou use o "
+                    "botão \"Corrigir\" em /vocab-anomalies depois de carregar.",
+                    sorted(new_suspicious),
+                )
+
             for pid, d, rt, v, rl, rh, ori, u, eg, ai, can, ph in zip(
                 pid_s, date_s, res_txt, value_s,
                 ref_low, ref_high, origin_s, unit_s, grp_s, att_s,
@@ -401,6 +428,12 @@ def generate_exams(
 
     out.write(b"\\.\n\n")
     logger.info("exam_records gravados: %d", total)
+    if suspicious_seen:
+        logger.warning(
+            "RESUMO: %d canonical(is) suspeito(s) neste seed — %s. "
+            "Revise antes de server-load-bpsp (ver aviso acima pra cada um).",
+            len(suspicious_seen), sorted(suspicious_seen),
+        )
 
 
 resolver_exams = ColumnResolver(
