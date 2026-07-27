@@ -507,13 +507,6 @@ class ProductionFedProxStrategy(
             self._best_macro_auc = macro_auc
             self._best_round = server_round
 
-        metrics_file = LOG_DIR / f"round_{server_round}_metrics.json"
-        try:
-            with open(metrics_file, "w", encoding="utf-8") as f:
-                json.dump(round_metrics, f, indent=2)
-        except Exception as e:
-            logger.warning("metrics_write_error", extra={"round": server_round, "error": str(e)})
-
         # Persiste estado após cada round — permite recovery exato no próximo restart
         self._current_state.status = "completed" if converged else "running"
         self._save_state(server_round)

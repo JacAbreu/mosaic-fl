@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 # partir do FAB extraído (~/.flwr/apps/...), não do checkout do projeto —
 # Path(__file__).parent... apontaria pra dentro do FAB, não pro projeto real.
 # LOG_DIR/CHECKPOINT_DIR (config.py) já usam esse mesmo padrão relativo ao CWD
-# com sucesso (round_N_metrics.json aparece certo em logs/ do projeto).
+# com sucesso (checkpoints/round_N.pt aparece certo no projeto, não no FAB).
 _EXPERIMENTS_LOG_DIR = Path("experiments/logs")
 _EXPERIMENTS_LOG_DIR.mkdir(parents=True, exist_ok=True)
 _serverapp_log_file = _EXPERIMENTS_LOG_DIR / f"serverapp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"

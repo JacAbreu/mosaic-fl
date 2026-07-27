@@ -623,32 +623,25 @@ class TestProductionFedProxStrategy:
             if v.dtype == torch.float32:
                 assert torch.allclose(v, torch.zeros_like(v))
 
-    def test_aggregate_evaluate_writes_metrics_file(self, strategy_and_model):
-        """
-        CORREÇÃO: usa patch() nas variáveis de módulo LOG_DIR e CHECKPOINT_DIR
-        em vez de tentar importar 'strategy as strat_mod' diretamente.
-        """
+    def test_aggregate_evaluate_saves_round_history_to_db(self, strategy_and_model):
+        """round_N_metrics.json removido 2026-07-27 — redundante com
+        fl_round_history (save_round_history() incremental, migration 025,
+        2026-07-26), e menos confiável (LOG_DIR não é escopado por training_id,
+        sobrescrevia entre treinos). Métricas por rodada agora só existem no
+        banco, checadas aqui via checkpoint_store.save_round_history()."""
         strategy, model, tmp_path = strategy_and_model
-        log_dir = tmp_path / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
+        strategy._checkpoint_store = MagicMock()
+        strategy._training_id = 42
 
-        import infrastructure.mosaicfl_server.strategy.core as strat_mod
-        old_log = strat_mod.LOG_DIR
-        strat_mod.LOG_DIR = log_dir
-        strategy.LOG_DIR = log_dir
-        try:
-            with patch("flwr.server.strategy.FedProx.aggregate_evaluate",
-                       return_value=(0.4, {"accuracy": 0.78})):
-                strategy.aggregate_evaluate(2, [], [])
-        finally:
-            strat_mod.LOG_DIR = old_log
+        with patch("flwr.server.strategy.FedProx.aggregate_evaluate",
+                   return_value=(0.4, {"accuracy": 0.78})):
+            strategy.aggregate_evaluate(2, [], [])
 
-        metrics_file = log_dir / "round_2_metrics.json"
-        assert metrics_file.exists()
-        with open(metrics_file) as f:
-            data = json.load(f)
-        assert data["round"] == 2
-        assert data["accuracy"] == 0.78
+        strategy._checkpoint_store.save_round_history.assert_called_once()
+        _, kwargs = strategy._checkpoint_store.save_round_history.call_args
+        assert kwargs["training_id"] == 42
+        assert kwargs["rounds"] == [2]
+        assert kwargs["accuracies"] == [0.78]
 
     def test_aggregate_evaluate_sets_should_stop_on_convergence(self, strategy_and_model):
         strategy, _, tmp_path = strategy_and_model
