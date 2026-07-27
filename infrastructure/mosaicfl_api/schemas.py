@@ -149,3 +149,43 @@ class OutcomeFeedbackResponse(BaseModel):
     recorded:          bool
     correlation_token: str
     predicted_label:   Optional[str] = None
+
+
+class VocabAnomalyEntry(BaseModel):
+    canonical:    str
+    source:       str
+    active:       bool
+    created_at:   Optional[str] = None
+    reason:       str = Field(description="Por que foi sinalizado — heurística best-effort, não prova de erro")
+    ref_low:      Optional[float] = None
+    ref_high:     Optional[float] = None
+    n_hospitals:  Optional[int] = None
+    local_record_count: int = Field(
+        description="Registros com este analito no banco que esta instância da API enxerga — "
+                     "NÃO é o total federado, só reflete o hospital local"
+    )
+
+
+class VocabAnomalyListResponse(BaseModel):
+    anomalies: list[VocabAnomalyEntry]
+
+
+class VocabAnomalyActionRequest(BaseModel):
+    active: bool
+
+
+class VocabAnomalyActionResponse(BaseModel):
+    canonical: str
+    active:    bool
+
+
+class VocabAnomalyCorrectionRequest(BaseModel):
+    correct_canonical: str = Field(description="Nome canônico correto (ex: '183' -> 'AMILASE')")
+
+
+class VocabAnomalyCorrectionResponse(BaseModel):
+    old_canonical:     str
+    new_canonical:     str
+    merged:            bool = Field(description="True se new_canonical já existia (juntou com ele); "
+                                                  "False se foi um rename simples")
+    exam_records_updated: int

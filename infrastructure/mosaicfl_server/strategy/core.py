@@ -65,6 +65,8 @@ class ProductionFedProxStrategy(
     _best_criterion_value = 0.0  # fallback para __new__ em testes
     _training_completed = False  # fallback para __new__ em testes
     _last_round_resources_json = None  # fallback para __new__ em testes
+    _ece_pre            = None  # fallback para __new__ em testes
+    _ece                = None  # fallback para __new__ em testes
 
     def __init__(
         self,
@@ -145,6 +147,16 @@ class ProductionFedProxStrategy(
         self._best_accuracy = 0.0
         self._best_f1_macro: float = 0.0
         self._best_macro_auc: Optional[float] = None
+        # ece/ece_pre federados — calculados uma única vez, na mesma rodada em que
+        # calibrate=True é enviado aos clientes (ver client.py::evaluate). Nunca
+        # centraliza uma amostra: cada cliente manda só contagens agregadas por bin
+        # (client.py::_fit_local_calibrator / local_ece_bin_stats), o servidor soma
+        # entre hospitais e calcula o ECE global exato (ver aggregate_evaluate
+        # abaixo). Achado 2026-07-26: antes ficavam sempre None/0 em produção porque
+        # o único cálculo existente (_run_calibration) exige test_loader
+        # centralizado, indisponível por design de privacidade no Caminho B.
+        self._ece_pre: Optional[float] = None
+        self._ece: Optional[float] = None
         self._training_completed = False
 
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
@@ -391,6 +403,51 @@ class ProductionFedProxStrategy(
                 per_client_calibration.append(entry)
         calibration_per_client_json = json.dumps(per_client_calibration) if per_client_calibration else None
 
+        # ece/ece_pre federados — mesma extração de "results" (raw, per-cliente) que
+        # calibration_per_client acima. Cada cliente já mandou só contagens agregadas
+        # por bin (nunca amostra bruta, ver client.py::local_ece_bin_stats); aqui só
+        # somamos entre hospitais e calculamos o ECE global exato — nunca vimos, nem
+        # centralizamos, uma predição/rótulo individual. Achado 2026-07-26.
+        from mosaicfl.core.evaluation import compute_ece_from_bin_totals, merge_ece_bin_stats
+
+        ece_pre_per_client = []
+        ece_post_per_client = []
+        for _, evaluate_res in results:
+            m = getattr(evaluate_res, "metrics", None) or {}
+            try:
+                if "ece_pre_bin_stats_json" in m:
+                    ece_pre_per_client.append(json.loads(m["ece_pre_bin_stats_json"]))
+                if "ece_post_bin_stats_json" in m:
+                    ece_post_per_client.append(json.loads(m["ece_post_bin_stats_json"]))
+            except Exception as e:
+                logger.warning(
+                    "ece_bin_stats_parse_error client_id=%s error=%s", m.get("client_id"), e,
+                )
+
+        try:
+            if ece_pre_per_client:
+                ece_pre, _, ece_pre_n = compute_ece_from_bin_totals(merge_ece_bin_stats(ece_pre_per_client))
+                self._ece_pre = ece_pre
+                logger.info(
+                    "ece_pre_computed round=%d ece_pre=%.4f n_samples=%d n_clients=%d",
+                    server_round, ece_pre, ece_pre_n, len(ece_pre_per_client),
+                )
+            if ece_post_per_client:
+                # ece_post reflete cada hospital usando SEU PRÓPRIO calibrador local (ver
+                # client.py::_fit_local_calibrator) — não o calibrador federado final
+                # agregado (esse só existe depois desta rodada, ver
+                # _persist_federated_calibration abaixo). Documentado como aproximação
+                # honesta, não medida exata do modelo efetivamente servido.
+                ece_post, _, ece_post_n = compute_ece_from_bin_totals(merge_ece_bin_stats(ece_post_per_client))
+                self._ece = ece_post
+                logger.info(
+                    "ece_post_computed round=%d ece=%.4f n_samples=%d n_clients=%d "
+                    "(calibrador local por hospital, não o agregado federado final)",
+                    server_round, ece_post, ece_post_n, len(ece_post_per_client),
+                )
+        except Exception as e:
+            logger.warning("ece_aggregation_error round=%d error=%s", server_round, e)
+
         self.tracker.check(accuracy)
         self.round_counter = server_round
 
@@ -526,6 +583,8 @@ class ProductionFedProxStrategy(
                     training_id=self._training_id,
                     macro_f1=self._best_f1_macro,
                     macro_auc=self._best_macro_auc,
+                    ece=self._ece,
+                    ece_pre=self._ece_pre,
                 )
                 logger.info(
                     "evaluation_metrics_updated",
@@ -533,6 +592,8 @@ class ProductionFedProxStrategy(
                         "training_id": self._training_id,
                         "macro_f1": self._best_f1_macro,
                         "macro_auc": self._best_macro_auc,
+                        "ece": self._ece,
+                        "ece_pre": self._ece_pre,
                     },
                 )
             except Exception as e:

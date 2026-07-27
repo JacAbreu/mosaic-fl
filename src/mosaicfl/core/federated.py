@@ -7,11 +7,14 @@ Funções de agregação ponderada usadas por ambos os adapters
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import flwr as fl
 import torch
 from collections import OrderedDict
+
+logger = logging.getLogger(__name__)
 
 
 def _weighted_average(metrics: List[Tuple[int, Dict[str, Any]]], key: str) -> Dict[str, float]:
@@ -111,7 +114,30 @@ def aggregate_calibration(metrics: List[Tuple[int, Dict[str, Any]]]) -> Optional
     if not calib_entries:
         return None
 
-    method = calib_entries[0][1]["calibration_method"]
+    # Maioria ponderada por n_samples — não mais "o método que o primeiro cliente
+    # da lista escolheu" (ordem de "results" não é determinística entre rounds).
+    # Achado 2026-07-26: com calibration_method="auto" (cada hospital escolhe
+    # localmente temperature ou isotonic pelo próprio ECE), hospitais podem
+    # discordar entre si — o critério antigo descartava silenciosamente a
+    # contribuição de quem não batia com o primeiro da lista (só entrava na média/
+    # pool quem tivesse a mesma chave "temperature"/"isotonic_thresholds_json" do
+    # método escolhido). Com maioria explícita, ainda existe descarte quando há
+    # divergência real (não dá pra combinar T escalar com thresholds isotônicos
+    # no mesmo calibrador), mas agora é uma decisão registrada em log, não um
+    # acidente de ordenação de lista.
+    votes: Dict[str, int] = {}
+    for n, m in calib_entries:
+        votes[m["calibration_method"]] = votes.get(m["calibration_method"], 0) + n
+    method = max(votes, key=votes.get)
+
+    if len(votes) > 1:
+        logger.warning(
+            "calibration_method_disagreement votes=%s chosen=%s — hospital(is) com método "
+            "diferente do majoritário não contribuem pro calibrador federado desta rodada "
+            "(cada hospital escolheu individualmente sob calibration_method=auto; "
+            "ver fl_round_history.calibration_per_client_json pra auditar quem escolheu o quê)",
+            votes, method,
+        )
 
     if method == "temperature":
         total = sum(n for n, m in calib_entries if "temperature" in m)

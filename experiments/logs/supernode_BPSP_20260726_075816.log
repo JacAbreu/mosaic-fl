@@ -6602,3 +6602,4 @@
 [92mINFO [0m:      Sending: evaluate message (ID: 3909e4dac0913fe40791ad386419b9a117f3f2b9527852a7e9204e7cbf766e87)
 [92mINFO [0m:      
 [92mINFO [0m:      Sent successfully
+[93mWARNING [0m:   Connection attempt failed, retrying in 0.20 seconds

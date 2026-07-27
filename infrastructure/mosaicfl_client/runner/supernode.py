@@ -5,8 +5,7 @@ Entry point para: flower-supernode --superlink <addr> ... (executa flwr-clientap
 import json
 import logging
 import os
-from datetime import datetime
-from pathlib import Path
+import sys
 
 import flwr as fl
 from flwr.client import ClientApp
@@ -31,9 +30,17 @@ def _setup_clientapp_logging(client_id_str: str) -> None:
     logger.info() do Python cai no logging.lastResort (só WARNING+ sobrevive, via
     stderr herdado do processo pai) — todo log INFO da lógica de treino real
     (client_fit, local_calibration_fit, client_resources em mosaicfl.core.client)
-    é descartado silenciosamente. Só sobrevivem os "[pipeline] ..." porque usam
-    print() além de logger.info() (ver sequence_pipeline.py::_log), e os warning/
-    error (ex: erro de conexão do datasource) via lastResort.
+    era descartado silenciosamente.
+
+    StreamHandler(stdout), não FileHandler: o stdout deste subprocesso já é herdado
+    até o processo pai (flower-supernode) e capturado pelo "tee" do shell em
+    experiments/logs/supernode_<client_id>_<timestamp>.log — é assim que os
+    "[pipeline] ..." (print()) e os avisos WARNING+ (via lastResort/stderr) já
+    apareciam ali. Escrever num FileHandler separado (clientapp_*.log, versão
+    anterior) duplicava esses últimos (root logger despacha pra todos os handlers)
+    e deixava os INFO isolados num segundo arquivo sem necessidade — achado
+    2026-07-26 revendo o primeiro log real da descoberta de vocabulário bidirecional.
+    Com StreamHandler(stdout), tudo cai no mesmo arquivo único, sem duplicar nada.
 
     Mesmo gap já achado e corrigido do lado do servidor em 2026-07-05/06 (ver
     infrastructure/mosaicfl_server/runner/superlink.py) — aqui é a mesma causa raiz,
@@ -41,18 +48,14 @@ def _setup_clientapp_logging(client_id_str: str) -> None:
     em nenhum log capturado apesar da calibração federada funcionar de ponta a ponta.
     """
     root_logger = logging.getLogger()
-    if any(isinstance(h, logging.FileHandler) and getattr(h, "_mosaicfl_clientapp", False)
-           for h in root_logger.handlers):
+    if any(getattr(h, "_mosaicfl_clientapp", False) for h in root_logger.handlers):
         return
-    log_dir = Path("experiments/logs")
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"clientapp_{client_id_str}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler._mosaicfl_clientapp = True
-    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s | %(message)s"))
-    root_logger.addHandler(file_handler)
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler._mosaicfl_clientapp = True
+    stream_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s | %(message)s"))
+    root_logger.addHandler(stream_handler)
     root_logger.setLevel(logging.INFO)
-    logger.info("clientapp_log_file_iniciado path=%s", log_file)
+    logger.info("clientapp_logging_iniciado client_id=%s", client_id_str)
 
 
 def _client_fn(context: Context) -> fl.client.Client:

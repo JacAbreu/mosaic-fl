@@ -87,6 +87,85 @@ class EvaluationReport:
 # ECE e diagrama de confiabilidade
 # ---------------------------------------------------------------------------
 
+def local_ece_bin_stats(
+    confidences: torch.Tensor,
+    correct:     torch.Tensor,
+    n_bins:      int = 15,
+) -> List[Dict]:
+    """
+    Estatísticas CRUAS por bin (count, sum_confidence, sum_correct) — nunca o ECE
+    já calculado nem confiança/acerto por amostra. Usado pelo cliente FL pra
+    reportar ao servidor só um resumo agregado por bin, mesma filosofia de
+    privacidade de F1/AUC (client.py::evaluate: "só o escalar agregado sai do
+    hospital, nunca probabilidade/rótulo bruto por amostra").
+
+    Lista de tamanho fixo (n_bins entradas, count=0 pros bins vazios) — permite
+    somar direto por índice entre hospitais sem precisar alinhar bins não-vazios
+    de clientes diferentes (ver merge_ece_bin_stats / compute_ece_from_bin_totals,
+    usados no servidor pra montar o ECE global federado, achado 2026-07-26: ece/
+    ece_pre ficavam sempre zerados em produção porque o único cálculo existente
+    exigia um test_loader centralizado, indisponível por design de privacidade).
+    """
+    edges = torch.linspace(0.0, 1.0, n_bins + 1)
+    stats: List[Dict] = []
+    for i in range(n_bins):
+        lo, hi = float(edges[i]), float(edges[i + 1])
+        mask = (confidences > lo) & (confidences <= hi)
+        if i == 0:
+            mask = (confidences >= lo) & (confidences <= hi)
+        count = int(mask.sum())
+        stats.append({
+            "count":          count,
+            "sum_confidence": float(confidences[mask].sum()) if count else 0.0,
+            "sum_correct":    float(correct[mask].float().sum()) if count else 0.0,
+        })
+    return stats
+
+
+def merge_ece_bin_stats(per_client_bin_stats: List[List[Dict]]) -> List[Dict]:
+    """Soma estatísticas de bin (local_ece_bin_stats) de vários clientes, índice a
+    índice — nunca centraliza uma amostra, só soma contagens/somas já agregadas."""
+    if not per_client_bin_stats:
+        return []
+    n_bins = len(per_client_bin_stats[0])
+    merged = [{"count": 0, "sum_confidence": 0.0, "sum_correct": 0.0} for _ in range(n_bins)]
+    for client_bins in per_client_bin_stats:
+        for i, b in enumerate(client_bins):
+            merged[i]["count"]          += b["count"]
+            merged[i]["sum_confidence"] += b["sum_confidence"]
+            merged[i]["sum_correct"]    += b["sum_correct"]
+    return merged
+
+
+def compute_ece_from_bin_totals(bin_totals: List[Dict]) -> "tuple[float, float, int]":
+    """Calcula ECE/MCE globais a partir de estatísticas por bin JÁ SOMADAS entre
+    clientes (merge_ece_bin_stats) — matematicamente idêntico a rodar compute_ece()
+    sobre o dado centralizado (mesma fórmula, só que os somatórios por bin chegam
+    prontos em vez de calculados aqui), sem nunca ter centralizado uma amostra.
+
+    Returns:
+        (ece, mce, n_samples)
+    """
+    n_total = sum(b["count"] for b in bin_totals)
+    if n_total == 0:
+        return 0.0, 0.0, 0
+
+    gaps: List[float] = []
+    weighted_gaps: List[float] = []
+    for b in bin_totals:
+        if b["count"] == 0:
+            continue
+        conf_mean = b["sum_confidence"] / b["count"]
+        acc       = b["sum_correct"] / b["count"]
+        gap       = abs(conf_mean - acc)
+        gaps.append(gap)
+        weighted_gaps.append((b["count"] / n_total) * gap)
+
+    ece = float(sum(weighted_gaps))
+    mce = float(max(gaps, default=0.0))
+    return round(ece, 4), round(mce, 4), n_total
+
+
 def compute_ece(
     confidences: torch.Tensor,
     correct:     torch.Tensor,
@@ -105,39 +184,28 @@ def compute_ece(
 
     Fórmula:
         ECE = Σ_b (|B_b| / N) * |acc(B_b) − conf(B_b)|
+
+    Implementado sobre local_ece_bin_stats()/compute_ece_from_bin_totals() — mesmo
+    código usado no caminho federado (client.py + strategy/core.py), garantindo que
+    a versão "centralizada" (simulação, Caminho A) e a "federada exata" (Caminho B)
+    nunca divirjam silenciosamente por causa de dois cálculos de bin implementados
+    em paralelo.
     """
     n = len(confidences)
-    bins: List[BinStats] = []
-    weighted_gaps: List[float] = []
+    bin_totals = local_ece_bin_stats(confidences, correct, n_bins)
+    ece, mce, _ = compute_ece_from_bin_totals(bin_totals)
 
-    edges = torch.linspace(0.0, 1.0, n_bins + 1)
+    bins = [
+        BinStats(
+            confidence_mean=round(b["sum_confidence"] / b["count"], 4),
+            accuracy=round(b["sum_correct"] / b["count"], 4),
+            count=b["count"],
+            gap=round(abs(b["sum_confidence"] / b["count"] - b["sum_correct"] / b["count"]), 4),
+        )
+        for b in bin_totals if b["count"] > 0
+    ]
 
-    for i in range(n_bins):
-        lo, hi = float(edges[i]), float(edges[i + 1])
-        mask = (confidences > lo) & (confidences <= hi)
-        if i == 0:
-            mask = (confidences >= lo) & (confidences <= hi)
-
-        count = int(mask.sum())
-        if count == 0:
-            continue
-
-        conf_mean = float(confidences[mask].mean())
-        acc       = float(correct[mask].float().mean())
-        gap       = abs(conf_mean - acc)
-
-        bins.append(BinStats(
-            confidence_mean=round(conf_mean, 4),
-            accuracy=round(acc, 4),
-            count=count,
-            gap=round(gap, 4),
-        ))
-        weighted_gaps.append((count / n) * gap)
-
-    ece = float(sum(weighted_gaps))
-    mce = float(max((b.gap for b in bins), default=0.0))
-
-    return CalibrationResult(ece=round(ece, 4), mce=round(mce, 4), bins=bins, n_samples=n)
+    return CalibrationResult(ece=ece, mce=mce, bins=bins, n_samples=n)
 
 
 # ---------------------------------------------------------------------------

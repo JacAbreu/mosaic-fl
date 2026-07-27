@@ -7,6 +7,12 @@ logging configurado — sem isso, logger.info() cai no logging.lastResort do Pyt
 local_calibration_fit, client_resources) fica invisível em qualquer log capturado.
 Achado 2026-07-25 — mesmo gap já corrigido do lado do servidor em 2026-07-05/06
 (ver infrastructure/mosaicfl_server/runner/superlink.py).
+
+StreamHandler(stdout), não FileHandler: desde 2026-07-26, o destino é o stdout do
+próprio subprocesso (já capturado pelo "tee" do processo pai em
+supernode_<client_id>_<timestamp>.log) — não mais um arquivo clientapp_*.log
+separado, que duplicava WARNING+ (também chegavam via lastResort/stderr) e deixava
+os INFO isolados sem necessidade.
 """
 import logging
 import sys
@@ -34,36 +40,33 @@ def _clean_root_handlers():
 
 
 class TestSetupClientappLogging:
-    def test_attaches_file_handler_to_root_logger(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_attaches_stream_handler_to_root_logger(self):
         _setup_clientapp_logging("BPSP")
         root = logging.getLogger()
         handlers = [h for h in root.handlers if getattr(h, "_mosaicfl_clientapp", False)]
         assert len(handlers) == 1
+        assert isinstance(handlers[0], logging.StreamHandler)
 
-    def test_creates_log_file_under_experiments_logs(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_handler_targets_stdout_not_a_file(self):
         _setup_clientapp_logging("HSL")
-        log_files = list((tmp_path / "experiments" / "logs").glob("clientapp_HSL_*.log"))
-        assert len(log_files) == 1
+        root = logging.getLogger()
+        handler = next(h for h in root.handlers if getattr(h, "_mosaicfl_clientapp", False))
+        assert not isinstance(handler, logging.FileHandler)
+        assert handler.stream is sys.stdout
 
-    def test_info_log_reaches_the_file(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_info_log_reaches_stdout(self, capsys):
         _setup_clientapp_logging("BPSP")
         logging.getLogger("mosaicfl.core.client").info("client_fit client_id=0 loss=0.5")
-        log_files = list((tmp_path / "experiments" / "logs").glob("clientapp_BPSP_*.log"))
-        content = log_files[0].read_text(encoding="utf-8")
-        assert "client_fit client_id=0 loss=0.5" in content
+        captured = capsys.readouterr()
+        assert "client_fit client_id=0 loss=0.5" in captured.out
 
-    def test_idempotent_does_not_duplicate_handler(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_idempotent_does_not_duplicate_handler(self):
         _setup_clientapp_logging("BPSP")
         _setup_clientapp_logging("BPSP")
         root = logging.getLogger()
         handlers = [h for h in root.handlers if getattr(h, "_mosaicfl_clientapp", False)]
         assert len(handlers) == 1
 
-    def test_root_logger_level_set_to_info(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_root_logger_level_set_to_info(self):
         _setup_clientapp_logging("BPSP")
         assert logging.getLogger().level == logging.INFO

@@ -19,15 +19,18 @@ Convenção de canonização:
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
-from integration.column_resolver import normalize
+from integration.column_resolver import looks_like_valid_analyte_name, normalize
 
 from .models import PendingTerm, ValidationResult
 from .resolution import _load_alias_cache, _resolve_one, _to_canonical
 
 if TYPE_CHECKING:
     from sqlalchemy import Connection
+
+logger = logging.getLogger(__name__)
 
 _TERM_TYPE_ANALYTE = "analyte"
 _SOURCE_AUTO = "AUTO_NORMALIZED"
@@ -260,7 +263,20 @@ def activate_all_auto_normalized(
         )
     ]
 
-    problemas = aliases_verdadeiros + colisoes
+    # Suspeito: canonical proposto não parece nome de exame real (hoje: puramente
+    # numérico) — achado 2026-07-26, canonical="183" (código interno de laboratório
+    # do HSL nunca traduzido). Esse caso passa DESPERCEBIDO pelo critério de "alias
+    # verdadeiro" acima porque normalize("183").upper() == "183" — o alias bruto e o
+    # canonical proposto são idênticos, exatamente como uma variante de grafia
+    # legítima (ex: "Eritrócitos"→"ERITROCITOS"). Checagem própria, não cabe dentro
+    # de aliases_verdadeiros nem colisoes.
+    suspeitos = [
+        p for p in pending
+        if p not in aliases_verdadeiros
+        and not looks_like_valid_analyte_name(p.canonical_proposto)
+    ]
+
+    problemas = aliases_verdadeiros + colisoes + suspeitos
     if problemas:
         if aliases_verdadeiros:
             print(f"\n⚠ {len(aliases_verdadeiros)} alias(es) verdadeiro(s) — canonical proposto pode estar errado:\n")
@@ -275,6 +291,18 @@ def activate_all_auto_normalized(
                     if normalize(p.canonical_proposto) == ac
                 )
                 print(f"  {p}  ← colide com '{colide_com.upper()}'")
+        if suspeitos:
+            print(
+                f"\n🚩 {len(suspeitos)} canonical(is) suspeito(s) — não parece nome de exame real "
+                "(provável código bruto não traduzido na fonte):\n"
+            )
+            for p in suspeitos:
+                print(f"  {p}")
+            logger.warning(
+                "activate_all_auto_normalized_suspicious_canonicals count=%d canonicals=%s "
+                "— bloqueado, revisar com correct_term() antes de ativar",
+                len(suspeitos), [p.canonical_proposto for p in suspeitos],
+            )
         print(
             "\nUse correct_term(alias, canonical_correto, conn) para cada um acima "
             "e então chame activate_all_auto_normalized() novamente.\n"

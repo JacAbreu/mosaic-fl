@@ -102,3 +102,21 @@ class TestDiscoverVocabOnlyBranch:
 
         assert n_samples == len(dummy_loader.dataset)
         assert "vocab_candidates_json" not in metrics
+
+    def test_logs_discovery_request_with_candidate_count(self, caplog):
+        """Achado 2026-07-26: sem log nenhum no caminho de sucesso, não dava pra
+        confirmar pelo log do cliente que a troca de vocabulário aconteceu — só
+        pelo banco. StreamHandler(stdout) (ver supernode.py) faz esse log cair no
+        mesmo arquivo único do supernode, não mais um segundo arquivo."""
+        candidates = [{"analyte": "PCR", "n_records": 200, "has_real_ref": False}]
+        client = FedProxClient(
+            client_id=7, loader_factory=_unused_loader_factory,
+            vocab_discovery_fn=lambda vocab: candidates,
+        )
+
+        with caplog.at_level("INFO", logger="mosaicfl.core.client"):
+            client.evaluate([], {"discover_vocab_only": True, "vocab_json": "{}"})
+
+        assert any("vocab_discovery_request" in r.message for r in caplog.records)
+        assert any("client_id=7" in r.message for r in caplog.records)
+        assert any("candidatos_encontrados=1" in r.message for r in caplog.records)

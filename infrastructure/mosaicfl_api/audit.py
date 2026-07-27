@@ -71,7 +71,8 @@ def log_access(
     Emite registro de auditoria LGPD Art. 37.
 
     Args:
-        operation:  "predict" | "ingest" | "patient_read" | "patient_list" | "model_reload"
+        operation:  "predict" | "ingest" | "patient_read" | "patient_list" | "model_reload" |
+                    "vocab_anomaly_correction"
         token_fp:   fingerprint do token de autorização (12 hex chars)
         patient_id: patient_id real — pseudonimizado antes de gravar
         **kwargs:   campos extras (ex: exam_count=5, risk_score=0.72)

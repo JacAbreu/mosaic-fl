@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOSAIC-FL — Vocabulário: Casos Fora de Padrão</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .anomaly-table th { font-size: .8rem; }
+    .anomaly-table td { font-size: .85rem; vertical-align: middle; }
+    .active-yes { background: #d1e7dd; color: #0a3622; }
+    .active-no  { background: #e9ecef; color: #495057; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark mb-3 px-3">
+  <span class="navbar-brand fw-bold">MOSAIC-FL</span>
+  <a href="/" class="text-white-50 small">&larr; Painel Clínico</a>
+</nav>
+
+<div class="container-fluid">
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <strong>Vocabulário — casos fora de padrão</strong>
+        <div class="text-muted small">
+          Sinalização automática (heurística best-effort) de analitos aprovados pela descoberta
+          bidirecional de vocabulário que não parecem nomes de exame reais. Não é prova de erro —
+          revise antes de desativar.
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadAnomalies()">↺</button>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm table-hover mb-0 anomaly-table">
+        <thead class="table-light">
+          <tr>
+            <th>Canonical</th><th>Motivo</th><th>Origem</th><th>Ref.</th>
+            <th>N hospitais</th><th>Registros locais</th><th>Criado em</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="anomaly-tbody">
+          <tr><td colspan="9" class="text-muted small text-center py-3">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 999">
+  <div id="toast" class="toast align-items-center border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toast-body"></div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const API = '';
+
+function showToast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  const body = document.getElementById('toast-body');
+  body.textContent = msg;
+  el.className = `toast align-items-center border-0 text-bg-${ok ? 'success' : 'danger'}`;
+  bootstrap.Toast.getOrCreateInstance(el, { delay: 3000 }).show();
+}
+
+async function loadAnomalies() {
+  const tbody = document.getElementById('anomaly-tbody');
+  tbody.innerHTML = '<tr><td colspan="9" class="text-muted small text-center py-3">Carregando…</td></tr>';
+  try {
+    const r = await fetch(`${API}/api/admin/vocab-anomalies`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (!data.anomalies.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="text-muted small text-center py-3">Nenhum caso sinalizado.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.anomalies.map(a => {
+      const ref = (a.ref_low !== null && a.ref_high !== null) ? `${a.ref_low}–${a.ref_high}` : '—';
+      const created = a.created_at ? a.created_at.slice(0, 16).replace('T', ' ') : '—';
+      const statusCls = a.active ? 'active-yes' : 'active-no';
+      const statusLabel = a.active ? 'ativo' : 'desativado';
+      return `
+        <tr data-canonical="${a.canonical}">
+          <td class="font-monospace">${a.canonical}</td>
+          <td class="text-muted">${a.reason}</td>
+          <td>${a.source}</td>
+          <td>${ref}</td>
+          <td>${a.n_hospitals ?? '—'}</td>
+          <td>${a.local_record_count}</td>
+          <td>${created}</td>
+          <td><span class="badge ${statusCls}">${statusLabel}</span></td>
+          <td class="text-nowrap">
+            <button class="btn btn-sm btn-outline-primary me-1"
+                    onclick="correctCanonical('${a.canonical}')">
+              Corrigir
+            </button>
+            <button class="btn btn-sm ${a.active ? 'btn-outline-danger' : 'btn-outline-success'}"
+                    onclick="toggleActive('${a.canonical}', ${!a.active})">
+              ${a.active ? 'Desativar' : 'Reativar'}
+            </button>
+          </td>
+        </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-danger small text-center py-3">Erro: ${e.message}</td></tr>`;
+  }
+}
+
+async function toggleActive(canonical, newActive) {
+  try {
+    const r = await fetch(`${API}/api/admin/vocab-anomalies/${encodeURIComponent(canonical)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: newActive }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(JSON.stringify(data.detail ?? data));
+    showToast(`${canonical}: ${newActive ? 'reativado' : 'desativado'}`);
+    await loadAnomalies();
+  } catch (e) {
+    showToast(e.message, false);
+  }
+}
+
+async function correctCanonical(canonical) {
+  const correct = prompt(
+    `Nome canônico correto pra "${canonical}" (ex: AMILASE)?\n\n` +
+    `Se já existir um canonical ativo com esse nome, "${canonical}" vira alias dele ` +
+    `e os registros já carregados são migrados. Se não existir, é um rename simples.`
+  );
+  if (!correct || !correct.trim()) return;
+
+  try {
+    const r = await fetch(`${API}/api/admin/vocab-anomalies/${encodeURIComponent(canonical)}/correct`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correct_canonical: correct.trim() }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(JSON.stringify(data.detail ?? data));
+    const action = data.merged ? 'fundido com' : 'renomeado para';
+    showToast(`${data.old_canonical} ${action} ${data.new_canonical} — ${data.exam_records_updated} registro(s) atualizado(s)`);
+    await loadAnomalies();
+  } catch (e) {
+    showToast(e.message, false);
+  }
+}
+
+loadAnomalies();
+</script>
+</body>
+</html>

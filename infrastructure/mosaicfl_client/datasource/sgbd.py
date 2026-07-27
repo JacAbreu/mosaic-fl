@@ -167,11 +167,17 @@ class SGBDDataSource(DataSource):
             token.rsplit("_", 1)[0] if token.rsplit("_", 1)[-1] in ("HIGH", "NORMAL", "LOW") else token
             for token in vocab
         }
-        return [
+        candidates = [
             {"analyte": r.analyte, "n_records": int(r.n_records), "has_real_ref": bool(r.has_real_ref)}
             for r in rows
             if r.analyte not in known_analytes
         ]
+        logger.info(
+            "[SGBD] find_vocab_candidates hospital=%s vocab_recebido=%d candidatos_locais=%d: %s",
+            self.hospital_id, len(vocab), len(candidates),
+            [c["analyte"] for c in candidates],
+        )
+        return candidates
 
     def get_metadata(self) -> dict:
         return {

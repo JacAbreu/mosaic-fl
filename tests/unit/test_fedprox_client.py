@@ -315,6 +315,89 @@ class TestFedProxClient:
         assert result["calibration_method"] == "temperature"
         assert result["temperature"] > 0
 
+    # ── ece/ece_pre federado (2026-07-26) ─────────────────────────────────────
+
+    def test_evaluate_calibrate_includes_ece_pre_bin_stats(self, contract_client):
+        import json
+        params = contract_client.get_parameters({})
+        _, _, metrics = contract_client.evaluate(
+            params, {"calibrate": True, "calibration_method": "temperature"}
+        )
+        assert "ece_pre_bin_stats_json" in metrics
+        bins = json.loads(metrics["ece_pre_bin_stats_json"])
+        assert len(bins) == 15
+        assert all({"count", "sum_confidence", "sum_correct"} == set(b) for b in bins)
+        assert sum(b["count"] for b in bins) == self.VAL_SIZE
+
+    def test_evaluate_without_calibrate_flag_has_no_ece_keys(self, contract_client):
+        params = contract_client.get_parameters({})
+        _, _, metrics = contract_client.evaluate(params, {})
+        assert "ece_pre_bin_stats_json" not in metrics
+
+    def test_fit_local_calibrator_temperature_includes_ece_post(self, client_v2):
+        import json
+        logits = torch.randn(20, NUM_CLASSES)
+        labels = torch.randint(0, NUM_CLASSES, (20,))
+        result = client_v2._fit_local_calibrator("temperature", logits, labels)
+        bins = json.loads(result["ece_post_bin_stats_json"])
+        assert len(bins) == 15
+        assert sum(b["count"] for b in bins) == 20
+
+    def test_fit_local_calibrator_isotonic_includes_ece_post(self, client_v2):
+        import json
+        logits = torch.randn(20, NUM_CLASSES)
+        labels = torch.randint(0, NUM_CLASSES, (20,))
+        result = client_v2._fit_local_calibrator("isotonic", logits, labels)
+        bins = json.loads(result["ece_post_bin_stats_json"])
+        assert len(bins) == 15
+        assert sum(b["count"] for b in bins) == 20
+
+    # ── calibration_method="auto" real no cliente (2026-07-26) ────────────────
+    # Até aqui, "auto" caía silenciosamente no ramo de temperature — nenhum
+    # código tratava esse valor no lado cliente (só existia "auto" real do lado
+    # servidor, e só com test_loader centralizado, indisponível no Caminho B).
+
+    def test_auto_returns_one_of_the_two_methods(self, client_v2):
+        logits = torch.randn(30, NUM_CLASSES)
+        labels = torch.randint(0, NUM_CLASSES, (30,))
+        result = client_v2._fit_local_calibrator("auto", logits, labels)
+        assert result["calibration_method"] in ("temperature", "isotonic")
+
+    def test_auto_includes_ece_post_bin_stats(self, client_v2):
+        import json
+        logits = torch.randn(30, NUM_CLASSES)
+        labels = torch.randint(0, NUM_CLASSES, (30,))
+        result = client_v2._fit_local_calibrator("auto", logits, labels)
+        bins = json.loads(result["ece_post_bin_stats_json"])
+        assert sum(b["count"] for b in bins) == 30
+
+    def test_auto_picks_lower_ece_between_temperature_and_isotonic(self, client_v2, monkeypatch):
+        """Confirma o critério de escolha chamando os dois métodos e comparando
+        com o que _fit_local_calibrator("auto", ...) realmente devolveu."""
+        logits = torch.randn(40, NUM_CLASSES)
+        labels = torch.randint(0, NUM_CLASSES, (40,))
+
+        from mosaicfl.core.evaluation import compute_ece_from_bin_totals
+        import json as json_mod
+
+        temp_result = client_v2._fit_local_calibrator("temperature", logits, labels)
+        iso_result  = client_v2._fit_local_calibrator("isotonic", logits, labels)
+        temp_ece, _, _ = compute_ece_from_bin_totals(json_mod.loads(temp_result["ece_post_bin_stats_json"]))
+        iso_ece, _, _  = compute_ece_from_bin_totals(json_mod.loads(iso_result["ece_post_bin_stats_json"]))
+        expected_method = "temperature" if temp_ece <= iso_ece else "isotonic"
+
+        auto_result = client_v2._fit_local_calibrator("auto", logits, labels)
+        assert auto_result["calibration_method"] == expected_method
+
+    def test_evaluate_calibrate_auto_end_to_end(self, contract_client):
+        params = contract_client.get_parameters({})
+        _, _, metrics = contract_client.evaluate(
+            params, {"calibrate": True, "calibration_method": "auto"}
+        )
+        assert metrics["calibration_method"] in ("temperature", "isotonic")
+        assert "ece_pre_bin_stats_json" in metrics
+        assert "ece_post_bin_stats_json" in metrics
+
 
 class TestFedProxClientResourceMetrics:
     """FL_COLLECT_RESOURCE_METRICS (FED_CFG.collect_resource_metrics) — ligado por

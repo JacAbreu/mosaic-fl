@@ -83,3 +83,13 @@ class TestSGBDFindVocabCandidates:
         with patch("sqlalchemy.create_engine", return_value=engine):
             candidates = self._source().find_vocab_candidates({})
         assert candidates == []
+
+    def test_logs_result_with_hospital_and_candidate_names(self, caplog):
+        rows = [SimpleNamespace(analyte="NEUTROFILOS", n_records=254614, has_real_ref=True)]
+        with patch("sqlalchemy.create_engine", return_value=_mock_engine_with_rows(rows)), \
+             caplog.at_level("INFO", logger="infrastructure.mosaicfl_client.datasource.sgbd"):
+            self._source().find_vocab_candidates({})
+
+        assert any("find_vocab_candidates" in r.message for r in caplog.records)
+        assert any("hospital=BPSP" in r.message for r in caplog.records)
+        assert any("NEUTROFILOS" in r.message for r in caplog.records)

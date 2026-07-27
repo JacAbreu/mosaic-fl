@@ -310,6 +310,10 @@ class FedProxClient(fl.client.NumPyClient):
                     logger.warning(
                         "vocab_discovery_error client_id=%s error=%s", self.client_id, e,
                     )
+            logger.info(
+                "vocab_discovery_request client_id=%s vocab_discovery_fn=%s candidatos_encontrados=%d",
+                self.client_id, self._vocab_discovery_fn is not None, len(candidates),
+            )
             return 0.0, 0, {"vocab_candidates_json": json.dumps(candidates)}
 
         self._ensure_data(config)
@@ -394,6 +398,21 @@ class FedProxClient(fl.client.NumPyClient):
         # docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md §9 (Cormode &
         # Markov / Maddock et al. — calibração ajustada no cliente, agregada no servidor).
         if config.get("calibrate", False) and total > 0:
+            # ece_pre: ECE do modelo ANTES de qualquer calibração (T=1.0), calculado
+            # localmente por bin (local_ece_bin_stats) — nunca confiança/acerto bruto
+            # por amostra, só contagens agregadas por bin (mesma filosofia de
+            # privacidade de F1/AUC acima). O servidor soma os bins de todos os
+            # hospitais e calcula o ECE global exato (aggregate_evaluate em
+            # strategy/core.py) — achado 2026-07-26: sem isso, ece/ece_pre ficavam
+            # sempre zerados em produção porque o único cálculo existente
+            # (calibration_mixin.py::_run_calibration) exige um test_loader
+            # centralizado, indisponível por design de privacidade no Caminho B.
+            from mosaicfl.core.evaluation import local_ece_bin_stats
+            confidences  = probs.max(dim=-1).values
+            correct_mask = torch.tensor(all_preds) == torch.tensor(all_labels)
+            metrics["ece_pre_bin_stats_json"] = json.dumps(
+                local_ece_bin_stats(confidences, correct_mask)
+            )
             metrics.update(self._fit_local_calibrator(
                 config.get("calibration_method", "temperature"),
                 torch.cat(all_logits),
@@ -407,18 +426,69 @@ class FedProxClient(fl.client.NumPyClient):
     ) -> dict:
         """Ajusta um calibrador local (temperature ou isotonic) sobre o val_loader deste
         cliente e devolve o resultado serializado (compatível com flwr.common.Metrics —
-        só escalares/strings, nunca objetos Python brutos)."""
+        só escalares/strings, nunca objetos Python brutos).
+
+        ece_post_bin_stats_json: ECE do modelo DEPOIS de aplicar o calibrador AJUSTADO
+        LOCALMENTE por este hospital — não o calibrador federado final (média/
+        agregação entre hospitais, ver _persist_federated_calibration em
+        strategy/core.py), que só fica pronto DEPOIS que o servidor agrega esta
+        mesma rodada (não daria pra reavaliar com ele sem uma rodada extra de
+        ida-e-volta). É uma leitura honesta de "como cada hospital se calibraria
+        sozinho", não uma medida exata do modelo que efetivamente será servido —
+        documentar essa diferença é importante pra não interpretar mal o número.
+
+        calibration_method="auto": ajusta os dois localmente e fica com o de menor
+        ECE local — mesmo critério do "auto" do lado servidor (calibration_mixin.py,
+        só roda com test_loader centralizado, indisponível no Caminho B), mas
+        decidido por hospital, não globalmente. Até 2026-07-26 esse valor caía
+        silenciosamente no ramo de temperature (nenhum código tratava "auto" aqui),
+        sem log nem aviso — achado ao revisar por que FL_CALIBRATION_METHOD=auto
+        nunca fazia diferença nenhuma em produção.
+        """
+        from mosaicfl.core.evaluation import compute_ece_from_bin_totals, local_ece_bin_stats
+
+        if calibration_method == "auto":
+            temp_result = self._fit_local_calibrator("temperature", logits, labels)
+            iso_result  = self._fit_local_calibrator("isotonic", logits, labels)
+            temp_ece, _, _ = compute_ece_from_bin_totals(
+                json.loads(temp_result["ece_post_bin_stats_json"])
+            )
+            iso_ece, _, _ = compute_ece_from_bin_totals(
+                json.loads(iso_result["ece_post_bin_stats_json"])
+            )
+            chosen = temp_result if temp_ece <= iso_ece else iso_result
+            logger.info(
+                "local_calibration_fit client_id=%s method=auto chosen=%s temp_ece=%.4f iso_ece=%.4f",
+                self.client_id, chosen["calibration_method"], temp_ece, iso_ece,
+            )
+            return chosen
+
         if calibration_method == "isotonic":
             iso = IsotonicCalibrator().fit_from_logits(logits, labels, num_classes=MODEL_CFG.num_classes)
             logger.info("local_calibration_fit client_id=%s method=isotonic", self.client_id)
+            raw_probs = F.softmax(logits, dim=-1)
+            cal_probs = iso.calibrate_probs(raw_probs)
+            cal_confidences = cal_probs.max(dim=-1).values
+            cal_correct     = cal_probs.argmax(dim=-1) == labels
             return {
                 "calibration_method": "isotonic",
                 "isotonic_thresholds_json": json.dumps(iso.export_thresholds()),
+                "ece_post_bin_stats_json": json.dumps(
+                    local_ece_bin_stats(cal_confidences, cal_correct)
+                ),
             }
 
         scaler = TemperatureScaler().fit_from_logits(logits, labels, device=str(RUNTIME_CFG.device))
         logger.info("local_calibration_fit client_id=%s method=temperature T=%.4f", self.client_id, scaler.T)
-        return {"calibration_method": "temperature", "temperature": scaler.T}
+        cal_probs = F.softmax(logits / scaler.T, dim=-1)
+        cal_confidences = cal_probs.max(dim=-1).values
+        cal_correct     = cal_probs.argmax(dim=-1) == labels
+        return {
+            "calibration_method": "temperature", "temperature": scaler.T,
+            "ece_post_bin_stats_json": json.dumps(
+                local_ece_bin_stats(cal_confidences, cal_correct)
+            ),
+        }
 
     def _extract_rag_patterns(self) -> list:
         """Gera perfis prototípicos por classe (BEHRTPatternExtractor) sobre o

@@ -21,7 +21,7 @@ FL_DB_URL            ?= postgresql://mosaicfl:senhaForte@localhost:5432/mosaicfl
 FL_LLM_BACKEND       ?= ollama
 FL_LLM_MODEL         ?= gemma3:4b
 FL_LLM_HF_MODEL      ?= distilgpt2
-FL_CALIBRATION_METHOD ?= temperature
+FL_CALIBRATION_METHOD ?= auto
 PIPELINE_SEQ_LEN     ?= 128
 PIPELINE_SAMPLE      ?= 3
 
@@ -390,7 +390,10 @@ superlink:
 # FL_LLM_BACKEND/FL_LLM_MODEL: usados por ClinicalRAG() ao construir a base de
 # conhecimento pós-convergência (core.py:_build_rag_knowledge_base). Sem isso,
 # cai silenciosamente em huggingface/distilgpt2 mesmo com Ollama disponível.
-# FL_CALIBRATION_METHOD: usado por _run_calibration (calibration_mixin.py).
+# FL_CALIBRATION_METHOD: "temperature" | "isotonic" | "auto" (cada hospital ajusta os
+# dois localmente e fica com o de menor ECE — client.py::_fit_local_calibrator).
+# Não é _run_calibration (calibration_mixin.py) — esse caminho exige test_loader
+# centralizado, indisponível por design de privacidade no Caminho B, nunca roda aqui.
 server-app:
 	FL_LLM_BACKEND=$(FL_LLM_BACKEND) \
 	FL_LLM_MODEL=$(FL_LLM_MODEL) \

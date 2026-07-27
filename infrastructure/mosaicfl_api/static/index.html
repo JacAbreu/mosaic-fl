@@ -25,10 +25,18 @@
 
 <nav class="navbar navbar-dark bg-dark mb-3 px-3">
   <span class="navbar-brand fw-bold">MOSAIC-FL</span>
-  <div id="fl-status-nav" class="d-flex align-items-center gap-2 text-white-50" style="font-size:.8rem">
-    Carregando status FL…
+  <div class="d-flex align-items-center gap-3">
+    <div id="fl-status-nav" class="d-flex align-items-center gap-2 text-white-50" style="font-size:.8rem">
+      Carregando status FL…
+    </div>
+    <a href="/vocab-anomalies" class="text-white-50 small">Vocabulário ⚠</a>
   </div>
 </nav>
+
+<div id="vocab-anomaly-banner" class="d-none alert alert-warning py-2 px-3 mb-3 mx-3 d-flex justify-content-between align-items-center">
+  <span id="vocab-anomaly-banner-text"></span>
+  <a href="/vocab-anomalies" class="btn btn-sm btn-outline-dark">Revisar</a>
+</div>
 
 <div class="container-fluid">
   <div class="row g-3">
@@ -165,6 +173,27 @@ async function loadFLStatus() {
         <span class="text-white-50">modelo com pesos aleatórios</span>`;
     }
   } catch { /* silencioso */ }
+}
+
+// ── faixa de vocabulário fora de padrão ─────────────────────────────────────
+
+async function loadVocabAnomalyBanner() {
+  const banner = document.getElementById('vocab-anomaly-banner');
+  try {
+    const r = await fetch(`${API}/api/admin/vocab-anomalies`);
+    if (!r.ok) { banner.classList.add('d-none'); return; }
+    const data = await r.json();
+    const n = data.anomalies.length;
+    if (n === 0) {
+      banner.classList.add('d-none');
+      return;
+    }
+    document.getElementById('vocab-anomaly-banner-text').textContent =
+      `⚠ ${n} termo(s) de vocabulário fora de padrão aguardando revisão.`;
+    banner.classList.remove('d-none');
+  } catch {
+    banner.classList.add('d-none');
+  }
 }
 
 // ── lista de pacientes ───────────────────────────────────────────────────────
@@ -369,8 +398,9 @@ document.getElementById('ingest-form').addEventListener('submit', async (e) => {
 // ── inicialização ─────────────────────────────────────────────────────────────
 
 (async () => {
-  await Promise.all([loadFLStatus(), loadPatients()]);
+  await Promise.all([loadFLStatus(), loadPatients(), loadVocabAnomalyBanner()]);
   setInterval(loadFLStatus, 30_000);
+  setInterval(loadVocabAnomalyBanner, 30_000);
   setInterval(() => { if (_selectedPatient) selectPatient(_selectedPatient); }, 60_000);
 })();
 </script>

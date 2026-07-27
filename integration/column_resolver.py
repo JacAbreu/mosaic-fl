@@ -40,6 +40,30 @@ def normalize(name: str) -> str:
     return slug.strip("_")
 
 
+_NUMERIC_ONLY_RE = re.compile(r"^[0-9]+$")
+
+
+def looks_like_valid_analyte_name(canonical: str) -> bool:
+    """Heurística best-effort: um nome de analito de verdade tem pelo menos uma
+    letra — não é só um código numérico bruto do sistema de origem.
+
+    Achado 2026-07-26 (canonical="183"): o HSL exportou `DE_ANALITO="183"` pra
+    2.133 registros de Amilase (código interno de laboratório nunca traduzido —
+    o nome certo, "Amilase", estava disponível na mesma linha em `DE_EXAME`, mas
+    a extração usa `DE_ANALITO` como fonte primária). `normalize("183").upper()`
+    é literalmente "183" — indistinguível de uma variante de grafia legítima
+    (ex: "Eritrócitos"→"ERITROCITOS") pro critério que já existia em
+    activate_all_auto_normalized() (só compara alias bruto vs canonical
+    proposto). Único ponto de verdade pra essa checagem — usado tanto na
+    revisão pré-carga (integration/term_manager/pending_workflow.py) quanto na
+    página pós-hoc /vocab-anomalies (infrastructure/mosaicfl_api/routers/
+    admin.py), pra nunca divergir entre os dois.
+    """
+    if not canonical.strip():
+        return False
+    return not _NUMERIC_ONLY_RE.match(canonical)
+
+
 class ColumnResolver:
     """
     Maps semantic concepts to actual column names in a DataFrame.

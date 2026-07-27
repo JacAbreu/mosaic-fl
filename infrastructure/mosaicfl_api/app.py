@@ -64,3 +64,11 @@ async def dashboard():
     if index.exists():
         return FileResponse(str(index))
     return {"message": "MOSAIC-FL API — painel web não encontrado em static/index.html"}
+
+
+@app.get("/vocab-anomalies", include_in_schema=False)
+async def vocab_anomalies_page():
+    page = _STATIC_DIR / "vocab_anomalies.html"
+    if page.exists():
+        return FileResponse(str(page))
+    return {"message": "página não encontrada em static/vocab_anomalies.html"}
