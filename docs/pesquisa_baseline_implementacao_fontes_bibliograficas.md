@@ -505,6 +505,36 @@ Padrão observado em pipelines comparativos de NLP (benchmarks que avaliam lado 
 
 ---
 
+## 12. Achado Empírico — Degradação de ECE Pós-Calibração Federada sob Non-IID (`training_id=76`)
+
+Não é literatura — é um achado nos dados reais do projeto, registrado aqui por conectar diretamente com a seção 9 (calibração federada) e por complementar o achado de heterogeneidade da seção 10: a assimetria BPSP×HSL não é só de volume, classes ou completude de atributo — é também de **como cada cliente se calibra**, e a combinação federada dos dois pode piorar, não melhorar, a confiabilidade do modelo global.
+
+**Contexto:** `training_id=76` (rede real desktop+notebook, 2026-07-27, 110 rounds, não convergiu antes do limite). `calibration_method="auto"` — cada cliente escolhe seu próprio método de calibração local a partir dos próprios dados de validação (client-side fit, ver `federated.py::aggregate_calibration()`). Os dois clientes escolheram, de forma independente, o mesmo método (`"temperature"`), mas com parâmetros bem diferentes:
+
+| `client_id` | Método | Temperatura |
+|---|---|---|
+| 4871 | temperature | 1,086 |
+| 4554 | temperature | 1,916 |
+
+Uma temperatura de ~1,09 é uma correção leve (modelo já quase bem calibrado localmente); ~1,92 é uma correção forte (modelo bem mais overconfident nesse cliente). O ECE medido no round 110 confirma que a calibração federada, nesse treino, **piorou** a confiabilidade global em vez de melhorar:
+
+| Métrica | Valor |
+|---|---|
+| `ece_pre` (antes da calibração) | 0,0392 |
+| `ece` (depois da calibração) | 0,1211 |
+
+**Hipótese (fundamentada na literatura já citada na seção 9, não inferência solta):** as duas temperaturas locais divergem porque BPSP e HSL têm distribuições de confiança do modelo genuinamente diferentes sob non-IID (a própria seção 10 já documenta uma faceta disso — completude de `birth_year` ~72% ausente no BPSP vs. ~3,2% no HSL). Um único fator de escala global (resultado da agregação dos dois `T` locais, majority-vote/combinação client-side) não consegue simultaneamente corrigir dois clientes com necessidades de correção tão diferentes — e a tentativa de fazê-lo pode sobrecorrigir um cliente e subcorrigir o outro, piorando o ECE global mesmo que cada correção local isolada fosse razoável. Isso é exatamente o que a seção 9.4 (FedCal, Peng et al., ICML 2024) prova formalmente no Teorema 4.4: sob *label skew*/heterogeneidade non-IID, o erro de calibração federado tem um **piso assintótico não-nulo** — nenhum método, por melhor implementado que seja, consegue zerá-lo, só minimizá-lo.
+
+**Ressalva de causalidade — dois fatores concorrentes não isolados neste treino único:** `training_id=76` também foi a primeira rodada de produção depois (a) da correção do canonical `"183"→AMILASE` (migration 026) e (b) de uma reinicialização que trocou GPU por CPU no desktop sem querer (`FL_DEVICE` não persistido). Qualquer um dos dois pode ter contribuído para o não-convergimento geral do treino, e por extensão para uma calibração local mais instável em pelo menos um cliente. Este achado registra a **hipótese** de que a degradação do ECE é (também) uma manifestação do piso teórico do FedCal — não uma afirmação causal comprovada. Isolar as duas causas exigiria repetir o treino mantendo CPU/GPU e dados fixos entre execuções, o que ainda não foi feito.
+
+**Implicação para o TCC:** calibração federada sob non-IID pode não ser corrigível apenas com melhor engenharia — é uma limitação estrutural reconhecida formalmente na literatura mais recente (peer-reviewed, ICML 2024), não uma falha de implementação do MOSAIC-FL. Vale reportar `ece_pre`/`ece` lado a lado explicitamente na seção de resultados/limitações do TCC, em vez de reportar só o ECE final — o par de números é o que evidencia que a calibração pode piorar a confiabilidade em cenários non-IID reais, um resultado negativo genuíno e citável.
+
+**Pergunta levantada pela autora — vale a pena forçar cada cliente a usar um método de calibração explicitamente diferente (em vez de `"auto"`)?** Não. A agregação federada de calibração hoje usa combinação client-side com voto de maioria quando os métodos escolhidos por `"auto"` divergem entre clientes (ver [[project_calibracao_federada_client_side]]) — com exatamente 2 clientes, forçar métodos *diferentes* por design garante desacordo permanente a cada rodada, o que sob a lógica de maioria atual significa que a contribuição de calibração de um dos dois clientes é **sempre descartada**, todas as rodadas, de forma determinística. Isso é o oposto do que a personalização deveria entregar — trava o problema de agregação em vez de evitá-lo. Duas alternativas melhor fundamentadas: manter `"auto"` (documentando esta limitação, como feito acima) — que já produz o que a literatura preconiza como calibração local-first (seção 9.4); ou, se for preferível um comportamento determinístico e não dependente dos dados de validação de cada rodada, forçar o **mesmo** método (não métodos diferentes) nos dois clientes. Forçar métodos diferentes não tem racional que sustente melhora — só reduz previsibilidade sem ganhar personalização de fato, já que a agregação de 2 clientes não tem como combinar dois formatos funcionais distintos de calibrador sem descartar um deles.
+
+**Ideia registrada para trabalho futuro (2026-07-27):** um ensemble de calibradores (nível 3 além da escolha manual/`"auto"`) poderia, em tese, evitar o descarte determinístico de um cliente ao combinar as saídas de ambos os calibradores locais em vez de escolher um por voto de maioria — candidato citado por Gharoun et al. (preprint 2025, conformal+isotonic dual), mas não é federado nativamente e exigiria adaptação (ver `project_calibracao_ensemble_futuro`). Não implementado; fica como linha de pesquisa aberta, não como mitigação imediata antes da simulação real.
+
+---
+
 ## 6. Regulatório
 
 ### 6.1 ANVISA — RDC 657/2022

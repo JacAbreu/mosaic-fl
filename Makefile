@@ -446,6 +446,14 @@ client-db-up:
 client-migrate:
 	FL_DB_URL="$(FL_DB_URL)" bash scripts/db/migrate.sh upgrade head
 
+## Investiga se os atendimentos com AMILASE de origem UTI/Internação/Pronto
+## Socorro (proxy do canonical "183", corrigido pela migration 026) se
+## concentram desproporcionalmente nas classes de prognóstico raras que
+## colapsaram no treino 76 (curado_internado, melhora_pronto). Achado
+## 2026-07-27 — ver scripts/investigate_183_class_correlation.py.
+investigate-183-classes:
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/investigate_183_class_correlation.py
+
 ## Carrega o seed HSL no banco do cliente.
 ## Requer que hsl_seed.sql.gz exista em $(HSL_SEED).
 client-load-hsl:
