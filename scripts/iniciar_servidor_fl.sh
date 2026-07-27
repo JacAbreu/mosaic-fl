@@ -33,6 +33,18 @@ fi
 # para esses subprocessos filhos também serem encontrados.
 export PATH="$PROJECT_ROOT/.venv/bin:$PATH"
 
+# Achado 2026-07-27 (flwr 1.31+): por padrão, o SuperLink passa
+# --allow-runtime-dependency-installation pro flower-superexec/flwr-serverapp,
+# que tenta reinstalar TODAS as dependências do pyproject.toml (torch,
+# transformers, chromadb, sentence-transformers...) num ambiente isolado toda
+# vez que um treino começa. O subprocesso do ServerApp roda com stdout/stderr
+# suprimidos (subprocess_executor.py::suppress_output=True, hardcoded na
+# própria lib) — se essa reinstalação falhar por qualquer motivo, o processo
+# morre em segundos, sem nenhum log, nenhum traceback, em lugar nenhum. O .venv
+# já tem tudo instalado corretamente — essa reinstalação nunca foi necessária
+# aqui. Desliga o comportamento novo, volta ao que já funcionava no 1.30.0.
+export FLWR_DISABLE_RUNTIME_DEPENDENCY_INSTALLATION=1
+
 : "${FL_TLS_CERT_DIR:?FL_TLS_CERT_DIR nao definido. Execute: bash scripts/gerar_certs_tls.sh}"
 
 FL_FLEET_API="${FL_FLEET_API:-0.0.0.0:9091}"
