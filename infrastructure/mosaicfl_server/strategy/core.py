@@ -528,16 +528,37 @@ class ProductionFedProxStrategy(
                 )
 
         if converged:
+            # self.should_stop=True é só informativo — achado 2026-07-27, ver
+            # flwr/server/server.py::Server.fit(): "for current_round in
+            # range(1, num_rounds + 1)" é um loop FIXO, sem nenhum mecanismo de
+            # saída antecipada. Nenhum retorno de configure_fit()/configure_evaluate()
+            # (nem [], nem should_stop, nem nada) interrompe esse for — o SuperLink
+            # sempre roda até num_rounds. Setar aqui não tem efeito nenhum sobre
+            # quantas rodadas realmente acontecem; mantido só pra não quebrar quem já
+            # depende do estado (ver test_aggregate_evaluate_sets_should_stop_on_convergence).
             self.should_stop = True
             logger.info(
                 "convergence_detected",
                 extra={"round": server_round, "convergence_round": self.tracker.converged_round},
             )
+            # _run_calibration() (calibration_mixin.py) é o caminho antigo, centralizado
+            # (exige test_loader, indisponível por design de privacidade no Caminho B —
+            # sempre no-op aqui). O caminho federado real (client.py::_fit_local_calibrator,
+            # ver initialize_parameters/_discover_and_curate_vocab da mesma sessão) só
+            # dispara quando o servidor pede calibrate=True — isso só acontece na última
+            # rodada configurada (rnd >= num_rounds via on_evaluate_config_fn em
+            # superlink.py), que SEMPRE vai acontecer de verdade dado o loop fixo do
+            # Flower acima. Por isso não finalizamos aqui: fazer isso na rodada de
+            # convergência (quase sempre bem antes de num_rounds) descartaria o
+            # ece/ece_pre real, calculado só depois, na rodada final que o loop vai
+            # rodar de qualquer jeito. Achado 2026-07-27, treino 74: convergência
+            # detectada na rodada 88 mas o loop seguiu até 110 (onde a calibração real
+            # rodou) — o finalize antigo, disparado na 88, nunca viu esses números.
             self._run_calibration(server_round)
 
         is_last_round = self._num_rounds is not None and server_round >= self._num_rounds
         if (
-            (converged or is_last_round)
+            is_last_round
             and not self._training_completed
             and self._checkpoint_store is not None
             and self._training_id is not None

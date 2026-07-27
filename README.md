@@ -929,7 +929,7 @@ make server-app
 
 ### Atenção — migração automática de configuração (flwr ≥1.30)
 
-A versão do flwr usada neste projeto (1.30.0) migra automaticamente a seção
+A versão do flwr usada neste projeto (≥1.30, validado com 1.32.1) migra automaticamente a seção
 `[tool.flwr.federations.production]` do `pyproject.toml` para um arquivo **local da
 máquina**, `~/.flwr/config.toml`, na primeira vez que `make server-app` (`flwr run`) roda.
 
