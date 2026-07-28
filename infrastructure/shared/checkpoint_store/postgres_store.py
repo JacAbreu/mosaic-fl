@@ -93,6 +93,12 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "gpu_energy_wh":    gpu_energy_wh,
                 },
             )
+        logger.info(
+            "training_completed_postgres id=%d best_round=%d best_accuracy=%.4f converged=%s "
+            "duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%%",
+            training_id, best_round, best_accuracy, converged,
+            total_duration_s, peak_ram_mb, avg_cpu_pct,
+        )
 
     def update_evaluation_metrics(
         self,
@@ -105,6 +111,8 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         dp_max_grad_norm: Optional[float] = None,
         dp_epsilon_simple: Optional[float] = None,
         dp_epsilon_rdp: Optional[float] = None,
+        dp_noise_strategy: Optional[str] = None,
+        dp_noise_group_multipliers_json: Optional[str] = None,
     ) -> None:
         import sqlalchemy as sa
         with self._engine.begin() as conn:
@@ -113,7 +121,9 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "UPDATE metrics.fl_trainings SET macro_auc=:macro_auc, "
                     "macro_f1=:macro_f1, ece=:ece, ece_pre=:ece_pre, "
                     "dp_noise_multiplier=:dp_noise_multiplier, dp_max_grad_norm=:dp_max_grad_norm, "
-                    "dp_epsilon_simple=:dp_epsilon_simple, dp_epsilon_rdp=:dp_epsilon_rdp "
+                    "dp_epsilon_simple=:dp_epsilon_simple, dp_epsilon_rdp=:dp_epsilon_rdp, "
+                    "dp_noise_strategy=:dp_noise_strategy, "
+                    "dp_noise_group_multipliers_json=cast(:dp_noise_group_multipliers_json as jsonb) "
                     "WHERE id=:training_id"
                 ),
                 {
@@ -126,19 +136,15 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "dp_max_grad_norm":    dp_max_grad_norm,
                     "dp_epsilon_simple":   dp_epsilon_simple,
                     "dp_epsilon_rdp":      dp_epsilon_rdp,
+                    "dp_noise_strategy":   dp_noise_strategy,
+                    "dp_noise_group_multipliers_json": dp_noise_group_multipliers_json,
                 },
             )
         logger.info(
             "training_evaluation_metrics_saved id=%d macro_auc=%s macro_f1=%s ece=%s ece_pre=%s "
-            "dp_sigma=%s dp_clip=%s dp_eps_simple=%s dp_eps_rdp=%s",
+            "dp_sigma=%s dp_clip=%s dp_eps_simple=%s dp_eps_rdp=%s dp_strategy=%s",
             training_id, macro_auc, macro_f1, ece, ece_pre,
-            dp_noise_multiplier, dp_max_grad_norm, dp_epsilon_simple, dp_epsilon_rdp,
-        )
-        logger.info(
-            "training_completed_postgres id=%d best_round=%d best_accuracy=%.4f converged=%s "
-            "duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%%",
-            training_id, best_round, best_accuracy, converged,
-            total_duration_s, peak_ram_mb, avg_cpu_pct,
+            dp_noise_multiplier, dp_max_grad_norm, dp_epsilon_simple, dp_epsilon_rdp, dp_noise_strategy,
         )
 
     def mark_active_model(self, training_id: int) -> None:

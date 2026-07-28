@@ -454,6 +454,32 @@ client-migrate:
 investigate-183-classes:
 	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/investigate_183_class_correlation.py
 
+## Grava peso de classe explícito (cost-sensitive learning) no banco LOCAL desta
+## máquina (clinical.fl_orchestration_config) — cada hospital tem sua própria
+## linha, então BPSP e HSL podem ter pesos DIFERENTES entre si (ex.: melhora_pronto
+## é maioria no HSL e rara no BPSP, um peso único não serve pros dois — ver
+## docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md, seção 14).
+## Roda no desktop (BPSP/servidor):
+##   make server-set-class-weights OVERRIDES='{"curado_internado": 20}'
+## Ver também: make client-set-class-weights (mesma coisa, banco do HSL) e
+## make server-show-class-weights / client-show-class-weights (só consulta).
+server-set-class-weights:
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/set_class_weight_overrides.py --overrides '$(OVERRIDES)'
+
+## Mesma coisa, pro HSL (laptop/cliente) — grava só no banco LOCAL do HSL, não
+## afeta o BPSP.
+##   make client-set-class-weights OVERRIDES='{"melhora_pronto": 8}'
+client-set-class-weights:
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/set_class_weight_overrides.py --overrides '$(OVERRIDES)'
+
+## Mostra o peso de classe gravado hoje no BPSP (não altera nada).
+server-show-class-weights:
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/set_class_weight_overrides.py --show
+
+## Mostra o peso de classe gravado hoje no HSL (não altera nada).
+client-show-class-weights:
+	FL_DB_URL="$(FL_DB_URL)" $(PYTHON) scripts/set_class_weight_overrides.py --show
+
 ## Carrega o seed HSL no banco do cliente.
 ## Requer que hsl_seed.sql.gz exista em $(HSL_SEED).
 client-load-hsl:

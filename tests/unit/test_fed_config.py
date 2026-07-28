@@ -96,3 +96,30 @@ class TestFedConfig:
         monkeypatch.setenv("FL_CLASS_WEIGHT_CLAMP", "30.0")
         cfg = FedConfig()
         assert cfg.class_weight_clamp == 30.0
+
+    def test_dp_noise_strategy_default_uniform(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.delenv("FL_DP_NOISE_STRATEGY", raising=False)
+        cfg = FedConfig()
+        assert cfg.dp_noise_strategy == "uniform"
+
+    def test_dp_noise_strategy_reads_env_var(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setenv("FL_DP_NOISE_STRATEGY", "layer_group")
+        cfg = FedConfig()
+        assert cfg.dp_noise_strategy == "layer_group"
+
+    def test_dp_noise_group_scales_default_to_noop(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        for var in ("FL_DP_NOISE_HEAD_SCALE", "FL_DP_NOISE_EMBEDDING_SCALE", "FL_DP_NOISE_TRANSFORMER_SCALE"):
+            monkeypatch.delenv(var, raising=False)
+        cfg = FedConfig()
+        assert cfg.dp_noise_head_scale == 1.0
+        assert cfg.dp_noise_embedding_scale == 1.0
+        assert cfg.dp_noise_transformer_scale == 1.0
+
+    def test_dp_noise_head_scale_reads_env_var(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setenv("FL_DP_NOISE_HEAD_SCALE", "0.5")
+        cfg = FedConfig()
+        assert cfg.dp_noise_head_scale == 0.5

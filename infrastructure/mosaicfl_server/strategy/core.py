@@ -159,6 +159,20 @@ class ProductionFedProxStrategy(
         self._ece: Optional[float] = None
         self._training_completed = False
 
+        # DP-FedAvg (McMahan et al. 2018) — portado do Caminho A (achado 2026-07-28:
+        # "o que tem no Caminho A tem que ter no Caminho B", decisão da autora — o
+        # ruído nunca tinha sido aplicado aqui, só no manual_loop.py de simulação).
+        # Desligado por padrão (dp_noise_multiplier=0.0); ligado, aplica ruído em
+        # aggregate_fit() via mosaicfl.core.dp_noise (Strategy pattern — uniforme ou
+        # por grupo de camada, ver FED_CFG.dp_noise_strategy). RDPAccountant é lazy
+        # (só importa opacus se DP estiver ligado, mesmo padrão de manual_loop.py).
+        self._rdp_accountant = None
+        if FED_CFG.dp_noise_multiplier > 0:
+            from opacus.accountants import RDPAccountant
+            self._rdp_accountant = RDPAccountant()
+        self._dp_epsilon_simple: Optional[float] = None
+        self._dp_last_group_multipliers: Optional[Dict[str, float]] = None
+
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -305,6 +319,59 @@ class ProductionFedProxStrategy(
         except Exception as e:
             logger.warning("vocab_discovery_error error=%s", e)
 
+    def _apply_dp_noise_to_aggregated(self, aggregated_parameters, server_round: int, n_clients: int):
+        """DP-FedAvg (McMahan et al. 2018) — portado do Caminho A pro Caminho B
+        (achado 2026-07-28: "o que tem no Caminho A tem que ter no Caminho B",
+        decisão da autora — o ruído nunca tinha sido aplicado aqui antes, só no
+        manual_loop.py de simulação). Aplica ruído aos parâmetros JÁ agregados e
+        precisa mutar o valor de RETORNO de aggregate_fit(), não só self.global_model
+        — o loop do Flower usa o que aggregate_fit() devolve pra continuar a próxima
+        rodada, não o estado do modelo local; mudar só self.global_model faria o
+        ruído "sumir" na rodada seguinte.
+
+        Estratégia roteada por FED_CFG.dp_noise_strategy (uniform/layer_group,
+        Strategy pattern — mosaicfl.core.dp_noise, ver docs/pesquisa_baseline_
+        implementacao_fontes_bibliograficas.md, seção 14/7.9). Nunca propaga
+        exceção: mais seguro o treino continuar sem DP nesta rodada (visível no log)
+        do que travar por causa de um erro na aplicação do ruído.
+        """
+        from collections import OrderedDict as _OrderedDict
+
+        from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
+
+        from mosaicfl.core.dp_noise import apply_dp_noise, get_dp_noise_strategy
+
+        try:
+            ndarrays = parameters_to_ndarrays(aggregated_parameters)
+            keys = list(self.global_model.state_dict().keys())
+            state_dict = _OrderedDict({k: torch.tensor(v) for k, v in zip(keys, ndarrays)})
+
+            eps_simple, group_multipliers = apply_dp_noise(
+                state_dict, server_round, n_clients,
+                FED_CFG.dp_noise_multiplier, FED_CFG.dp_max_grad_norm,
+                strategy=get_dp_noise_strategy(),
+            )
+            self._dp_epsilon_simple = eps_simple
+            self._dp_last_group_multipliers = group_multipliers
+
+            if self._rdp_accountant is not None:
+                for group, multiplier in group_multipliers.items():
+                    if multiplier > 0:
+                        self._rdp_accountant.step(noise_multiplier=multiplier, sample_rate=1.0)
+
+            logger.info(
+                "dp_noise_applied round=%d groups=%s epsilon_simple=%.3f",
+                server_round, group_multipliers, eps_simple,
+            )
+            noised_ndarrays = [state_dict[k].detach().cpu().numpy() for k in keys]
+            return ndarrays_to_parameters(noised_ndarrays)
+        except Exception as e:
+            logger.error(
+                "dp_noise_apply_error round=%d error=%s — rodada continua SEM ruído DP",
+                server_round, e,
+            )
+            return aggregated_parameters
+
     def aggregate_fit(self, server_round, results, failures):
         """Agrega pesos e salva checkpoint. Cancela watchdog do round."""
         self._cancel_round_watchdog()
@@ -338,6 +405,11 @@ class ProductionFedProxStrategy(
                 )
             else:
                 self._last_round_resources_json = None
+
+        if aggregated_parameters is not None and FED_CFG.dp_noise_multiplier > 0:
+            aggregated_parameters = self._apply_dp_noise_to_aggregated(
+                aggregated_parameters, server_round, len(results),
+            )
 
         if aggregated_parameters is not None:
             self._load_global_weights(aggregated_parameters)
@@ -610,6 +682,17 @@ class ProductionFedProxStrategy(
                 },
             )
             self._save_federated_training_id_marker()
+            # DP-FedAvg (McMahan et al. 2018) — achado 2026-07-28: essas 4 colunas já
+            # existiam em fl_trainings/update_evaluation_metrics() desde as migrations
+            # 018/019 (usadas pelo Caminho A, manual_loop.py), mas nunca eram
+            # preenchidas aqui porque o ruído nunca tinha sido aplicado no Caminho B.
+            # None quando DP está desligado (dp_noise_multiplier=0.0).
+            dp_epsilon_rdp = None
+            if self._rdp_accountant is not None:
+                try:
+                    dp_epsilon_rdp = self._rdp_accountant.get_epsilon(delta=1e-5)
+                except Exception as e:
+                    logger.warning("dp_epsilon_rdp_error training_id=%s error=%s", self._training_id, e)
             try:
                 self._checkpoint_store.update_evaluation_metrics(
                     training_id=self._training_id,
@@ -617,6 +700,15 @@ class ProductionFedProxStrategy(
                     macro_auc=self._best_macro_auc,
                     ece=self._ece,
                     ece_pre=self._ece_pre,
+                    dp_noise_multiplier=FED_CFG.dp_noise_multiplier if FED_CFG.dp_noise_multiplier > 0 else None,
+                    dp_max_grad_norm=FED_CFG.dp_max_grad_norm if FED_CFG.dp_noise_multiplier > 0 else None,
+                    dp_epsilon_simple=self._dp_epsilon_simple,
+                    dp_epsilon_rdp=dp_epsilon_rdp,
+                    dp_noise_strategy=FED_CFG.dp_noise_strategy if FED_CFG.dp_noise_multiplier > 0 else None,
+                    dp_noise_group_multipliers_json=(
+                        json.dumps(self._dp_last_group_multipliers)
+                        if self._dp_last_group_multipliers is not None else None
+                    ),
                 )
                 logger.info(
                     "evaluation_metrics_updated",
@@ -626,6 +718,8 @@ class ProductionFedProxStrategy(
                         "macro_auc": self._best_macro_auc,
                         "ece": self._ece,
                         "ece_pre": self._ece_pre,
+                        "dp_epsilon_simple": self._dp_epsilon_simple,
+                        "dp_epsilon_rdp": dp_epsilon_rdp,
                     },
                 )
             except Exception as e:

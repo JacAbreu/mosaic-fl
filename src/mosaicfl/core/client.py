@@ -30,7 +30,7 @@ from collections import Counter
 
 from mosaicfl.core.model import SimplifiedBEHRT
 from .calibration import IsotonicCalibrator, TemperatureScaler
-from .class_weighting import compute_class_weights
+from .class_weighting import compute_class_weights, load_local_overrides
 from .config import FED_CFG, MODEL_CFG, RUNTIME_CFG
 from .resources import sample_gpu_power_w
 
@@ -164,20 +164,36 @@ class FedProxClient(fl.client.NumPyClient):
 
         Fonte do override, em ordem de prioridade:
         1. config["class_weight_overrides_json"] — vem do servidor a cada rodada
-           (clinical.fl_orchestration_config, ver fit_config_mixin.py), idêntico nos
-           dois hospitais. Autoritativo em produção federada real.
-        2. FED_CFG.class_weight_overrides (env FL_CLASS_WEIGHT_OVERRIDES_JSON) — usado
-           quando não há config de rodada (simulação/testes/dev sem servidor real).
+           (clinical.fl_orchestration_config NO BANCO DO SERVIDOR, ver
+           fit_config_mixin.py), idêntico nos dois hospitais. Usar quando a intenção
+           é forçar o MESMO peso nos dois — autoritativo quando presente.
+        2. Banco LOCAL desta máquina (clinical.fl_orchestration_config no FL_DB_URL
+           deste cliente, ver mosaicfl.core.class_weighting.load_local_overrides) —
+           permite BPSP e HSL terem pesos DIFERENTES entre si (cada hospital edita o
+           seu via `make server-set-class-weights`/`client-set-class-weights` ou a
+           tela /class-weights local). Ver docs/pesquisa_baseline_implementacao_
+           fontes_bibliograficas.md, seção 14.
+        3. FED_CFG.class_weight_overrides (env FL_CLASS_WEIGHT_OVERRIDES_JSON) —
+           último fallback, usado quando não há config de rodada nem banco (simulação
+           sem Postgres real).
         """
         counts: Counter = Counter()
         for _, batch_y, *_ in loader:
             counts.update(batch_y.tolist())
 
         overrides = FED_CFG.class_weight_overrides
+        source = "env_fallback"
+
+        local = load_local_overrides(RUNTIME_CFG.db_url)
+        if local is not None:
+            overrides = local
+            source = "local_db"
+
         raw = (config or {}).get("class_weight_overrides_json")
         if raw:
             try:
                 overrides = json.loads(raw)
+                source = "server_round_config"
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(
                     "class_weight_overrides_parse_error client_id=%s error=%s — usando fallback local",
@@ -192,8 +208,7 @@ class FedProxClient(fl.client.NumPyClient):
         )
         logger.info(
             "class_weights client_id=%s weights=%s counts=%s overrides_source=%s",
-            self.client_id, [round(w, 3) for w in weights.tolist()], dict(counts),
-            "server_round_config" if raw else "env_fallback",
+            self.client_id, [round(w, 3) for w in weights.tolist()], dict(counts), source,
         )
         return weights
 

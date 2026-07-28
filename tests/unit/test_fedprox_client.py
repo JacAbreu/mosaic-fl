@@ -649,3 +649,82 @@ class TestClassWeightOverridesIntegration:
         client.fit(params, config)  # não deve levantar exceção
 
         assert client.criterion is not None
+
+
+class TestClassWeightOverridesPriorityOrder:
+    """3 fontes possíveis de override, em ordem: config da rodada (servidor,
+    compartilhado) > banco local desta máquina > FED_CFG (env, último fallback).
+    Ver docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md, seção 14 —
+    banco local é o que permite BPSP e HSL terem pesos DIFERENTES entre si."""
+
+    def _loader_factory(self, vocab_json):
+        seq_len = 8
+        x   = torch.randint(1, VOCAB_SIZE, (10, seq_len))
+        y   = torch.randint(0, NUM_CLASSES, (10,))
+        dia = torch.randint(0, 100, (10, seq_len))
+        loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
+        return loader, loader
+
+    def test_local_db_used_when_no_server_config(self, monkeypatch):
+        import json as _json
+
+        import mosaicfl.core.client as client_module
+        from mosaicfl.core.config import MODEL_CFG
+
+        monkeypatch.setattr(
+            client_module, "load_local_overrides",
+            lambda db_url: {"melhora_pronto": 8.0},
+        )
+
+        client = client_module.FedProxClient(client_id=0, loader_factory=self._loader_factory)
+        idx = MODEL_CFG.class_labels.index("melhora_pronto")
+        config = {"vocab_json": _json.dumps({"CLS": 0})}  # sem class_weight_overrides_json
+
+        params = client.get_parameters({})
+        client.fit(params, config)
+
+        assert client.criterion.weight[idx].item() == pytest.approx(8.0)
+
+    def test_server_config_wins_over_local_db(self, monkeypatch):
+        import json as _json
+
+        import mosaicfl.core.client as client_module
+        from mosaicfl.core.config import MODEL_CFG
+
+        monkeypatch.setattr(
+            client_module, "load_local_overrides",
+            lambda db_url: {"melhora_pronto": 8.0},
+        )
+
+        client = client_module.FedProxClient(client_id=0, loader_factory=self._loader_factory)
+        idx = MODEL_CFG.class_labels.index("melhora_pronto")
+        config = {
+            "vocab_json": _json.dumps({"CLS": 0}),
+            "class_weight_overrides_json": _json.dumps({"melhora_pronto": 3.0}),
+        }
+
+        params = client.get_parameters({})
+        client.fit(params, config)
+
+        assert client.criterion.weight[idx].item() == pytest.approx(3.0)
+
+    def test_env_fallback_used_when_no_server_config_and_no_local_db(self, monkeypatch):
+        import json as _json
+
+        import mosaicfl.core.client as client_module
+        from mosaicfl.core.config import FedConfig, MODEL_CFG
+
+        monkeypatch.setattr(client_module, "load_local_overrides", lambda db_url: None)
+        monkeypatch.setattr(
+            client_module, "FED_CFG",
+            FedConfig(class_weight_overrides={"melhora_pronto": 5.0}),
+        )
+
+        client = client_module.FedProxClient(client_id=0, loader_factory=self._loader_factory)
+        idx = MODEL_CFG.class_labels.index("melhora_pronto")
+        config = {"vocab_json": _json.dumps({"CLS": 0})}
+
+        params = client.get_parameters({})
+        client.fit(params, config)
+
+        assert client.criterion.weight[idx].item() == pytest.approx(5.0)

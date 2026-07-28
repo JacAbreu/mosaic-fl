@@ -1463,3 +1463,139 @@ A UPSERT de `fl_round_history` usa `COALESCE(EXCLUDED.x, tabela.x)` nas duas col
 **Teste de integração real contra Postgres, primeiro do projeto** (`tests/integration/test_analyte_references_unique_index_live.py`) — valida o índice único parcial (migration 023, ver entrada anterior) contra um banco de verdade, não mock. Só roda com `FL_TEST_DB_URL` explicitamente definido (não `FL_DB_URL` — não roda por padrão em `make test`/CI); toda a suíte roda dentro de uma transação com rollback explícito no `finally`, mesmo em caso de sucesso — seguro contra qualquer banco, inclusive produção, porque nunca commita. Validado ao vivo: 3/3 passando, zero linhas de teste remanescentes após confirmação.
 
 **Validado**: 3 migrations novas (024, 025, aplicadas no banco real), 12 testes novos (`test_federated_training_id_marker.py` reescrito — 3 testes —, `test_save_round_history.py` — 6 —, `test_per_client_calibration_extraction.py` — 5 —, `test_analyte_references_unique_index_live.py` — 3, condicional). 701 testes passando (unit+integration, 3 skipped por padrão) + 10 e2e.
+
+---
+
+## Vocabulário federado bidirecional implementado — descoberta automática antes da Rodada 1 (2026-07-26/27)
+
+Retomada do item deixado pausado na entrada anterior. `ProductionFedProxStrategy.initialize_parameters()` (`infrastructure/mosaicfl_server/strategy/core.py`) passou a sobrescrever o fallback nativo do Flower: antes de devolver os parâmetros iniciais, chama `_discover_and_curate_vocab()`, que usa `client_manager.wait_for()` + `client_manager.all()` (não `sample()` — quer todos os clientes, não uma amostra) para disparar, em paralelo, um `evaluate()` especial em cada hospital com `config={"discover_vocab_only": True, "vocab_json": <vocab atual>}`.
+
+No lado do cliente, `FedProxClient.evaluate()` (`src/mosaicfl/core/client.py`) checa esse flag **antes de qualquer outra coisa** (antes de `_ensure_data`/`set_parameters`) e, se presente, chama `vocab_discovery_fn(vocab)` — um novo parâmetro do construtor, injetado em produção como `SGBDDataSource.find_vocab_candidates()` (`infrastructure/mosaicfl_client/datasource/sgbd.py`, novo método na interface `DataSource`, default `[]` nas fontes que não têm banco local — `SimulatedDataSource`/`CSVDataSource`). Consulta os analitos locais desse hospital com volume mínimo (`min_records=100`) cujo token ainda não está no vocab recebido, no mesmo formato que `discover_analyte_catalog_gaps.py::find_candidates()` já usava (reaproveitado, não duplicado).
+
+O servidor mescla os candidatos dos dois hospitais (soma `n_records`, conta `n_hospitals`), insere os aprovados em `knowledge.term_dictionary` (reaproveitando `insert_candidates()`) e reconstrói `self.vocab` chamando `build_standard_vocab()` — extraída de `scripts/build_standard_vocab.py` pra virar uma função importável, não só CLI. A partir daí, `self.vocab` é a única fonte de verdade: `_FitConfigMixin.configure_fit()`/`configure_evaluate()` passaram a sobrescrever `vocab_json` em cada `Ins.config` a partir de `self.vocab` (não mais do closure calculado em `superlink.py` no momento em que os lambdas são definidos, antes da estratégia existir) — garante vocabulário **congelado** por toda a duração do treino, idêntico nos dois hospitais em toda rodada, decidido uma única vez antes da Rodada 1 — exatamente o comportamento que a autora pediu (rejeitou explicitamente a ideia de o vocab crescer no meio do treino: "se o vocabulário for no meio, não tem como garantir que ele será usado").
+
+`_discover_and_curate_vocab()` nunca propaga exceção — timeout, cliente fora do ar ou erro de SQL mantêm `self.vocab` como já estava, só loga aviso; a descoberta é enriquecimento, não pode travar o treino.
+
+**Validado**: 30 testes novos (descoberta local com `conn.execute()` mockado, `evaluate()` com `discover_vocab_only=True` confirmando que não toca modelo/dado nem quebra quando `vocab_discovery_fn=None`, merge de candidatos multi-cliente, `configure_fit`/`configure_evaluate` refletindo `self.vocab` em vez do valor de closure). Regressão completa verde. **Pendente**: validação manual com as duas máquinas físicas reais (desktop+notebook) rodando `make server-app` com analitos deliberadamente diferentes entre si — não executada nesta sessão, fica para quando a autora rodar o próximo treino real.
+
+---
+
+## Causa raiz do canonical "183" confirmada — Amilase mal traduzida do HSL, corrigida no pipeline real e no dado (2026-07-26/27)
+
+Investigação decorrente da expansão do catálogo (15→167 analitos, entrada anterior): o canonical `"183"`, promovido automaticamente pela descoberta bidirecional de vocabulário recém-implementada, mostrou-se um código interno de laboratório do HSL nunca traduzido, não um exame novo legítimo.
+
+**Causa raiz confirmada em dois níveis independentes**: (1) no CSV bruto do HSL (`HSL_Exames_3.csv`), as 2.133 linhas onde `DE_EXAME="Amilase"` têm `DE_ANALITO="183"` — confirmado por grep direto no arquivo; (2) `knowledge.analyte_references` já tinha `AMILASE` com faixa de referência **idêntica** (28,0–100,0) à computada pra "183", e `AMILASE` já tinha 13.189 registros legítimos do BPSP — confirma ser o mesmo exame. A cadeia completa: `bulk_load.py` prioriza `DE_ANALITO` sobre `DE_EXAME` → sem alias conhecido pra "183" → vira canonical próprio pela normalização → passa despercebido pelo critério de "alias verdadeiro" (só compara alias bruto vs. canonical proposto — "183"→"183" não difere, igual a uma variante de grafia legítima) → aprovado em lote junto com centenas de variantes de acento/grafia reais.
+
+**Correção estrutural** (guarda pro futuro, pra não recorrer quando os dados da FAPESP forem recarregados): `integration/column_resolver.py::looks_like_valid_analyte_name()` — heurística compartilhada (rejeita canonical puramente numérico), usada em 3 pontos até então independentes: `term_manager` (categoria nova `suspeitos`, bloqueia o atalho de lote de `activate_all_auto_normalized()`), endpoint admin (`infrastructure/mosaicfl_api/routers/admin.py`, já usava regex própria duplicada) e o **pipeline real de produção** (`scripts/db/generate_hsl_seed.py`/`generate_bpsp_seed.py` — descoberta importante: são um caminho **completamente separado** de `integration/fapesp/loader.py`, com resolução de canonical própria, sem NENHUMA guarda; como escrevem o seed em streaming, sem fase de scan prévia, não dava pra bloquear a geração — a correção foi logar `canonical_suspeito_detectado` na primeira ocorrência por chunk + um resumo final, visível antes de rodar `client-load-hsl`/`server-load-bpsp`). Dashboard: banner de alerta em `/` fazendo polling a cada 30s em `/api/admin/vocab-anomalies`, com link pra tela dedicada `/vocab-anomalies` (listagem + botão "Corrigir", `POST /api/admin/vocab-anomalies/{canonical}/correct` — renomeia ou funde com um canonical existente, mesmo efeito da migration abaixo mas reutilizável pra qualquer caso futuro sem escrever migration nova).
+
+**Correção do dado** — migration `026_fix_183_analyte_to_amilase`: `exam_records.analyte='183'`→`'AMILASE'`, `term_dictionary` corrigido (183 vira alias de AMILASE, `source='MANUAL_CORRECTION'`), `analyte_references` de "183" removida (redundante). Aplicada e validada nas duas máquinas: no desktop (BPSP) foi no-op (0 registros com "183" ali, confirma que o bug era específico do ETL do HSL); no notebook (HSL) corrigiu os 2.133 registros reais, confirmado pela autora após rodar `make client-migrate` (migrations 022→026 em sequência).
+
+**Validado**: 37 testes novos no total (6 heurística compartilhada, 8 `term_manager`, 15 endpoint incluindo rename/merge, 8 geração de seed). Regressão completa: 801 unit+integration passando.
+
+**Incidente durante a validação** (segunda vez na sessão, mesmo padrão): `conn.commit()` interno quebrando o padrão `trans.rollback()` de teste contra banco real — vazou e foi limpo na hora.
+
+---
+
+## Upgrade do `flwr` 1.30.0 → 1.32.1 + bug real de reinstalação silenciosa de dependências trava o `make server-app` (2026-07-27)
+
+Upgrade de rotina (`pyproject.toml`/`requirements.txt`) virou uma investigação de bug genuinamente obscuro depois de reiniciar o treino: o `ServerApp` conectava, registrava a rodada (`fl_trainings` novo `training_id`), e morria em segundos, **sem nenhum log, nenhum traceback, em lugar nenhum** — os dois `SuperNode` (BPSP/HSL) conectavam normalmente (confirmado via `PullMessages` no log do SuperLink), então a suspeita inicial (vocabulário, rede) foi descartada rápido.
+
+Causa raiz, encontrada lendo o código-fonte da própria biblioteca instalada (`subprocess_executor.py`, `serverapp_exec_plugin.py`, `server/app.py`): (1) `SubprocessExecutor.launch()` usa `stdout=stderr=subprocess.DEVNULL` **hardcoded** especificamente pro processo do `ServerApp` — nunca visível em terminal nem arquivo; (2) o flwr 1.31+ introduziu uma "instalação de dependência em runtime" que, por padrão (`FLWR_DISABLE_RUNTIME_DEPENDENCY_INSTALLATION` não setado), tenta reinstalar TODAS as dependências do `pyproject.toml` (torch, transformers, chromadb...) num ambiente isolado toda vez que um treino começa — o `.venv` do projeto já tinha tudo certo, essa reinstalação nunca foi necessária, e se falhar por qualquer motivo o processo morre silenciosamente por causa do item (1).
+
+A autora explicitamente rejeitou a saída fácil (reverter pro flwr 1.30.0) pra insistir em achar a causa raiz real: **"não vi nenhuma alteração em código. Nós temos que tentar corrigir mais um pouco esse bug antes de fazer rollback."** Correção final, mínima e cirúrgica — só `scripts/iniciar_servidor_fl.sh` (12 linhas): `export PATH="$PROJECT_ROOT/.venv/bin:$PATH"` (subprocessos filhos do SuperLink resolvem o executável pelo PATH herdado, não bastava apontar só o binário principal pro `.venv`) e `export FLWR_DISABLE_RUNTIME_DEPENDENCY_INSTALLATION=1`. Confirmado ao vivo: `training_id=76` registrado com sucesso, `ServerApp` ficou de pé, os dois clientes participaram normalmente do treino completo.
+
+Verificado por leitura direta do `--help` dos binários instalados que todas as flags de CLI usadas pelo projeto (`--ssl-certfile`, `--node-config`, `--clientappio-api-address` etc.) continuam existindo em 1.32.1 — sem breaking change relevante pro projeto além do achado acima.
+
+---
+
+## Treino real de produção (`training_id=76`, 110 rounds, ~4h20) avaliado com rigor — 3 confundidores concorrentes, nenhum culpado único isolado (2026-07-27)
+
+Primeiro treino real de produção depois da expansão de vocabulário, da correção do "183" e do upgrade do flwr, tudo junto — e a autora exigiu rigor total antes de tirar qualquer conclusão: **"seja extremamente correto: um modelo que rodou mais de uma vez com os mesmos dados, mas por ter um outro corte pode convergir em um treinamento e no outro não?"**. Treino não convergiu (`converged=False`), levou ~4h20 (a versão anterior levava ~2h) e, pela primeira vez desde que o Caminho B roda em máquinas físicas separadas, o vocábulo "183" foi corretamente considerado como AMILASE nos dois hospitais.
+
+Auditoria distinguiu três categorias de mudança entre este treino e o anterior: (a) mudanças que **não podem** ter afetado a dinâmica do treino (cálculo de ECE/`ece_pre`, desacoplamento de convergência/finalização — tudo confinado a observação pós-hoc ou só na última rodada); (b) mudanças com efeito zero **neste** treino mas implicação real futura (correção de agregação de calibração por maioria — irrelevante aqui porque os dois clientes concordaram no método "temperature"); (c) confundidores genuinamente causais e concorrentes, nunca isolados um do outro: a correção do "183" (mudança real de dado) e uma troca acidental GPU→CPU no desktop durante o reinício (`FL_DEVICE` não persistiu). Grounding quantitativo usado pra comparar: a própria comparação formal CPU×GPU do projeto (`docs/Sumario_Treinamento_Parte3.md`) já documentava uma faixa esperada de ruído CPU/GPU de até ~1,9 p.p. de accuracy / ~0,04 de F1 — a magnitude do desvio observado em 76 (colapso total das duas classes raras, não convergência) excede claramente essa faixa, tornando a correção do "183" a explicação mais provável, não a diferença de hardware.
+
+---
+
+## Hipótese "183 como sinal espúrio de gravidade" testada e refutada — achado maior e não-planejado: label skew extremo entre BPSP e HSL (2026-07-27)
+
+A autora levantou uma hipótese interessante a partir do treino 76: será que o canonical "183" (Amilase mal traduzida, de origem majoritariamente UTI/Internação/Pronto Socorro no HSL — 92,6% dos 2.133 registros brutos, confirmado por grep no CSV) funcionava, sem querer, como um sinal correlacionado com gravidade que o modelo explorava, e que sua correção (migration 026) ajuda a explicar o colapso mais severo do treino 76?
+
+Construído `scripts/investigate_183_class_correlation.py` (+ `make investigate-183-classes`) — reaproveita `_map_outcome()` real do pipeline de produção (não reimplementa), compara a distribuição das 5 classes entre atendimentos com AMILASE de origem alta-gravidade (proxy do "183", já que depois da correção não sobra marca direta) contra a linha de base geral. Rodado nas duas máquinas.
+
+**Resultado, com números reais**: no HSL (Grupo A, proxy do "183", n=1.194 vs. Grupo B linha de base n=12.522), `curado_internado` aparece enriquecido 4,08× — mas `melhora_pronto`, a OUTRA classe que colapsou, aparece **depletada** pela metade (0,45×), direção oposta à hipótese. O padrão real é mais simples e clinicamente coerente — o proxy correlaciona com gravidade geral (`melhora_internado_grave` 5,31×, `melhora_internado_breve` 2,80×), não especificamente com o par de classes raras. **Conclusão: o "183" não explica o colapso das classes raras.**
+
+**Achado colateral, maior que a pergunta original**: comparando a linha de base do HSL com a do BPSP (já medida antes, mesmo filtro `outcome_class NOT IN (2,3,4)`) — `curado_pronto` é 67,2% no BPSP e só 1,5% no HSL; `melhora_pronto` é 1,1% no BPSP e 80,6% no HSL. As duas classes praticamente trocam de papel entre os hospitais — label skew extremo e quase espelhado, um terceiro eixo de heterogeneidade non-IID distinto de volume (motivo original do FedNova) e de completude de atributo (assimetria `birth_year`, já documentada). Escrito como **seção 13** de `docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md` — é provavelmente o achado de heterogeneidade mais forte e mais fácil de defender do projeto até agora, e explica de forma muito mais direta o colapso estrutural de F1 já confirmado em dois treinos (71 e 72): o gradiente que o HSL propõe pra `melhora_pronto` é sistematicamente diluído pelo BPSP (5× mais volume), que quase não vê essa classe — e vice-versa pra `curado_pronto`.
+
+---
+
+## Degradação de ECE pós-calibração federada sob non-IID — achado documentado como limitação, não bug (2026-07-27)
+
+Enquanto avaliava o treino 76, a autora notou algo contraintuitivo: `ece_pre=0,0392` (bom, pré-calibração) piorou pra `ece=0,1211` depois da calibração federada — a calibração tornou o modelo **menos** confiável, não mais. Os dois clientes escolheram o mesmo método via `calibration_method="auto"` ("temperature"), mas com parâmetros bem diferentes: T=1,086 no cliente 4871, T=1,916 no 4554.
+
+Fundamentado na literatura já citada no próprio projeto (seção 9.4, FedCal — Peng et al., ICML 2024): sob *label skew*/heterogeneidade non-IID, o erro de calibração federado tem **piso assintótico não-nulo** (Teorema 4.4) — nenhum método, por melhor implementado, zera esse erro, só minimiza. Duas temperaturas locais tão diferentes sugerem exatamente o tipo de heterogeneidade que o teorema prevê — reforçado pelo label skew concreto descoberto no mesmo dia (seção 13, acima). Ressalva de causalidade registrada explicitamente: o mesmo treino também foi o primeiro pós-correção do "183" e teve a troca acidental GPU→CPU, então a degradação de ECE não pode ser atribuída com certeza só ao piso teórico do FedCal — fica registrada como hipótese fundamentada, não prova.
+
+Escrito como **seção 12** do doc de pesquisa. Numa reflexão importante nesse momento, a autora verbalizou fadiga real ("eu não sei mais o que fazer, vou ser muito honesta") diante de mais um obstáculo depois de achar que estava perto da simulação real — resolvida reenquadrando o achado: não precisa ser corrigido antes de prosseguir, pode virar uma seção de discussão/limitação legítima do TCC.
+
+**Pergunta prática respondida na mesma discussão**: vale forçar cada hospital a usar um método de calibração diferente (em vez de `"auto"`)? Não — com voto de maioria em 2 clientes, forçar métodos diferentes garante desacordo permanente, e sob a lógica de maioria isso significa que a contribuição de um dos dois clientes é sempre descartada, toda rodada — o oposto do que a personalização deveria entregar.
+
+---
+
+## Revisão de literatura: cost-sensitive learning vs. classificação ordinal (2026-07-27)
+
+Puxado pela discussão do colapso de classes raras: a autora levantou a analogia do Ebola (raridade estatística não é o mesmo que importância clínica) e pediu revisão de literatura de ML aplicado à medicina antes de decidir qualquer correção — só fontes peer-reviewed, sem preprint não revisado.
+
+Seis fontes revisadas, escritas como **seção 14** do doc de pesquisa: Elkan (2001, IJCAI, fundação teórica de cost-sensitive learning); Idri & Chairi (2024, *Artificial Intelligence Review*, revisão sistemática de 173 papers de CSL em dados médicos); Zheng, Sherazi & Lee (2024, *Frontiers in Cardiovascular Medicine*) — achado importante: mesmo um paper peer-reviewed rotulado "cost-sensitive" derivou o peso só da razão de desbalanceamento (frequência), não de julgamento clínico, ressalva central pra não superestimar o que a tag "cost-sensitive" entrega sozinha; Gutiérrez et al. (2016, IEEE TKDE, survey de classificação ordinal — família de métodos desenhada pra classes com ordem natural, que as 5 classes de prognóstico têm e a softmax nominal atual ignora); **Hwangbo et al. (2022, *Frontiers in Public Health*) — evidência mais forte, mesmo domínio da pesquisa (severidade de COVID-19)**: classificação multiclasse plana de 4 categorias teve desempenho ruim, os autores reformularam como cascata de 3 classificações binárias seguindo a hierarquia de gravidade e o AUC subiu pra 0,879–0,887; He & Garcia (2009, IEEE TKDE, taxonomia clássica de referência).
+
+**Decisão registrada**: opção D — implementar a tag de peso explícito por classe (mudança pequena, reversível) primeiro, medir o efeito real antes de decidir se vale investir na reestruturação ordinal/hierárquica (mudança bem mais cara e arriscada, ainda que com respaldo direto do achado de Hwangbo). Motivo explícito da autora: pressão real de cronograma, mas sem abrir mão de fazer certo.
+
+---
+
+## Captura de F1 por cliente antes da agregação — migration 027 (2026-07-27)
+
+Gap simétrico ao que já existia pra recurso computacional e calibração: cada cliente já calcula seu próprio `per_class_f1` local em `evaluate()`, mas o servidor só persistia o valor agregado (média ponderada nativa do Flower) — o valor individual de cada hospital era descartado antes de chegar no banco. Sem isso, não dava pra saber se o colapso de F1 nas classes raras é um artefato só da agregação (cada hospital prediz bem sua própria classe dominante, a média é que zera) ou já é uma falha local em cada cliente antes de agregar — pergunta central em aberto desde o achado do label skew.
+
+Migration `027_fl_round_history_per_client_f1`: nova coluna `per_client_f1_json` em `fl_round_history`, mesmo padrão UPSERT com `COALESCE` das colunas de recurso/calibração já existentes (migration 025). Extração em `aggregate_evaluate()` (`strategy/core.py`), mesmo molde da extração de calibração por cliente. Só produz dado novo a partir do próximo treino real — não é retroativo aos treinos 71/72/76 já rodados.
+
+**Validado**: 10 testes novos, regressão completa 810 passando.
+
+---
+
+## Peso de classe explícito (cost-sensitive learning) implementado como Strategy pattern — namespace `class_weighting` (2026-07-27)
+
+Implementação da opção D decidida na revisão de literatura acima, com uma exigência de desenho explícita da autora: **"vamos criar namespace para as 2 e ter uma config que vai rotear para cada estratégia"** — e, quando a conversa avançou pra uma futura opção C (classificação ordinal), reforçou o princípio geral: **"eu não quero perder nenhuma implementação agora, quero poder escolher implementação, mesmo que duplique código"** — registrado como princípio de engenharia do projeto daqui pra frente (nunca substituir uma abordagem de ML já validada por outra; sempre Strategy pattern coexistindo, roteado por config).
+
+Novo pacote `src/mosaicfl/core/class_weighting/`: `ClassWeightStrategy` (interface), `ClassBalancedStrategy` (extração exata do que `_compute_class_weights()` já fazia — peso inversamente proporcional à frequência local, teto de estabilidade 15,0), `CostSensitiveStrategy` (peso explícito, ignora frequência), `router.py::compute_class_weights()` — roteia cada classe individualmente: presente em `overrides` usa `CostSensitiveStrategy`, ausente cai automaticamente em `ClassBalancedStrategy`. `FedConfig` ganhou `class_weight_overrides` (dict, lido de `FL_CLASS_WEIGHT_OVERRIDES_JSON`) e `class_weight_clamp` (antes hardcoded em 15.0, agora configurável via `FL_CLASS_WEIGHT_CLAMP`). `client.py::_compute_class_weights()` virou um wrapper fino que delega pro router — nenhuma lógica antiga foi apagada, só movida. Vazio por padrão: zero mudança de comportamento pra quem não configurar nada.
+
+**Validado**: 19 testes novos (`test_class_weighting.py`, extensões de `test_fed_config.py`/`test_fedprox_client.py`, incluindo teste de regressão de paridade exata com a fórmula antiga). Regressão completa: 828 passando.
+
+---
+
+## `class_weight_overrides` migrado de `.env` pro banco — mesmo canal já usado por `proximal_mu`/`stop` (2026-07-27)
+
+A autora perguntou diretamente: **"esse json vai ficar em arquivo ou no banco? o ideal é que ele fique no banco."** Como BPSP e HSL têm bancos locais separados por desenho (dado clínico nunca sai do hospital), "banco" ingênuo (cada hospital com o seu) não resolveria sincronização sozinho — a resposta certa, encontrada já pronta no próprio código, foi reaproveitar `clinical.fl_orchestration_config`/`PostgreSQLConfigLoader`, o mesmo canal que já entrega `proximal_mu`/`pause_seconds`/`stop` pro cliente a cada rodada (`configure_fit()`/`configure_evaluate()`), lido do banco do **servidor** — automaticamente idêntico nos dois hospitais, editável ao vivo, sem redeploy.
+
+Migration `028_fl_orchestration_config_class_weight_overrides`: nova coluna `class_weight_overrides_json` JSONB. `PostgreSQLConfigLoader.load()`/`write()`/`clear()` estendidos (trafega como string JSON já serializada, mesma convenção de `vocab_json` — psycopg2 desserializa JSONB automaticamente, então `load()` reserializa antes de devolver). Novo `_inject_class_weight_overrides()` em `fit_config_mixin.py`, chamado tanto em `configure_fit()` quanto `configure_evaluate()` (não dá pra saber qual dos dois o Flower chama primeiro). `client.py` passou a priorizar `config["class_weight_overrides_json"]` (servidor) sobre `FED_CFG.class_weight_overrides` (env, virou fallback de dev/simulação) — nunca derruba o treino se o JSON vier malformado, loga aviso e cai no fallback.
+
+**Validado**: 12 testes novos (engine mockado, injeção espelhando os testes já existentes de `vocab_json`, integração client.py incluindo prioridade servidor>env). Regressão completa: 840 passando. Migration 028 aplicada no desktop; coluna confirmada `NULL` por padrão (zero mudança de comportamento).
+
+---
+
+## Tela web `/class-weights` — editar peso de classe sem SQL/Python (2026-07-28)
+
+A pedido direto da autora ("eu preferia que tivesse uma tela para fazer essas alterações"), nova tela seguindo exatamente o padrão visual e estrutural já estabelecido por `/vocab-anomalies` (Bootstrap 5.3.2, toast, `fetch` same-origin, sem framework JS): tabela com as 5 classes, badge indicando `class_balanced (automático)` ou `cost_sensitive`, input numérico por classe, botão "Salvar alterações" (substitui o conjunto inteiro, não faz merge parcial — deixar um campo em branco remove o override daquela classe, que volta pra `class_balanced` automaticamente).
+
+2 endpoints novos em `infrastructure/mosaicfl_api/routers/admin.py`: `GET`/`POST /api/admin/orchestration-config`, gravando via `UPDATE` de coluna única (não reaproveita `PostgreSQLConfigLoader.write()` porque esse método faz replace da linha inteira sem `COALESCE`, o que resetaria `proximal_mu`/`stop` sem querer).
+
+**Validado**: 12 testes de integração (engine mockado, mesmo padrão de `test_vocab_anomalies_endpoint.py`) + smoke test manual completo contra o banco real do desktop — servidor subido, ciclo GET→POST→GET confirmando persistência de verdade, validação 422 pra classe inexistente e peso ≤0, estado limpo no final. Regressão completa: 852 passando.
+
+---
+
+## Peso de classe agora pode ser DIFERENTE por hospital — banco local de cada máquina, sem mudança no protocolo Flower (2026-07-28)
+
+Ao revisar pesos propostos pela autora na tela nova, a análise numérica (usando os dados reais de BPSP/HSL já levantados) mostrou algo importante: um peso único forçado nos dois hospitais não consegue tratar bem `melhora_pronto`, porque essa classe é rara no BPSP (1,1%) e maioria no HSL (80,6%) — skew em direções opostas (mesmo achado da seção 13). A autora confirmou: **"são pesos do bpsp"** — queria valores genuinamente diferentes por hospital, não um valor único compartilhado.
+
+Investigação (via subagente de exploração) confirmou que o Flower 1.32 não propaga a identidade do hospital (`--node-config`, `FL_CLIENT_ID`) pro lado do servidor antes da rodada — `ClientProxy.properties` fica vazio, `Context.node_config` é estritamente client-side; fazer o servidor decidir "qual peso pra qual hospital" exigiria um RPC novo (`get_properties`). Não foi necessário: como cada hospital já tem seu próprio banco local com as migrations aplicadas, a solução foi o **cliente ler `clinical.fl_orchestration_config` do seu PRÓPRIO `FL_DB_URL`** — terceiro nível de prioridade em `_compute_class_weights()` (servidor compartilhado > banco local desta máquina > env), sem precisar de nenhum mecanismo novo no protocolo Flower. A tela `/class-weights` já funcionava certo por hospital sem nenhuma mudança — sempre leu/escreveu no banco de onde a API roda.
+
+Dois `make` novos, mesma convenção `server-`/`client-` já usada no projeto (BPSP=servidor/desktop, HSL=cliente/notebook): `make server-set-class-weights OVERRIDES='{...}'` / `make client-set-class-weights OVERRIDES='{...}'`, script `scripts/set_class_weight_overrides.py` reaproveitando a mesma validação do endpoint web (extraída pra `class_weighting.validate_overrides`, compartilhada — antes duplicada).
+
+**Validado**: 8 testes novos (`test_local_db_source.py` + 3 testes de prioridade em `test_fedprox_client.py`) + smoke test real do script contra o banco do desktop (grava, mostra, limpa, estado confirmado limpo no final). Regressão completa: 860 passando.

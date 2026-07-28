@@ -144,6 +144,19 @@ class FedConfig:
     # onde S=dp_max_grad_norm (sensitivity) e n=num_clients.
     dp_noise_multiplier: float = field(default_factory=lambda: float(os.getenv("FL_DP_NOISE", "0.0")))
     dp_max_grad_norm:    float = field(default_factory=lambda: float(os.getenv("FL_DP_CLIP",  "1.0")))
+    # Estratégia de ruído DP (Strategy pattern, mosaicfl.core.dp_noise — achado
+    # 2026-07-28, ver docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md,
+    # seção 14/7.9). "uniform" (padrão, preserva o mecanismo histórico — mesmo ruído
+    # em todo o modelo) | "layer_group" (opcional, ruído diferenciado por grupo de
+    # camada — hipótese: reduzir ruído na cabeça de classificação preserva sinal de
+    # classe rara já frágil por label skew, seção 13). Só tem efeito quando
+    # dp_noise_multiplier > 0.
+    dp_noise_strategy: str = field(default_factory=lambda: os.getenv("FL_DP_NOISE_STRATEGY", "uniform"))
+    # Escalas usadas só por "layer_group" — 1.0 = mesmo ruído que "uniform" nesse
+    # grupo (no-op até serem configuradas explicitamente).
+    dp_noise_head_scale:        float = field(default_factory=lambda: float(os.getenv("FL_DP_NOISE_HEAD_SCALE", "1.0")))
+    dp_noise_embedding_scale:   float = field(default_factory=lambda: float(os.getenv("FL_DP_NOISE_EMBEDDING_SCALE", "1.0")))
+    dp_noise_transformer_scale: float = field(default_factory=lambda: float(os.getenv("FL_DP_NOISE_TRANSFORMER_SCALE", "1.0")))
     # Amostragem de custo computacional por cliente (CPU/RAM via psutil, potência GPU
     # via nvidia-smi — ver mosaicfl.core.resources). Ligado por padrão (é o que sustenta
     # a análise de viabilidade/provisionamento do TCC), mas parametrizável — quem roda o

@@ -58,12 +58,19 @@ class CheckpointStore(ABC):
         dp_max_grad_norm: Optional[float] = None,
         dp_epsilon_simple: Optional[float] = None,
         dp_epsilon_rdp: Optional[float] = None,
+        dp_noise_strategy: Optional[str] = None,
+        dp_noise_group_multipliers_json: Optional[str] = None,
     ) -> None:
         """Grava em fl_trainings o AUC-ROC/F1/ECE pós-calibração (+ ECE pré-calibração,
         ece_pre) e, quando DP-FedAvg está habilitado, os parâmetros e o ε acumulado
         (composição simples e RDP). Calculados após complete_training() (a avaliação
         final só roda depois do melhor checkpoint ser restaurado). Chamado uma vez
-        por treinamento, ao final da calibração."""
+        por treinamento, ao final da calibração.
+
+        dp_noise_strategy/dp_noise_group_multipliers_json (migration 029): qual
+        estratégia de ruído (mosaicfl.core.dp_noise) foi usada e os multiplicadores
+        efetivos por grupo — "uniform" sempre resulta em {"all": dp_noise_multiplier};
+        "layer_group" varia por camada. NULL quando DP está desligado."""
 
     @abstractmethod
     def save(

@@ -353,14 +353,13 @@ async def set_class_weight_overrides(
     não afeta um treino já em andamento retroativamente."""
     from sqlalchemy import text as _text
 
+    from mosaicfl.core.class_weighting import validate_overrides
     from mosaicfl.core.config import MODEL_CFG
 
-    unknown = sorted(set(body.overrides.keys()) - set(MODEL_CFG.class_labels))
-    if unknown:
-        raise HTTPException(status_code=422, detail=f"Classe(s) desconhecida(s): {unknown}")
-    invalid = {name: w for name, w in body.overrides.items() if w <= 0}
-    if invalid:
-        raise HTTPException(status_code=422, detail=f"Peso precisa ser > 0: {invalid}")
+    try:
+        validate_overrides(body.overrides, MODEL_CFG.class_labels)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     import json as _json
     overrides_json = _json.dumps(body.overrides) if body.overrides else None

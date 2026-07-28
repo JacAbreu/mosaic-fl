@@ -99,6 +99,8 @@ class SQLiteCheckpointStore(CheckpointStore):
         dp_max_grad_norm: Optional[float] = None,
         dp_epsilon_simple: Optional[float] = None,
         dp_epsilon_rdp: Optional[float] = None,
+        dp_noise_strategy: Optional[str] = None,
+        dp_noise_group_multipliers_json: Optional[str] = None,
     ) -> None:
         # fl_trainings do SQLite ainda não tem essas colunas (schema local, sem
         # Alembic — mesma lacuna já existente para as métricas de recurso
