@@ -354,6 +354,20 @@ class ProductionFedProxStrategy(
             self._dp_epsilon_simple = eps_simple
             self._dp_last_group_multipliers = group_multipliers
 
+            # LIMITAÇÃO CONHECIDA (achado 2026-07-28, não resolvida — análise
+            # completa e fonte em docs/pesquisa_baseline_implementacao_fontes_
+            # bibliograficas.md, seção "Ruído por camada (layer_group)"): um
+            # .step() por grupo trata os N grupos como mecanismos compostos
+            # SEQUENCIALMENTE, superestimando o epsilon real quando
+            # dp_noise_strategy="layer_group". A literatura tem tratamento formal
+            # pra ruído heterogêneo como 1 mecanismo só (Phan et al., "Heterogeneous
+            # Gaussian Mechanism," IJCAI 2019, Teorema 3), mas provado pra ruído por
+            # neurônio em DPSGD centralizado, com uma restrição (Σr_k=1) que a
+            # implementação atual não respeita — não é uma instância válida do
+            # teorema ainda, precisa de adaptação teórica própria pro DP-FedAvg
+            # federado com grupos de camada.
+            # Com dp_noise_strategy="uniform" (1 grupo só), este código já reproduz
+            # a contabilidade exata de sempre — a imprecisão só afeta "layer_group".
             if self._rdp_accountant is not None:
                 for group, multiplier in group_multipliers.items():
                     if multiplier > 0:

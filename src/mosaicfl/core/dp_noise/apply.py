@@ -53,6 +53,23 @@ def apply_dp_noise(
     weakest_multiplier = min(protected) if protected else noise_multiplier
     eps_per_round = math.sqrt(2 * math.log(1.25 / delta)) / weakest_multiplier
     eps_accumulated = eps_per_round * round_num
+    # LIMITAÇÃO CONHECIDA (achado 2026-07-28, não resolvida — ver docs/pesquisa_
+    # baseline_implementacao_fontes_bibliograficas.md, seção "Ruído por camada
+    # (layer_group)" pra análise completa e fontes). Esta fórmula usa o
+    # multiplicador MAIS FRACO como cota superior pro epsilon "simples" — razoável
+    # aqui. O problema real está na contabilidade RDP feita pelo CHAMADOR (ver
+    # strategy/core.py::_apply_dp_noise_to_aggregated): hoje ela chama
+    # accountant.step() uma vez POR GRUPO por rodada, tratando os N grupos como N
+    # mecanismos compostos sequencialmente — superestima o epsilon real. A
+    # literatura tem um tratamento formal pra ruído heterogêneo por componente como
+    # UM mecanismo só, não N compostos (Phan, Vu, Liu, Jin, Dou, Wu & Thai,
+    # "Heterogeneous Gaussian Mechanism," IJCAI 2019, Teorema 3) — mas o teorema foi
+    # provado pra ruído por NEURÔNIO numa única camada oculta em DPSGD centralizado,
+    # com um vetor de redistribuição r (Σr_k=1) que EXIGE aumentar o ruído de outros
+    # componentes pra reduzir o de um — a implementação atual não faz essa
+    # compensação, então não é uma instância válida do teorema. Adaptar
+    # corretamente pro DP-FedAvg federado com grupos de camada (não neurônios
+    # individuais) é trabalho teórico próprio, não feito ainda.
 
     logger.info(
         "dp_noise strategy=%s groups=%s S=%.2f n=%d | "
