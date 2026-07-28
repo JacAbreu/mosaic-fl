@@ -1599,3 +1599,65 @@ Investigação (via subagente de exploração) confirmou que o Flower 1.32 não 
 Dois `make` novos, mesma convenção `server-`/`client-` já usada no projeto (BPSP=servidor/desktop, HSL=cliente/notebook): `make server-set-class-weights OVERRIDES='{...}'` / `make client-set-class-weights OVERRIDES='{...}'`, script `scripts/set_class_weight_overrides.py` reaproveitando a mesma validação do endpoint web (extraída pra `class_weighting.validate_overrides`, compartilhada — antes duplicada).
 
 **Validado**: 8 testes novos (`test_local_db_source.py` + 3 testes de prioridade em `test_fedprox_client.py`) + smoke test real do script contra o banco do desktop (grava, mostra, limpa, estado confirmado limpo no final). Regressão completa: 860 passando.
+
+---
+
+## DP-FedAvg portado do Caminho A pro Caminho B + ruído por camada opcional (2026-07-28)
+
+A autora pediu explicação sobre limitações do projeto pra discutir no TCC; ao analisar calibração (seção 12) e privacidade diferencial juntas, decidiu investigar se ruído DP uniforme estaria "afogando" o sinal já frágil das classes raras (label skew, seção 13) — e pediu pra testar. Investigação revelou um achado que mudou o escopo: **o ruído DP-FedAvg nunca tinha sido aplicado no Caminho B** — só existia em `experiments/training/core/fl_core/manual_loop.py` (Caminho A, simulação). A autora foi direta: **"o que tem no caminho A tem que ter no caminho B... implemente, mas sempre lembrando que deve ser strategy/opcional/liga ou desliga."**
+
+Novo namespace `src/mosaicfl/core/dp_noise/` (mesmo padrão de `class_weighting`): `UniformNoiseStrategy` (extração exata do comportamento histórico) e `LayerGroupNoiseStrategy` (novo, ruído reduzido seletivamente por grupo — embedding/transformer/cabeça de classificação, exclui o buffer não-treinável `pos_encoder.pe` do ruído). `ProductionFedProxStrategy.aggregate_fit()` ganhou `_apply_dp_noise_to_aggregated()` — muta o RETORNO de `aggregate_fit()`, não só `self.global_model` (o Flower usa o valor de retorno pra continuar a rodada seguinte). `RDPAccountant` (opacus) instanciado por treino; `dp_epsilon_simple`/`dp_epsilon_rdp`/`dp_noise_strategy` agora persistidos em `fl_trainings` (migration 029) — nunca preenchidos antes porque o mecanismo nunca rodava no Caminho B.
+
+**Bug real achado de brinde**: `postgres_store.py::update_evaluation_metrics()` tinha o log de sucesso de `complete_training()` fisicamente colado no fim do método errado, causando `NameError` engolido silenciosamente toda vez que era chamado — o `UPDATE` já tinha commitado antes do crash (sem corrupção de dado), só o log de sucesso nunca aparecia. Corrigido.
+
+**Limitação técnica séria, achada ANTES de gastar horas rodando o teste**: calculando o ε (epsilon) real pra σ=0,5/`head_scale`=0,5 (110 rounds), a contabilidade RDP de `layer_group` (um `accountant.step()` por grupo por rodada) deu ε≈1.564 contra ε≈319 do `uniform` — 5× pior. Primeira explicação da autora-assistente ("é composição paralela, McSherry") estava **errada e sem fonte checada** — a autora pediu explicitamente aprofundamento antes de documentar: **"faça uma análise aprofundada sobre o tema... você me deu um parecer antes de aprofundar."** Pesquisa real encontrou a fonte correta: **Phan, Vu, Liu, Jin, Dou, Wu & Thai, "Heterogeneous Gaussian Mechanism: Preserving Differential Privacy in Deep Learning with Provable Robustness," IJCAI 2019 (peer-reviewed)**, Teorema 3 — prova que ruído heterogêneo por componente pode ser tratado como **um mecanismo só**, via um vetor de redistribuição `r` com `Σr_k=1` (não N mecanismos compostos). Mas não se aplica direto: o teorema foi provado pra ruído por neurônio em DPSGD centralizado, e a restrição `Σr_k=1` exige que reduzir ruído num componente AUMENTE o ruído dos outros pra compensar — a implementação atual não faz essa compensação. Adaptar corretamente pro DP-FedAvg federado com grupos de camada é trabalho teórico próprio, registrado como direção futura citável, não implementado. Documentado com rigor (o que epsilon significa, tabela de camadas/valores, a análise honesta da limitação) em `docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md`.
+
+**Validado**: 33 testes novos cobrindo o namespace `dp_noise`, a integração Caminho A (wrapper preserva assinatura/comportamento) e Caminho B (aplicação condicional, RDP accounting, persistência). Regressão completa: 889 passando. Migration 029 aplicada no desktop.
+
+---
+
+## Primeiro treino real com peso de classe (`training_id=77`) — ganho real mas frágil, e um bug sério achado ao avaliar (2026-07-28)
+
+Antes de testar o ruído seletivo, a autora e a assistente decidiram validar o peso de classe primeiro (opção D já decidida — ver seção 14 do doc de pesquisa): `curado_internado=20`, `melhora_internado_grave=20` (as duas únicas classes com evidência real de problema), gravados via `make server-set-class-weights`/`client-set-class-weights` nos dois hospitais, com `FL_CLASS_WEIGHT_CLAMP` subido de 15 pra 25 no `.env` de cada máquina (sem isso, peso 20 seria clampado pra 15 e equivaleria a não fazer nada).
+
+**Resultado, comparado ao baseline (treino 76, sem peso de classe)**: `curado_internado` saiu de F1=0,000 (sempre, em 4 treinos anteriores) pra F1=0,171 na melhor rodada (95) — mas instável: só ficou acima de zero em 17 das 110 rodadas (~15%), sempre no mesmo patamar (~0,15-0,17), nunca crescendo de forma durável; na última rodada (110) tinha voltado a 0,000. `melhora_internado_grave` não melhorou (piorou levemente, 0,531→0,503, mesmo peso 20). Accuracy caiu 3,4 p.p., `melhora_internado_breve` caiu 9,8 p.p. — custo real de empurrar gradiente pra classe rara. `per_client_f1_json` (primeira vez com dado real) mostrou que só UM dos dois hospitais realmente acertou `curado_internado` na rodada 95 — reforça a hipótese de diluição por label skew (seção 13).
+
+**Bug sério achado ao construir a tela de avaliação de treinamentos** (abaixo): o checkpoint salvo (`fl_checkpoints`, os pesos de fato servidos) nunca correspondia à "melhor rodada" registrada em `fl_trainings.best_round`/`best_accuracy` — sempre refletia a ÚLTIMA rodada. Isso significa que o ganho observado na rodada 95 **não estava no modelo realmente servido** (que tinha os pesos da rodada 110, onde `curado_internado` já tinha revertido). Ver entrada seguinte.
+
+---
+
+## BUG SÉRIO — checkpoint nunca correspondia à melhor rodada, só à última (2026-07-28)
+
+Descoberto ao testar a tela `/fl-training-results` (abaixo) contra dado real: `fl_checkpoints` do `training_id=77` tinha `round=110`, mas `fl_trainings.best_round=95`. A autora confirmou na hora: **"isso é real e também aconteceu durante o caminho A, achei que já estaria resolvido pra o caminho B."**
+
+**Causa raiz**: `ProductionFedProxStrategy.aggregate_fit()` chamava `checkpoint_store.save()` **sem condição, toda rodada**. O rastreamento de "melhor rodada" (`_best_round`/`_best_accuracy`) sempre foi só um contador em memória, nunca ligado à decisão de QUANDO salvar os pesos de verdade. Caminho A (`manual_loop.py:278-284`) já fazia certo — só salva dentro do `if criterion_value > best_criterion_val`. Caminho B nunca teve esse mesmo cuidado.
+
+**Correção**: `save()` removido de `aggregate_fit()`; movido pra dentro do bloco de melhora em `aggregate_evaluate()`. Segunda ocorrência achada e corrigida: `_persist_federated_calibration()` (roda na última rodada configurada, quase nunca a melhor) também sobrescrevia o checkpoint com os pesos da rodada atual — corrigido com `self._best_state_dict`, cache em memória dos pesos da melhor rodada.
+
+**Impacto real**: provavelmente afeta todos os treinos anteriores registrados no banco (73-77) — `best_accuracy`/`best_round` sempre foram metadados corretos, mas os pesos salvos nunca correspondiam. Não há como recuperar retroativamente os pesos exatos da "melhor rodada" desses treinos antigos.
+
+**Validado**: 8 testes novos cobrindo o cenário exato do bug (melhora na rodada 2, piora 3-5, checkpoint final continua sendo o da rodada 2). Regressão completa: 908 passando.
+
+---
+
+## Tela `/fl-training-results` — avaliação de treinamentos, com comparação mais-recente-vs-melhor (2026-07-28)
+
+A pedido da autora ("prepare uma tela... para ter a avaliação de cada treinamento... pode mostrar uma lista de treinamentos e suas respectivas avaliações"), nova tela seguindo o mesmo padrão visual das outras (`/vocab-anomalies`, `/class-weights`). Lista resumida (accuracy, macro_f1, macro_auc, ECE pré→pós, convergência, duração, DP) com expansão por treino mostrando `per_class_f1`/`per_client_f1` rodada-a-rodada — mesmo nível de análise que a autora tinha pedido manualmente pro treino 77. Painel de comparação no topo (mais recente vs. melhor `macro_f1` até hoje), pedido explicitamente depois que a autora gostou da tabela comparativa feita à mão: **"eu gostei da comparação do melhor treinamento e do treinamento atual."**
+
+3 endpoints novos (`GET /api/admin/fl-training-results`, `.../{id}/rounds`, `.../compare`). Foi testando esta tela contra dado real que o bug do checkpoint (acima) foi descoberto.
+
+**Validado**: 11 testes de integração. Regressão completa: 900 passando.
+
+---
+
+## Auditoria sistemática Caminho A vs. Caminho B — 7 gaps achados, 6 corrigidos (2026-07-28)
+
+Depois do bug do checkpoint, a autora pediu uma investigação mais ampla: **"acho que antes de seguirmos qualquer coisa, devemos validar o que tem de pronto no caminho A e migrar para o B, senão sempre teremos surpresas desagradáveis."** Auditoria via subagente, comparando `manual_loop.py`/`aggregation.py` (Caminho A) contra `strategy/core.py` + mixins (Caminho B), linha a linha.
+
+**7 gaps achados** (severidade decrescente): (1) `_run_calibration` tinha a MESMA classe do bug do checkpoint (pesos/rodada atuais em vez da melhor) — vivo em `legacy_server.py` (dev); (2) convergência sempre usava `accuracy`, ignorando `FED_CFG.checkpoint_criterion="f1_macro"` (default); (3) faltava o warm-up de `MIN_ROUNDS` (20 rounds) antes de avaliar convergência — `ConvergenceTracker` podia declarar convergido já na rodada 4; (4) RDP epsilon do **Caminho A** ignorava a estratégia `layer_group`, sempre contava com o multiplicador base; (5) `dp_noise_strategy`/multiplicadores nunca eram persistidos pelo Caminho A; (6) `fl_checkpoints.evaluation_json` (relatório clínico estruturado) nunca era preenchido pelo Caminho B; (7) `legacy_server.py` tem um default de agregação de métricas incompleto (só afeta esse script de dev).
+
+A autora: **"temos que corrigir os achados de 1 a 6, o 7 não precisa pois é simulação... ainda bem que você fez essa auditoria, senão eu iria escrever bobagem no tcc."**
+
+**Todos os 6 corrigidos na mesma sessão**: `_run_calibration` agora carrega `self._best_state_dict` antes de avaliar/calibrar; convergência usa `f1_macro` quando configurado; warm-up de `min_rounds` portado (docstring de `convergence.py`, que afirmava incorretamente paridade entre os dois caminhos, também corrigido); `aggregation.py::apply_dp_noise` (Caminho A) mudou de retornar `float` pra `(float, dict)` — RDP accounting agora por grupo, igual ao Caminho B; `dp_noise_strategy`/multiplicadores persistidos por A; novo `_build_evaluation_json()` monta um payload equivalente ao do Caminho A (mais enxuto — sem dado bruto centralizado, que não existe em produção real por design de privacidade), salvo nos dois pontos que persistem checkpoint.
+
+**Validado**: ~25 testes novos/atualizados cobrindo as 6 correções. Regressão completa: 921 passando.

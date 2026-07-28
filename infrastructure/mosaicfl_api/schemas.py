@@ -209,3 +209,58 @@ class ClassWeightOverridesUpdate(BaseModel):
         description="Substitui o conjunto inteiro de overrides (não é merge parcial). "
                      "Objeto vazio remove todos os overrides — todas as classes voltam pra class_balanced."
     )
+
+
+class TrainingResultSummary(BaseModel):
+    """1 linha de metrics.fl_trainings — visão resumida pra tela /fl-training-results."""
+    id: int
+    algorithm: Optional[str] = None
+    run_classification: Optional[str] = None
+    partition_mode: Optional[str] = None
+    status: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    n_rounds_done: Optional[int] = None
+    best_round: Optional[int] = None
+    best_accuracy: Optional[float] = None
+    converged: Optional[bool] = None
+    macro_f1: Optional[float] = None
+    macro_auc: Optional[float] = None
+    ece: Optional[float] = None
+    ece_pre: Optional[float] = None
+    total_duration_s: Optional[float] = None
+    dp_noise_multiplier: Optional[float] = None
+    dp_noise_strategy: Optional[str] = None
+    is_active_model: Optional[bool] = None
+
+
+class TrainingResultsListResponse(BaseModel):
+    trainings: list[TrainingResultSummary]
+
+
+class TrainingRoundDetail(BaseModel):
+    """1 linha de metrics.fl_round_history — pra expansão por treino."""
+    round: int
+    accuracy: Optional[float] = None
+    f1_macro: Optional[float] = None
+    per_class_f1: Optional[list[float]] = None
+    per_client_f1: Optional[list[dict]] = None
+
+
+class TrainingRoundsResponse(BaseModel):
+    training_id: int
+    class_labels: list[str]
+    best_round: Optional[int] = None
+    rounds: list[TrainingRoundDetail]
+
+
+class TrainingComparisonSide(BaseModel):
+    """1 lado da comparação latest vs. best — resumo + per_class_f1 no melhor round."""
+    training: TrainingResultSummary
+    per_class_f1: Optional[list[float]] = None
+
+
+class TrainingComparisonResponse(BaseModel):
+    class_labels: list[str]
+    latest: Optional[TrainingComparisonSide] = None
+    best: Optional[TrainingComparisonSide] = None

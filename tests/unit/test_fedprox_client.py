@@ -555,6 +555,10 @@ class TestClassWeightOverridesIntegration:
 
         custom_cfg = FedConfig(class_weight_overrides={"curado_internado": 12.0})
         monkeypatch.setattr(client_module, "FED_CFG", custom_cfg)
+        # Isola do banco local real (2º nível de prioridade, ver
+        # TestClassWeightOverridesPriorityOrder) — sem isso o teste fica refém de
+        # qualquer override real gravado em clinical.fl_orchestration_config.
+        monkeypatch.setattr(client_module, "load_local_overrides", lambda db_url: None)
 
         from mosaicfl.core.client import FedProxClient
         seq_len = 8
@@ -575,6 +579,7 @@ class TestClassWeightOverridesIntegration:
 
         default_cfg = FedConfig()
         monkeypatch.setattr(client_module, "FED_CFG", default_cfg)
+        monkeypatch.setattr(client_module, "load_local_overrides", lambda db_url: None)
 
         from mosaicfl.core.client import FedProxClient
         seq_len = 8

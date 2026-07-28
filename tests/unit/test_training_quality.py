@@ -60,6 +60,15 @@ def _make_client(seed: int = 42) -> FedProxClient:
 
 class TestClassWeightClipping:
 
+    @pytest.fixture(autouse=True)
+    def _isolate_from_real_local_db(self, monkeypatch):
+        # Sem isso, _compute_class_weights consulta clinical.fl_orchestration_config
+        # no FL_DB_URL real (2º nível de prioridade, ver mosaicfl.core.class_weighting)
+        # — estes testes precisam do cálculo por frequência puro, não de um override
+        # gravado de verdade no banco por um experimento real em andamento.
+        import mosaicfl.core.client as client_module
+        monkeypatch.setattr(client_module, "load_local_overrides", lambda db_url: None)
+
     def test_weights_never_exceed_15(self):
         loader = _make_imbalanced_loader(majority_n=500, minority_n=1)
         client = FedProxClient(0, loader, loader)

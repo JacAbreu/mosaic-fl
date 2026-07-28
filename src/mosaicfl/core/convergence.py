@@ -1,9 +1,6 @@
 """
 convergence.py — Rastreamento de convergência do treinamento federado.
 
-Fonte única da verdade para o algoritmo de convergência. Importado por todos
-os adapters (experimento e produção) — nenhum redefine esta lógica localmente.
-
 Algoritmo: janela deslizante sobre os últimos `patience` deltas consecutivos.
 Um round ruidoso "envelhece" e sai da janela; não reinicia a contagem.
 Isso é adequado para FL com dados hospitalares non-IID, onde rounds isolados
@@ -11,7 +8,15 @@ podem ser instáveis por natureza.
 
 Propriedade de idempotência: uma vez convergido, check() sempre retorna True.
 Isso garante consistência entre o valor booleano retornado e converged_round.
-"""
+
+Usado pelo Caminho B (produção real, ver infrastructure/mosaicfl_server/
+strategy/core.py). Correção 2026-07-28: o docstring afirmava "importado por
+todos os adapters... nenhum redefine esta lógica localmente" — isso está
+errado desde sempre. O Caminho A (experiments/training/core/fl_core/
+manual_loop.py:278-313) reimplementa a lógica de convergência inline (delta
+entre rodadas consecutivas + FED_CFG.min_rounds de warm-up, ambos ausentes
+aqui), não importa esta classe. Os dois algoritmos são parecidos mas não
+idênticos — não assumir paridade automática entre os dois caminhos."""
 from __future__ import annotations
 
 

@@ -27,6 +27,11 @@ def _make_strategy():
     strategy.vocab = {"A": 2}
     strategy._last_round_metrics = {"accuracy": 0.7, "loss": 0.3}
     strategy._save_evaluation_report = MagicMock()
+    # Pesos/rodada/accuracy da "melhor rodada" (achado 2026-07-28) — usados por
+    # _run_calibration() em vez dos pesos da rodada em que ela foi disparada.
+    strategy._best_round = 3
+    strategy._best_accuracy = 0.7
+    strategy._best_state_dict = None  # None = não troca, usa self.global_model como está
     return strategy
 
 
@@ -175,3 +180,50 @@ class TestUnknownMethodFallsBackToTemperature:
 
             strategy._fit_temperature.assert_called_once()
             strategy._fit_isotonic.assert_not_called()
+
+
+class TestUsesBestRoundNotCurrentRound:
+    """Achado 2026-07-28 — mesma classe do bug de checkpoint já corrigido em
+    aggregate_fit()/_persist_federated_calibration: _run_calibration() pode ser
+    disparada bem depois da melhor rodada (converged fica permanente), então
+    precisa avaliar/salvar com os pesos/round/accuracy da MELHOR rodada."""
+
+    def test_loads_best_state_dict_before_evaluating(self):
+        strategy = _make_strategy()
+        fake_best = {"marker": "sou o melhor round"}
+        strategy._best_state_dict = fake_best
+        strategy._best_round = 42
+        strategy._best_accuracy = 0.9
+
+        with patch("mosaicfl.core.config.FED_CFG") as fed_cfg, \
+             patch("mosaicfl.core.evaluation.evaluate", return_value=_fake_report(0.1)):
+            fed_cfg.calibration_method = "temperature"
+            strategy._fit_temperature = MagicMock(return_value=_fit_result("temperature", 0.05, temperature=1.8))
+            strategy._fit_isotonic    = MagicMock()
+
+            strategy._run_calibration(server_round=110)  # bem depois da melhor rodada (42)
+
+        strategy.global_model.load_state_dict.assert_called_once_with(fake_best, strict=False)
+        save_kwargs = strategy._checkpoint_store.save.call_args.kwargs
+        assert save_kwargs["round_num"] == 42
+        assert save_kwargs["accuracy"] == pytest.approx(0.9)
+
+    def test_no_best_state_dict_skips_reload_but_still_uses_best_round(self):
+        """Caso degenerado (nunca melhorou): não troca os pesos, mas ainda usa
+        best_round/best_accuracy pra registrar corretamente."""
+        strategy = _make_strategy()
+        strategy._best_state_dict = None
+        strategy._best_round = 5
+        strategy._best_accuracy = 0.6
+
+        with patch("mosaicfl.core.config.FED_CFG") as fed_cfg, \
+             patch("mosaicfl.core.evaluation.evaluate", return_value=_fake_report(0.1)):
+            fed_cfg.calibration_method = "temperature"
+            strategy._fit_temperature = MagicMock(return_value=_fit_result("temperature", 0.05))
+            strategy._fit_isotonic    = MagicMock()
+
+            strategy._run_calibration(server_round=8)
+
+        strategy.global_model.load_state_dict.assert_not_called()
+        save_kwargs = strategy._checkpoint_store.save.call_args.kwargs
+        assert save_kwargs["round_num"] == 5

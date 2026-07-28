@@ -13,8 +13,9 @@ logger = logging.getLogger(__name__)
 
 class _CalibrationMixin:
     """Requer os atributos definidos em ProductionFedProxStrategy.__init__ (global_model,
-    _test_loader, _checkpoint_store, vocab, _last_round_metrics) e o método
-    _save_evaluation_report (de core.py, via herança na classe final)."""
+    _test_loader, _checkpoint_store, vocab, _last_round_metrics, _best_round,
+    _best_accuracy, _best_state_dict) e o método _save_evaluation_report (de core.py,
+    via herança na classe final)."""
 
     def _fit_temperature(self, device: str) -> Optional[dict]:
         """Ajusta TemperatureScaler e avalia. Retorna None se falhar em qualquer etapa."""
@@ -104,6 +105,21 @@ class _CalibrationMixin:
         from mosaicfl.core.config import FED_CFG, MODEL_CFG, RUNTIME_CFG
         from mosaicfl.core.evaluation import evaluate
 
+        # Achado 2026-07-28 (mesma classe do bug já corrigido em aggregate_fit()/
+        # _persist_federated_calibration, ver docs/Linha_do_Tempo_MOSAIC-FL.md):
+        # calibração precisa avaliar/ajustar sobre os pesos da MELHOR rodada, não
+        # os da rodada em que foi disparada (server_round pode ser bem depois do
+        # best_round — ex.: converged=True fica permanente, então este método pode
+        # rodar de novo em rodadas seguintes). Carrega self._best_state_dict em
+        # self.global_model ANTES de qualquer avaliação — sem isso, o relatório e
+        # os calibradores ficariam ajustados sobre um modelo diferente do que
+        # termina salvo/servido. Seguro mutar self.global_model aqui: a próxima
+        # rodada sempre recarrega os pesos agregados de verdade via
+        # aggregate_fit()/_load_global_weights(), então essa troca é só temporária.
+        best_round = self._best_round or server_round
+        if self._best_state_dict is not None:
+            self.global_model.load_state_dict(self._best_state_dict, strict=False)
+
         device = str(RUNTIME_CFG.device)
         method = FED_CFG.calibration_method
 
@@ -119,7 +135,7 @@ class _CalibrationMixin:
             logger.info(
                 "evaluation_pre_calibration",
                 extra={
-                    "round":      server_round,
+                    "round":      best_round,
                     "accuracy":   report_raw.accuracy,
                     "macro_f1":   report_raw.macro_f1,
                     "macro_auc":  report_raw.macro_auc,
@@ -146,7 +162,7 @@ class _CalibrationMixin:
                 logger.info(
                     "calibration_auto_selected",
                     extra={
-                        "round":  server_round,
+                        "round":  best_round,
                         "method": result["method"],
                         "ece":    result["report_cal"].calibration.ece,
                     },
@@ -164,7 +180,7 @@ class _CalibrationMixin:
         logger.info(
             "calibration_complete",
             extra={
-                "round":     server_round,
+                "round":     best_round,
                 "method":    result["method"],
                 "T":         round(result["temperature"], 4),
                 "ece":       report_cal.calibration.ece,
@@ -176,20 +192,20 @@ class _CalibrationMixin:
 
         # 3. Persiste relatório em JSON para rastreabilidade clínica
         self._save_evaluation_report(
-            server_round, result["temperature"], report_raw, report_cal,
+            best_round, result["temperature"], report_raw, report_cal,
             calibration_method=result["method"],
         )
 
-        # 4. Re-persiste checkpoint com o calibrador escolhido; load_latest() retorna o mais recente por id
+        # 4. Re-persiste checkpoint com o calibrador escolhido — pesos da MELHOR
+        # rodada (já carregados em self.global_model no início deste método),
+        # não os "últimos" (achado 2026-07-28).
         if self._checkpoint_store is not None:
-            last_acc  = self._last_round_metrics.get("accuracy", 0.0)
-            last_loss = self._last_round_metrics.get("loss", 0.0)
             self._checkpoint_store.save(
-                round_num=server_round,
+                round_num=best_round,
                 state_dict=self.global_model.state_dict(),
                 vocab=self.vocab,
-                accuracy=last_acc,
-                loss=last_loss,
+                accuracy=self._best_accuracy,
+                loss=0.0,  # loss da melhor rodada não é rastreado separadamente, só accuracy/f1_macro
                 temperature=result["temperature"],
                 calibration_method=result["method"],
                 isotonic_calibrators=result["isotonic_calibrators"],

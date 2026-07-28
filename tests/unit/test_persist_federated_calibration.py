@@ -20,6 +20,19 @@ def _make_strategy():
     strategy._training_id = 7
     strategy._checkpoint_store = MagicMock()
     strategy._last_round_metrics = {"accuracy": 0.7, "loss": 0.3}
+    # Pesos/round/accuracy da "melhor rodada" (achado 2026-07-28) — usados por
+    # _persist_federated_calibration() em vez dos pesos da rodada atual.
+    strategy._best_state_dict = None  # cai no fallback self.global_model.state_dict()
+    strategy._best_round = 7
+    strategy._best_accuracy = 0.7
+    # Usados por _build_evaluation_json() (achado #6 da auditoria Caminho A vs B).
+    strategy.round_counter = 10
+    strategy._best_f1_macro = 0.5
+    strategy._best_macro_auc = 0.8
+    strategy._ece = None
+    strategy._ece_pre = None
+    strategy._dp_epsilon_simple = None
+    strategy._rdp_accountant = None
     return strategy
 
 

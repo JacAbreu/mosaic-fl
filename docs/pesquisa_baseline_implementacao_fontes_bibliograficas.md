@@ -654,6 +654,58 @@ Três opções avaliadas, comparando custo/risco de implementação contra o que
 
 **Desenho de implementação decidido com a autora:** Strategy pattern com 2 estratégias em namespace próprio (`class_balanced` = comportamento atual por frequência; `cost_sensitive` = peso explícito por classe), roteadas por classe via configuração — uma classe sem override cai automaticamente na estratégia `class_balanced` de hoje, preservando intacto o que já funciona. Sem valores de custo definidos ainda (override vazio por padrão) — a infraestrutura fica pronta pra receber o julgamento clínico da autora quando ela decidir os pesos.
 
+### Valores decididos e gravados (2026-07-28)
+
+**BPSP** (`make server-set-class-weights`): `{"curado_internado": 20, "melhora_internado_grave": 20}` — as duas únicas classes com evidência real de problema (colapso estrutural de F1 e maior gravidade absoluta, respectivamente). `curado_pronto`, `melhora_pronto` e `melhora_internado_breve` ficam em `class_balanced`, sem evidência de que precisem de peso explícito (ver seção 13 — `melhora_pronto` tem skew em direção oposta entre hospitais, um peso único não resolve isso de qualquer forma).
+
+**Pendência crítica antes do próximo treino real:** com `FED_CFG.class_weight_clamp` ainda no default (15,0), o peso 20 em `curado_internado` é clampado pra 15 — **efeito idêntico a não configurar nada**, porque `class_balanced` já bate nesse teto sozinho hoje (ver seção 14, tabela de efeito real por classe). Decidido subir o teto pra 25 (`FL_CLASS_WEIGHT_CLAMP=25`) — precisa ser setado no `.env` de **cada máquina** (BPSP e HSL), já que o teto é lido localmente por `FedProxClient` no momento do treino, não é um valor empurrado pelo canal compartilhado do servidor (diferente de `class_weight_overrides_json`, que viaja via `clinical.fl_orchestration_config`).
+
+**Ainda em aberto:** valores de peso pro HSL (não decididos ainda — podem ser diferentes dos do BPSP, já que cada hospital grava no seu próprio banco local, ver seção "Peso de classe por hospital" na linha do tempo).
+
+### O que o epsilon (ε) significa, e por que importa aqui (2026-07-28)
+
+Antes de discutir o ruído por camada, vale fixar o conceito pra quem for ler a seção seguinte sem contexto prévio de DP. `ε` (epsilon) mede o quanto a distribuição de probabilidade da SAÍDA de um mecanismo (aqui, os pesos do modelo agregado) pode mudar entre dois bancos de dados que diferem em **um único registro** (um paciente a mais ou a menos). Formalmente (Dwork & Roth, *The Algorithmic Foundations of Differential Privacy*, 2014): para todo par de bancos vizinhos D, D′ e todo conjunto de saídas possíveis S,
+
+Pr[M(D) ∈ S] ≤ e^ε · Pr[M(D′) ∈ S] + δ
+
+`ε` pequeno → um adversário observando o modelo publicado não consegue distinguir com confiança se um paciente específico participou do treino ou não (o que protege contra reidentificação/inferência de participação). Na prática da literatura de ML privado, valores de `ε` de até ~10 costumam ser tratados como oferecendo alguma proteção significativa; `ε` na casa das centenas ou milhares é, na prática, equivalente a nenhuma proteção — a desigualdade acima continua matematicamente válida, mas `e^ε` é tão grande que a "garantia" não restringe nada de útil sobre o que um adversário pode inferir.
+
+### Ruído por camada (`layer_group`) — grupos, valores e o problema real de contabilidade (2026-07-28)
+
+**Os grupos de camada e os valores testados hoje** (`mosaicfl.core.dp_noise.layer_group.LayerGroupNoiseStrategy`, ver `src/mosaicfl/core/model.py` pra nomes exatos de parâmetro):
+
+| Grupo | Parâmetros do modelo | Papel na arquitetura | Escala testada (`*_scale`) | σ efetivo (σ_base=0,5) |
+|---|---|---|---|---|
+| `embedding` | `embedding.weight`, `dia_embedding.*`, `cls_token` | Representação inicial de token/tempo | 1,0 (sem redução) | 0,5 |
+| `transformer` | `layers.0.*`, `layers.1.*` (atenção + FFN + LayerNorm) | Blocos de atenção do BEHRT | 1,0 (sem redução) | 0,5 |
+| `head` | `pre_classifier.*`, `classifier.*` | Decisão final entre as 5 classes | 0,5 (reduzida) | 0,25 |
+| `excluded` | `pos_encoder.pe` (buffer não-treinável) | Codificação posicional fixa | 0,0 (sem ruído) | — (fora do mecanismo DP) |
+
+A hipótese (seção 13 — label skew extremo, colapso de F1 em `curado_internado`/`melhora_pronto`) é que reduzir ruído especificamente na cabeça preserva sinal de classe rara já frágil, ao custo de proteger menos essa parte específica do modelo.
+
+**O problema de contabilidade encontrado antes de rodar o teste:** a implementação de hoje soma a perda de privacidade chamando `RDPAccountant.step()` uma vez por grupo com ruído (`embedding`, `transformer`, `head`) a cada rodada — tratando os 3 grupos como 3 mecanismos gaussianos independentes cuja perda de privacidade se acumula. Minha primeira tentativa de explicar isso citou "composição paralela" (McSherry) como a correção — **isso estava errado e eu não tinha checado a literatura antes de afirmar** (a autora me corrigiu a pedir aprofundamento antes de documentar). Composição paralela exige que cada mecanismo opere sobre **partições disjuntas dos indivíduos** — aqui isso é falso: todo paciente contribui pro gradiente de embedding, transformer e cabeça no mesmo forward/backward pass. Não há como aplicar composição paralela clássica.
+
+**O que a literatura realmente oferece — Heterogeneous Gaussian Mechanism (Phan, Vu, Liu, Jin, Dou, Wu & Thai, "Heterogeneous Gaussian Mechanism: Preserving Differential Privacy in Deep Learning with Provable Robustness," IJCAI 2019 — revisado por pares):**
+
+O artigo prova formalmente (Teorema 3) que é possível redistribuir ruído gaussiano de forma heterogênea entre K componentes de uma única liberação, tratando isso como **UM mecanismo só, com UM ε** — não como K mecanismos compostos. A mecânica: cada componente k recebe ruído `N(0, σ²·K·r_k)`, onde o vetor de redistribuição `r ∈ ℝ^K` satisfaz `0 ≤ r_k ≤ 1` e `Σr_k = 1` — e o mecanismo inteiro é `(ε,δ)`-DP com `σ ≥ (√2/2ε)(√s + √(s+ε))`, `s = ln(√(2/π)·1/δ)`. Isso é exatamente o tipo de resultado que eu precisava pra justificar "não precisa somar a perda de privacidade por grupo" — mas com uma ressalva importante que muda a conclusão.
+
+**Por que não dá pra aplicar direto ao MOSAIC-FL ainda — ressalvas honestas:**
+1. **Domínio diferente**: o Teorema 3 foi desenhado pra injetar ruído nos **neurônios de uma única camada oculta** durante o treino centralizado (DPSGD, Secure-SGD no artigo), com `K` = número de neurônios daquela camada específica e uma análise de sensibilidade (`Δ_A`) atrelada à norma dessa camada. O MOSAIC-FL precisa de ruído no **modelo inteiro agregado**, pós-`aggregate_fit()`, em cenário federado (DP-FedAvg, McMahan et al. 2018) — cenário estruturalmente diferente do centralizado do artigo.
+2. **A restrição `Σr_k = 1` não é "ruído a menos de graça"**: se a cabeça recebe menos ruído (r_head pequeno), o vetor precisa compensar — os OUTROS componentes recebem r_k maior (mais ruído que o "uniforme" de referência), pra manter a soma em 1. A implementação de hoje NÃO faz essa compensação — reduz o ruído da cabeça sem aumentar o das outras camadas — ou seja, **não é uma instância válida do Teorema 3 hoje**, mesmo que a ideia geral (heterogeneidade como mecanismo único) seja a correta.
+3. **Adaptar exigiria trabalho teórico próprio**: definir `Δ_A` (sensibilidade) coerente com o `dp_max_grad_norm` já usado no FedAvg, generalizar de "por neurônio" pra "por grupo de camada" (bloco de coordenadas, não coordenada individual), e verificar se a prova do Teorema 3 se sustenta nessa generalização. Não é um ajuste de configuração — é uma extensão formal que precisaria ser feita e revisada com o mesmo rigor do teorema original antes de virar código de produção.
+
+**Quantificação do que já temos (não definitiva — bounds calculados com a contabilidade atual, não com uma adaptação correta do Teorema 3; σ=0,5, `head_scale`=0,5, 110 rounds, `δ`=1e-5):**
+
+| Cenário | ε (RDP) | Status |
+|---|---|---|
+| `uniform` (σ=0,5 em todo o modelo, 1 mecanismo, contabilidade exata de sempre) | ≈ 319 | Correto — não é afetado por essa limitação |
+| `layer_group` — soma ingênua atual (`.step()` por grupo, o que está implementado hoje) | ≈ 1.564 | Cota superior, provavelmente superestimada |
+| `layer_group` — aproximação (mecanismo único, nível do grupo mais fraco isolado, σ_cabeça=0,25) | ≈ 1.080 | Aproximação melhor, ainda não é o Teorema 3 aplicado corretamente |
+
+A aproximação reduz o ε em ~31% frente à soma ingênua — uma direção real de melhoria, não hipotética — mas **nenhum dos dois números é o resultado correto de uma aplicação válida do Teorema 3** (que exigiria a redistribuição `Σr_k=1` real, não implementada). Os dois já estão, de qualquer forma, muito acima de qualquer faixa de `ε` que signifique uma garantia de privacidade útil (ver explicação de epsilon acima) — tanto o `uniform` quanto o `layer_group` já não oferecem proteção prática nesse σ, então o refinamento da contabilidade muda "quão sem sentido" o número é, não se a garantia é útil ou não.
+
+**Implicação prática pro teste de hoje e pro TCC:** o resultado que vale comparar entre `uniform` e `layer_group` é o ganho de F1 nas classes raras, não o ε — que já está fora de qualquer faixa útil nos dois cenários, e cuja contabilidade para `layer_group` especificamente é uma cota superior sabidamente imprecisa. Fica registrado como limitação técnica explícita, com direção de correção futura concreta e citável (adaptar o Teorema 3 de Phan et al. pro cenário de DP-FedAvg com grupos de camada) — não implementada agora, por exigir trabalho teórico dedicado que a pressão de cronograma atual não comporta.
+
 ---
 
 ## 6. Regulatório

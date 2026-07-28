@@ -14,6 +14,12 @@ from ..schemas import (
     ClassWeightOverridesUpdate,
     FLStatus,
     OrchestrationConfigResponse,
+    TrainingComparisonResponse,
+    TrainingComparisonSide,
+    TrainingResultSummary,
+    TrainingResultsListResponse,
+    TrainingRoundDetail,
+    TrainingRoundsResponse,
     VocabAnomalyActionRequest,
     VocabAnomalyActionResponse,
     VocabAnomalyCorrectionRequest,
@@ -384,4 +390,134 @@ async def set_class_weight_overrides(
         class_weight_overrides=body.overrides,
         class_labels=list(MODEL_CFG.class_labels),
         class_weight_clamp=FED_CFG.class_weight_clamp,
+    )
+
+
+_TRAINING_SUMMARY_COLUMNS = (
+    "id, algorithm, run_classification, partition_mode, status, started_at, completed_at, "
+    "n_rounds_done, best_round, best_accuracy, converged, macro_f1, macro_auc, ece, ece_pre, "
+    "total_duration_s, dp_noise_multiplier, dp_noise_strategy, is_active_model"
+)
+
+
+def _row_to_training_summary(r) -> TrainingResultSummary:
+    return TrainingResultSummary(
+        id=r.id, algorithm=r.algorithm, run_classification=r.run_classification,
+        partition_mode=r.partition_mode, status=r.status,
+        started_at=r.started_at.isoformat() if r.started_at else None,
+        completed_at=r.completed_at.isoformat() if r.completed_at else None,
+        n_rounds_done=r.n_rounds_done, best_round=r.best_round, best_accuracy=r.best_accuracy,
+        converged=r.converged, macro_f1=r.macro_f1, macro_auc=r.macro_auc, ece=r.ece,
+        ece_pre=r.ece_pre, total_duration_s=r.total_duration_s,
+        dp_noise_multiplier=r.dp_noise_multiplier, dp_noise_strategy=r.dp_noise_strategy,
+        is_active_model=r.is_active_model,
+    )
+
+
+@router.get("/api/admin/fl-training-results", response_model=TrainingResultsListResponse)
+async def list_training_results(fingerprint: str = Depends(_get_token_fingerprint)):
+    """Lista todos os treinamentos federados (metrics.fl_trainings), mais recente
+    primeiro — visão resumida pra tela /fl-training-results. Ver
+    docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md e a linha do
+    tempo pra interpretação de cada achado por treino."""
+    from sqlalchemy import text as _text
+
+    try:
+        with state._db._engine.connect() as conn:
+            rows = conn.execute(_text(
+                f"SELECT {_TRAINING_SUMMARY_COLUMNS} FROM metrics.fl_trainings ORDER BY id DESC"
+            )).fetchall()
+    except Exception as exc:
+        logger.warning("training_results_query_error error=%s", exc)
+        raise HTTPException(status_code=503, detail=f"Não foi possível consultar os treinamentos: {exc}")
+
+    return TrainingResultsListResponse(trainings=[_row_to_training_summary(r) for r in rows])
+
+
+@router.get("/api/admin/fl-training-results/{training_id}/rounds", response_model=TrainingRoundsResponse)
+async def get_training_rounds(training_id: int, fingerprint: str = Depends(_get_token_fingerprint)):
+    """Histórico rodada-a-rodada de um treinamento — per_class_f1 (agregado) e
+    per_client_f1 (por hospital, antes da agregação, migration 027) pra avaliar
+    estabilidade/diluição, mesma análise feita manualmente pra decidir se um
+    ajuste de peso de classe funcionou de verdade (ver seção 13/14 do doc de
+    pesquisa)."""
+    from sqlalchemy import text as _text
+
+    from mosaicfl.core.config import MODEL_CFG
+
+    try:
+        with state._db._engine.connect() as conn:
+            best_round_row = conn.execute(_text(
+                "SELECT best_round FROM metrics.fl_trainings WHERE id = :id"
+            ), {"id": training_id}).mappings().first()
+            rows = conn.execute(_text("""
+                SELECT round, accuracy, f1_macro, per_class_f1, per_client_f1_json
+                FROM metrics.fl_round_history WHERE training_id = :id ORDER BY round
+            """), {"id": training_id}).fetchall()
+    except Exception as exc:
+        logger.warning("training_rounds_query_error training_id=%s error=%s", training_id, exc)
+        raise HTTPException(status_code=503, detail=f"Não foi possível consultar as rodadas: {exc}")
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"training_id={training_id!r} sem histórico de rodadas")
+
+    rounds = [
+        TrainingRoundDetail(
+            round=r.round, accuracy=r.accuracy, f1_macro=r.f1_macro,
+            per_class_f1=r.per_class_f1, per_client_f1=r.per_client_f1_json,
+        )
+        for r in rows
+    ]
+    return TrainingRoundsResponse(
+        training_id=training_id,
+        class_labels=list(MODEL_CFG.class_labels),
+        best_round=best_round_row["best_round"] if best_round_row else None,
+        rounds=rounds,
+    )
+
+
+@router.get("/api/admin/fl-training-results/compare", response_model=TrainingComparisonResponse)
+async def compare_training_results(fingerprint: str = Depends(_get_token_fingerprint)):
+    """Compara o treinamento MAIS RECENTE contra o de MELHOR macro_f1 até hoje —
+    mesma comparação feita manualmente pra avaliar se um ajuste (peso de classe,
+    ruído seletivo etc.) melhorou ou piorou em relação ao que já se tinha."""
+    from sqlalchemy import text as _text
+
+    from mosaicfl.core.config import MODEL_CFG
+
+    try:
+        with state._db._engine.connect() as conn:
+            latest_row = conn.execute(_text(
+                f"SELECT {_TRAINING_SUMMARY_COLUMNS} FROM metrics.fl_trainings "
+                "WHERE status = 'completed' ORDER BY id DESC LIMIT 1"
+            )).fetchone()
+            best_row = conn.execute(_text(
+                f"SELECT {_TRAINING_SUMMARY_COLUMNS} FROM metrics.fl_trainings "
+                "WHERE status = 'completed' AND macro_f1 IS NOT NULL "
+                "ORDER BY macro_f1 DESC LIMIT 1"
+            )).fetchone()
+
+            def _per_class_f1_at_best_round(training_id: int, best_round: int):
+                if training_id is None or best_round is None:
+                    return None
+                row = conn.execute(_text(
+                    "SELECT per_class_f1 FROM metrics.fl_round_history "
+                    "WHERE training_id = :tid AND round = :rnd"
+                ), {"tid": training_id, "rnd": best_round}).mappings().first()
+                return row["per_class_f1"] if row else None
+
+            latest_pcf1 = _per_class_f1_at_best_round(latest_row.id, latest_row.best_round) if latest_row else None
+            best_pcf1 = _per_class_f1_at_best_round(best_row.id, best_row.best_round) if best_row else None
+    except Exception as exc:
+        logger.warning("training_comparison_query_error error=%s", exc)
+        raise HTTPException(status_code=503, detail=f"Não foi possível montar a comparação: {exc}")
+
+    return TrainingComparisonResponse(
+        class_labels=list(MODEL_CFG.class_labels),
+        latest=TrainingComparisonSide(
+            training=_row_to_training_summary(latest_row), per_class_f1=latest_pcf1,
+        ) if latest_row else None,
+        best=TrainingComparisonSide(
+            training=_row_to_training_summary(best_row), per_class_f1=best_pcf1,
+        ) if best_row else None,
     )

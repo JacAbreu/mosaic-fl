@@ -80,3 +80,11 @@ async def class_weights_page():
     if page.exists():
         return FileResponse(str(page))
     return {"message": "página não encontrada em static/class_weights.html"}
+
+
+@app.get("/fl-training-results", include_in_schema=False)
+async def fl_training_results_page():
+    page = _STATIC_DIR / "fl_training_results.html"
+    if page.exists():
+        return FileResponse(str(page))
+    return {"message": "página não encontrada em static/fl_training_results.html"}

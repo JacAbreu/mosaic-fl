@@ -173,6 +173,13 @@ class ProductionFedProxStrategy(
         self._dp_epsilon_simple: Optional[float] = None
         self._dp_last_group_multipliers: Optional[Dict[str, float]] = None
 
+        # Pesos da MELHOR rodada até agora (achado 2026-07-28 — ver aggregate_evaluate
+        # e _persist_federated_calibration). Cache em memória porque a calibração
+        # roda na ÚLTIMA rodada configurada, não necessariamente a melhor — sem isso,
+        # persistir a calibração sobrescreveria o checkpoint da melhor rodada com os
+        # pesos da última, reintroduzindo o mesmo bug que a correção de hoje resolve.
+        self._best_state_dict: Optional[Dict[str, "torch.Tensor"]] = None
+
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -319,6 +326,39 @@ class ProductionFedProxStrategy(
         except Exception as e:
             logger.warning("vocab_discovery_error error=%s", e)
 
+    def _build_evaluation_json(self, best_round: int, best_per_class_f1) -> Dict:
+        """Relatório estruturado salvo em fl_checkpoints.evaluation_json — achado
+        2026-07-28 (auditoria Caminho A vs B): essa coluna sempre ficava NULL no
+        Caminho B; Caminho A monta um payload rico (manual_loop.py:494-510,
+        evaluation_payload) com relatório clínico completo, disponível via SQL sem
+        reler log/arquivo. Equivalente federado aqui — só usa dado JÁ agregado no
+        servidor (nunca predição/rótulo bruto por paciente, mesma garantia de
+        privacidade do resto do projeto). Mais enxuto que o do Caminho A porque não
+        existe test_loader centralizado em produção real (subgroup_metrics/reports
+        completos exigiriam dado bruto, indisponível por desenho)."""
+        dp_epsilon_rdp = None
+        if self._rdp_accountant is not None:
+            try:
+                dp_epsilon_rdp = self._rdp_accountant.get_epsilon(delta=1e-5)
+            except Exception:
+                pass
+        return {
+            "best_round": best_round,
+            "total_rounds_so_far": self.round_counter,
+            "best_f1_macro": self._best_f1_macro,
+            "best_accuracy": self._best_accuracy,
+            "best_macro_auc": self._best_macro_auc,
+            "best_per_class_f1": best_per_class_f1,
+            "class_labels": list(MODEL_CFG.class_labels),
+            "ece": self._ece,
+            "ece_pre": self._ece_pre,
+            "dp_noise_multiplier": FED_CFG.dp_noise_multiplier if FED_CFG.dp_noise_multiplier > 0 else None,
+            "dp_max_grad_norm": FED_CFG.dp_max_grad_norm if FED_CFG.dp_noise_multiplier > 0 else None,
+            "dp_epsilon_simple": self._dp_epsilon_simple,
+            "dp_epsilon_rdp": dp_epsilon_rdp,
+            "dp_noise_strategy": FED_CFG.dp_noise_strategy if FED_CFG.dp_noise_multiplier > 0 else None,
+        }
+
     def _apply_dp_noise_to_aggregated(self, aggregated_parameters, server_round: int, n_clients: int):
         """DP-FedAvg (McMahan et al. 2018) — portado do Caminho A pro Caminho B
         (achado 2026-07-28: "o que tem no Caminho A tem que ter no Caminho B",
@@ -427,26 +467,9 @@ class ProductionFedProxStrategy(
 
         if aggregated_parameters is not None:
             self._load_global_weights(aggregated_parameters)
-            if self._checkpoint_store is not None:
-                last_acc = self._last_round_metrics.get("accuracy", 0.0)
-                last_loss = self._last_round_metrics.get("loss", 0.0)
-                self._checkpoint_store.save(
-                    round_num=server_round,
-                    state_dict=self.global_model.state_dict(),
-                    vocab=self.vocab,
-                    training_id=self._training_id,
-                    accuracy=last_acc,
-                    loss=last_loss,
-                )
-                logger.info(
-                    "checkpoint_saved",
-                    extra={
-                        "round": server_round,
-                        "store": type(self._checkpoint_store).__name__,
-                        "vocab_size": len(self.vocab),
-                    },
-                )
-            else:
+            if self._checkpoint_store is None:
+                # Sem CheckpointStore (dev/simulação sem banco) — fallback em arquivo,
+                # 1 por rodada; não tem noção de "melhor rodada", mantido como estava.
                 checkpoint_path = CHECKPOINT_DIR / f"round_{server_round}.pt"
                 from ..runner import _save_checkpoint
                 _save_checkpoint(
@@ -457,6 +480,15 @@ class ProductionFedProxStrategy(
                     "checkpoint_saved",
                     extra={"round": server_round, "path": str(checkpoint_path), "vocab_size": len(self.vocab)},
                 )
+            # Com CheckpointStore (produção real): o save condicionado à melhora de
+            # critério acontece em aggregate_evaluate() (achado 2026-07-28 — ver
+            # comentário lá). Salvar aqui incondicionalmente, toda rodada, foi o bug:
+            # sempre sobrava só a ÚLTIMA rodada em fl_checkpoints, nunca a MELHOR
+            # (best_round/best_accuracy ficavam corretos como metadado, mas os PESOS
+            # de fato salvos nunca correspondiam). Caminho A (manual_loop.py:278-284)
+            # já fazia certo — só salva dentro do "if criterion_value > best": este
+            # código replica o mesmo padrão, só que precisa esperar aggregate_evaluate()
+            # calcular accuracy/f1_macro da rodada, que aggregate_fit() ainda não tem.
 
         return aggregated_parameters, aggregated_metrics
 
@@ -551,7 +583,25 @@ class ProductionFedProxStrategy(
         except Exception as e:
             logger.warning("ece_aggregation_error round=%d error=%s", server_round, e)
 
-        self.tracker.check(accuracy)
+        # Achado 2026-07-28: convergência sempre checava accuracy, ignorando
+        # FED_CFG.checkpoint_criterion — Caminho A usa f1_global quando o critério é
+        # "f1_macro" (manual_loop.py:278). Não muda quantas rodadas o Flower executa
+        # de fato (loop fixo, ver comentário abaixo sobre should_stop), mas
+        # converged/convergence_round gravados no banco ficavam usando um critério
+        # diferente do que best_round/best_accuracy já usam (linha ~605 adiante).
+        convergence_metric = f1_macro if FED_CFG.checkpoint_criterion == "f1_macro" else accuracy
+        # Warm-up (achado 2026-07-28): Caminho A suspende a avaliação de
+        # convergência até FED_CFG.min_rounds (manual_loop.py:300-301) — sem isso,
+        # ConvergenceTracker (patience=3 default) podia declarar convergência já na
+        # rodada 4, bem antes do modelo estabilizar de verdade. Caminho B nunca
+        # teve esse gate.
+        if server_round > FED_CFG.min_rounds:
+            self.tracker.check(convergence_metric)
+        else:
+            logger.info(
+                "convergence_warmup round=%d min_rounds=%d — convergência suspensa",
+                server_round, FED_CFG.min_rounds,
+            )
         self.round_counter = server_round
 
         converged = self.tracker.converged_round is not None
@@ -610,6 +660,41 @@ class ProductionFedProxStrategy(
             self._best_f1_macro = f1_macro
             self._best_macro_auc = macro_auc
             self._best_round = server_round
+            # Cópia em memória — usada por _persist_federated_calibration() na
+            # última rodada, pra não sobrescrever o checkpoint da melhor rodada com
+            # os pesos da última (ver comentário em __init__).
+            self._best_state_dict = {k: v.clone() for k, v in self.global_model.state_dict().items()}
+
+            # Checkpoint salvo SÓ quando a rodada melhora o critério (achado
+            # 2026-07-28 — mesmo padrão de manual_loop.py, Caminho A, linha 278-284).
+            # self.global_model já tem os pesos desta rodada (carregados em
+            # aggregate_fit(), que roda antes de aggregate_evaluate() no mesmo
+            # round) — não precisa reagregar nada aqui, só decidir se salva.
+            if self._checkpoint_store is not None:
+                try:
+                    self._checkpoint_store.save(
+                        round_num=server_round,
+                        state_dict=self.global_model.state_dict(),
+                        vocab=self.vocab,
+                        training_id=self._training_id,
+                        accuracy=accuracy,
+                        loss=aggregated_loss if aggregated_loss is not None else 0.0,
+                        evaluation_json=self._build_evaluation_json(
+                            best_round=server_round, best_per_class_f1=per_class_f1,
+                        ),
+                    )
+                    logger.info(
+                        "checkpoint_saved_best_round",
+                        extra={
+                            "round": server_round, "criterion": FED_CFG.checkpoint_criterion,
+                            "criterion_value": criterion_value,
+                            "store": type(self._checkpoint_store).__name__,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "checkpoint_save_error", extra={"round": server_round, "error": str(e)},
+                    )
 
         # Persiste estado após cada round — permite recovery exato no próximo restart
         self._current_state.status = "completed" if converged else "running"
@@ -806,7 +891,15 @@ class ProductionFedProxStrategy(
         só combina o que já chegou agregado do lado do cliente, num único calibrador
         pronto pra InferenceEngine.calibrate()/calibrate_probs() carregar depois.
         Nunca propaga exceção: calibração é enriquecimento pós-convergência, uma
-        falha aqui não deve invalidar o checkpoint do treino em si."""
+        falha aqui não deve invalidar o checkpoint do treino em si.
+
+        Usa os pesos da MELHOR rodada (self._best_state_dict), não os da rodada
+        atual — achado 2026-07-28: calibração roda na ÚLTIMA rodada configurada
+        (ver on_evaluate_config_fn/calibrate=True), que raramente é a mesma da
+        melhor rodada por critério (f1_macro/accuracy). Salvar aqui com
+        self.global_model.state_dict() (pesos da rodada atual) reintroduziria o
+        mesmo bug corrigido em aggregate_evaluate() — o checkpoint voltaria a
+        refletir a última rodada, não a melhor."""
         if self._checkpoint_store is None:
             return
         try:
@@ -830,23 +923,31 @@ class ProductionFedProxStrategy(
                 logger.warning("federated_calibration_unknown_method method=%s", calibration_method)
                 return
 
-            last_acc = self._last_round_metrics.get("accuracy", 0.0)
-            last_loss = self._last_round_metrics.get("loss", 0.0)
+            best_state_dict = self._best_state_dict or self.global_model.state_dict()
+            best_round = self._best_round or server_round
+            best_per_class_f1_json = aggregated_metrics.get("per_class_f1_json")
+            best_per_class_f1 = json.loads(best_per_class_f1_json) if best_per_class_f1_json else None
             self._checkpoint_store.save(
-                round_num=server_round,
-                state_dict=self.global_model.state_dict(),
+                round_num=best_round,
+                state_dict=best_state_dict,
                 vocab=self.vocab,
                 training_id=self._training_id,
-                accuracy=last_acc,
-                loss=last_loss,
+                accuracy=self._best_accuracy,
+                loss=0.0,  # loss da melhor rodada não é rastreado separadamente, só accuracy/f1_macro
                 calibration_method=calibration_method,
                 temperature=temperature,
                 isotonic_calibrators=isotonic_calibrators,
                 isotonic_num_classes=isotonic_num_classes,
+                evaluation_json=self._build_evaluation_json(
+                    best_round=best_round, best_per_class_f1=best_per_class_f1,
+                ),
             )
             logger.info(
                 "federated_calibration_persisted",
-                extra={"round": server_round, "method": calibration_method, "temperature": temperature},
+                extra={
+                    "calibration_computed_at_round": server_round, "checkpoint_round": best_round,
+                    "method": calibration_method, "temperature": temperature,
+                },
             )
         except Exception as e:
             logger.warning("federated_calibration_persist_error round=%d error=%s", server_round, e)
