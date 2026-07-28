@@ -403,6 +403,23 @@ class ProductionFedProxStrategy(
                 per_client_calibration.append(entry)
         calibration_per_client_json = json.dumps(per_client_calibration) if per_client_calibration else None
 
+        # F1 por classe, por cliente, ANTES da agregação — mesma extração de "results"
+        # (raw, per-cliente) que calibração acima. Cada cliente já calcula seu próprio
+        # per_class_f1 local (client.py::evaluate()); só o valor agregado (média
+        # ponderada nativa do Flower) ia pro banco até aqui. Sem isso não dá pra saber
+        # se o colapso de F1 nas classes raras (curado_internado, melhora_pronto) já
+        # acontece localmente em cada hospital, ou só surge na agregação — achado
+        # 2026-07-27, ver migration 027.
+        per_client_f1 = []
+        for _, evaluate_res in results:
+            m = getattr(evaluate_res, "metrics", None) or {}
+            if "per_class_f1_json" in m:
+                per_client_f1.append({
+                    "client_id": m.get("client_id"),
+                    "per_class_f1": json.loads(m["per_class_f1_json"]),
+                })
+        per_client_f1_json = json.dumps(per_client_f1) if per_client_f1 else None
+
         # ece/ece_pre federados — mesma extração de "results" (raw, per-cliente) que
         # calibration_per_client acima. Cada cliente já mandou só contagens agregadas
         # por bin (nunca amostra bruta, ver client.py::local_ece_bin_stats); aqui só
@@ -487,6 +504,7 @@ class ProductionFedProxStrategy(
                     per_class_f1s=[per_class_f1 or []],
                     resource_per_client_jsons=[self._last_round_resources_json],
                     calibration_per_client_jsons=[calibration_per_client_json],
+                    per_client_f1_jsons=[per_client_f1_json],
                 )
             except Exception as e:
                 logger.warning(

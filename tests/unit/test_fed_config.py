@@ -60,3 +60,39 @@ class TestFedConfig:
         monkeypatch.setenv("FL_CALIBRATION_METHOD", "auto")
         cfg = FedConfig()
         assert cfg.calibration_method == "auto"
+
+    def test_class_weight_overrides_default_empty(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.delenv("FL_CLASS_WEIGHT_OVERRIDES_JSON", raising=False)
+        cfg = FedConfig()
+        assert cfg.class_weight_overrides == {}
+
+    def test_class_weight_overrides_reads_env_var(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setenv("FL_CLASS_WEIGHT_OVERRIDES_JSON", '{"curado_internado": 25.0}')
+        cfg = FedConfig()
+        assert cfg.class_weight_overrides == {"curado_internado": 25.0}
+
+    def test_class_weight_overrides_invalid_json_raises(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setenv("FL_CLASS_WEIGHT_OVERRIDES_JSON", "{not valid json")
+        with pytest.raises(ValueError):
+            FedConfig()
+
+    def test_class_weight_overrides_non_object_raises(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setenv("FL_CLASS_WEIGHT_OVERRIDES_JSON", "[1, 2, 3]")
+        with pytest.raises(ValueError):
+            FedConfig()
+
+    def test_class_weight_clamp_default(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.delenv("FL_CLASS_WEIGHT_CLAMP", raising=False)
+        cfg = FedConfig()
+        assert cfg.class_weight_clamp == 15.0
+
+    def test_class_weight_clamp_reads_env_var(self, monkeypatch):
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setenv("FL_CLASS_WEIGHT_CLAMP", "30.0")
+        cfg = FedConfig()
+        assert cfg.class_weight_clamp == 30.0

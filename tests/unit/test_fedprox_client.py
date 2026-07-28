@@ -543,3 +543,109 @@ class TestEvaluateMacroAuc:
         params = client.get_parameters({})
         _, _, metrics = client.evaluate(params, {})  # não deve levantar exceção
         assert "macro_auc" not in metrics
+
+
+class TestClassWeightOverridesIntegration:
+    """FED_CFG.class_weight_overrides (Strategy pattern, mosaicfl.core.class_weighting)
+    precisa chegar de fato no criterion do cliente — sem isso, a config fica sem efeito."""
+
+    def test_override_reaches_criterion_weight(self, monkeypatch):
+        import mosaicfl.core.client as client_module
+        from mosaicfl.core.config import FedConfig, MODEL_CFG
+
+        custom_cfg = FedConfig(class_weight_overrides={"curado_internado": 12.0})
+        monkeypatch.setattr(client_module, "FED_CFG", custom_cfg)
+
+        from mosaicfl.core.client import FedProxClient
+        seq_len = 8
+        x   = torch.randint(1, VOCAB_SIZE, (10, seq_len))
+        y   = torch.randint(0, NUM_CLASSES, (10,))
+        dia = torch.randint(0, 100, (10, seq_len))
+        loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
+        client = client_module.FedProxClient(0, loader, loader)
+
+        idx = MODEL_CFG.class_labels.index("curado_internado")
+        assert client.criterion.weight[idx].item() == pytest.approx(12.0)
+
+    def test_no_overrides_preserves_legacy_behavior(self, monkeypatch):
+        """Sem overrides (default), o peso continua vindo só da frequência local —
+        nenhuma classe fica presa num valor fixo."""
+        import mosaicfl.core.client as client_module
+        from mosaicfl.core.config import FedConfig
+
+        default_cfg = FedConfig()
+        monkeypatch.setattr(client_module, "FED_CFG", default_cfg)
+
+        from mosaicfl.core.client import FedProxClient
+        seq_len = 8
+        x   = torch.randint(1, VOCAB_SIZE, (10, seq_len))
+        y   = torch.zeros(10, dtype=torch.long)  # só a classe 0 presente
+        dia = torch.randint(0, 100, (10, seq_len))
+        loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
+        client = client_module.FedProxClient(0, loader, loader)
+
+        # classe 0 (única presente) deve ter peso baixo (dominante local); demais 0.0 (ausentes)
+        assert client.criterion.weight[0].item() > 0.0
+        assert all(w == 0.0 for w in client.criterion.weight[1:].tolist())
+
+    def test_round_config_takes_priority_over_env_fallback(self):
+        """Caminho de produção real: loader_factory (não train_loader direto) — o
+        override chega via config["class_weight_overrides_json"] na 1ª chamada de
+        evaluate()/fit(), o mesmo canal que fit_config_mixin.py injeta a partir de
+        clinical.fl_orchestration_config (migration 028). Precisa ganhar de
+        FED_CFG.class_weight_overrides (env), não só coexistir com ele."""
+        import json as _json
+
+        from mosaicfl.core.client import FedProxClient
+        from mosaicfl.core.config import MODEL_CFG
+
+        seq_len = 8
+
+        def _loader_factory(vocab_json):
+            x   = torch.randint(1, VOCAB_SIZE, (10, seq_len))
+            y   = torch.randint(0, NUM_CLASSES, (10,))
+            dia = torch.randint(0, 100, (10, seq_len))
+            loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
+            return loader, loader
+
+        client = FedProxClient(client_id=0, loader_factory=_loader_factory)
+        idx = MODEL_CFG.class_labels.index("melhora_pronto")
+        config = {
+            "vocab_json": _json.dumps({"CLS": 0}),
+            "class_weight_overrides_json": _json.dumps({"melhora_pronto": 8.0}),
+        }
+
+        params = client.get_parameters({})
+        client.fit(params, config)
+
+        assert client.criterion.weight[idx].item() == pytest.approx(8.0)
+
+    def test_malformed_round_config_falls_back_without_raising(self, monkeypatch):
+        """class_weight_overrides_json malformado no config da rodada não pode
+        derrubar o treino do cliente — cai no fallback local e segue."""
+        import json as _json
+
+        import mosaicfl.core.client as client_module
+        from mosaicfl.core.config import FedConfig
+
+        monkeypatch.setattr(client_module, "FED_CFG", FedConfig())  # sem overrides
+
+        seq_len = 8
+
+        def _loader_factory(vocab_json):
+            x   = torch.randint(1, VOCAB_SIZE, (10, seq_len))
+            y   = torch.randint(0, NUM_CLASSES, (10,))
+            dia = torch.randint(0, 100, (10, seq_len))
+            loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
+            return loader, loader
+
+        client = client_module.FedProxClient(client_id=0, loader_factory=_loader_factory)
+        config = {
+            "vocab_json": _json.dumps({"CLS": 0}),
+            "class_weight_overrides_json": "{not valid json",
+        }
+
+        params = client.get_parameters({})
+        client.fit(params, config)  # não deve levantar exceção
+
+        assert client.criterion is not None

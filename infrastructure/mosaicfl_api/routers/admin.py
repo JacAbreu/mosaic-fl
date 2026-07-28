@@ -11,7 +11,9 @@ from .. import audit
 from .. import state
 from ..inference_engine import InferenceEngine
 from ..schemas import (
+    ClassWeightOverridesUpdate,
     FLStatus,
+    OrchestrationConfigResponse,
     VocabAnomalyActionRequest,
     VocabAnomalyActionResponse,
     VocabAnomalyCorrectionRequest,
@@ -306,4 +308,81 @@ async def correct_vocab_anomaly(
     return VocabAnomalyCorrectionResponse(
         old_canonical=canonical, new_canonical=new_canonical,
         merged=merged, exam_records_updated=exam_result.rowcount,
+    )
+
+
+@router.get("/api/admin/orchestration-config", response_model=OrchestrationConfigResponse)
+async def get_orchestration_config(fingerprint: str = Depends(_get_token_fingerprint)):
+    """Peso de classe explícito (cost-sensitive learning, Strategy pattern em
+    mosaicfl.core.class_weighting) — lido de clinical.fl_orchestration_config
+    (migration 028), o mesmo canal que o servidor de orquestração FL já usa pra
+    empurrar proximal_mu/stop pro cliente a cada rodada, idêntico nos dois
+    hospitais. Ver docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md,
+    seção 14."""
+    from sqlalchemy import text as _text
+
+    from mosaicfl.core.config import FED_CFG, MODEL_CFG
+
+    try:
+        with state._db._engine.connect() as conn:
+            row = conn.execute(_text(
+                "SELECT class_weight_overrides_json "
+                "FROM clinical.fl_orchestration_config WHERE id = 'current'"
+            )).mappings().first()
+    except Exception as exc:
+        logger.warning("orchestration_config_query_error error=%s", exc)
+        raise HTTPException(status_code=503, detail=f"Não foi possível consultar a configuração: {exc}")
+
+    overrides = (row["class_weight_overrides_json"] if row else None) or {}
+    return OrchestrationConfigResponse(
+        class_weight_overrides=overrides,
+        class_labels=list(MODEL_CFG.class_labels),
+        class_weight_clamp=FED_CFG.class_weight_clamp,
+    )
+
+
+@router.post("/api/admin/orchestration-config/class-weights", response_model=OrchestrationConfigResponse)
+async def set_class_weight_overrides(
+    body: ClassWeightOverridesUpdate,
+    fingerprint: str = Depends(_get_token_fingerprint),
+):
+    """Substitui o conjunto inteiro de overrides de peso de classe (não é merge
+    parcial — reflete exatamente o que a tela mandou). Classe fora daqui cai em
+    class_balanced (frequência local). Valor só tem efeito real na 1ª rodada de
+    um treino novo (FedProxClient._ensure_data carrega o criterion uma vez só) —
+    não afeta um treino já em andamento retroativamente."""
+    from sqlalchemy import text as _text
+
+    from mosaicfl.core.config import MODEL_CFG
+
+    unknown = sorted(set(body.overrides.keys()) - set(MODEL_CFG.class_labels))
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Classe(s) desconhecida(s): {unknown}")
+    invalid = {name: w for name, w in body.overrides.items() if w <= 0}
+    if invalid:
+        raise HTTPException(status_code=422, detail=f"Peso precisa ser > 0: {invalid}")
+
+    import json as _json
+    overrides_json = _json.dumps(body.overrides) if body.overrides else None
+
+    try:
+        with state._db._engine.begin() as conn:
+            conn.execute(_text("""
+                UPDATE clinical.fl_orchestration_config
+                SET class_weight_overrides_json = cast(:overrides AS jsonb), updated_at = now()
+                WHERE id = 'current'
+            """), {"overrides": overrides_json})
+    except Exception as exc:
+        logger.error("orchestration_config_update_error error=%s", exc)
+        raise HTTPException(status_code=503, detail=f"Não foi possível gravar a configuração: {exc}")
+
+    logger.info("class_weight_overrides_updated overrides=%s", body.overrides)
+    audit.log_access(
+        "class_weight_overrides_update", token_fp=fingerprint, overrides=body.overrides,
+    )
+    from mosaicfl.core.config import FED_CFG
+    return OrchestrationConfigResponse(
+        class_weight_overrides=body.overrides,
+        class_labels=list(MODEL_CFG.class_labels),
+        class_weight_clamp=FED_CFG.class_weight_clamp,
     )

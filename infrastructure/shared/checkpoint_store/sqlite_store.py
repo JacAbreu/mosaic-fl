@@ -221,6 +221,7 @@ class SQLiteCheckpointStore(CheckpointStore):
         round_durations: Optional[list] = None,
         resource_per_client_jsons: Optional[list] = None,
         calibration_per_client_jsons: Optional[list] = None,
+        per_client_f1_jsons: Optional[list] = None,
     ) -> None:
         # SQLite é o backend de simulação — fl_round_history existe apenas no PostgreSQL (migration 013).
         logger.debug("save_round_history: no-op no SQLiteCheckpointStore (training_id=%d)", training_id)

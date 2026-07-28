@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOSAIC-FL — Peso de Classe (Cost-Sensitive Learning)</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .cw-table th { font-size: .8rem; }
+    .cw-table td { font-size: .85rem; vertical-align: middle; }
+    .mode-balanced   { background: #e9ecef; color: #495057; }
+    .mode-sensitive  { background: #cfe2ff; color: #084298; }
+    .cw-input { max-width: 8rem; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark mb-3 px-3">
+  <span class="navbar-brand fw-bold">MOSAIC-FL</span>
+  <a href="/" class="text-white-50 small">&larr; Painel Clínico</a>
+</nav>
+
+<div class="container-fluid">
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <strong>Peso de classe — cost-sensitive learning</strong>
+        <div class="text-muted small">
+          Classe com peso explícito ignora a frequência local e usa o valor definido aqui
+          (julgamento clínico). Classe sem peso explícito cai em <em>class_balanced</em>
+          (peso automático por frequência — comportamento padrão). O valor é gravado uma vez
+          e vale igual pros dois hospitais — só tem efeito na 1ª rodada de um treino novo,
+          não afeta um treino já em andamento.
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadConfig()">↺</button>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm table-hover mb-0 cw-table">
+        <thead class="table-light">
+          <tr>
+            <th>Classe</th><th>Modo</th><th>Peso explícito</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="cw-tbody">
+          <tr><td colspan="4" class="text-muted small text-center py-3">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+      <span class="text-muted small" id="cw-clamp-note"></span>
+      <button class="btn btn-primary btn-sm" onclick="saveConfig()">Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 999">
+  <div id="toast" class="toast align-items-center border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toast-body"></div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const API = '';
+
+function showToast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  const body = document.getElementById('toast-body');
+  body.textContent = msg;
+  el.className = `toast align-items-center border-0 text-bg-${ok ? 'success' : 'danger'}`;
+  bootstrap.Toast.getOrCreateInstance(el, { delay: 3000 }).show();
+}
+
+async function loadConfig() {
+  const tbody = document.getElementById('cw-tbody');
+  tbody.innerHTML = '<tr><td colspan="4" class="text-muted small text-center py-3">Carregando…</td></tr>';
+  try {
+    const r = await fetch(`${API}/api/admin/orchestration-config`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    document.getElementById('cw-clamp-note').textContent =
+      `Peso é limitado a ${data.class_weight_clamp} (estabilidade do gradiente), mesmo quando explícito.`;
+    tbody.innerHTML = data.class_labels.map(name => {
+      const hasOverride = Object.prototype.hasOwnProperty.call(data.class_weight_overrides, name);
+      const value = hasOverride ? data.class_weight_overrides[name] : '';
+      const modeCls = hasOverride ? 'mode-sensitive' : 'mode-balanced';
+      const modeLabel = hasOverride ? 'cost_sensitive' : 'class_balanced (automático)';
+      return `
+        <tr data-class="${name}">
+          <td class="font-monospace">${name}</td>
+          <td><span class="badge ${modeCls}">${modeLabel}</span></td>
+          <td>
+            <input type="number" step="0.1" min="0.01" class="form-control form-control-sm cw-input"
+                   id="cw-input-${name}" value="${value}" placeholder="auto (frequência)">
+          </td>
+          <td class="text-nowrap">
+            ${hasOverride ? `<button class="btn btn-sm btn-outline-secondary" onclick="clearOverride('${name}')">Remover</button>` : ''}
+          </td>
+        </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-danger small text-center py-3">Erro: ${e.message}</td></tr>`;
+  }
+}
+
+function clearOverride(name) {
+  const input = document.getElementById(`cw-input-${name}`);
+  if (input) input.value = '';
+}
+
+async function saveConfig() {
+  try {
+    const r0 = await fetch(`${API}/api/admin/orchestration-config`);
+    if (!r0.ok) throw new Error(`HTTP ${r0.status}`);
+    const current = await r0.json();
+
+    const overrides = {};
+    for (const name of current.class_labels) {
+      const input = document.getElementById(`cw-input-${name}`);
+      const raw = input ? input.value.trim() : '';
+      if (raw === '') continue;
+      const weight = parseFloat(raw);
+      if (!Number.isFinite(weight) || weight <= 0) {
+        showToast(`Peso inválido para "${name}": ${raw}`, false);
+        return;
+      }
+      overrides[name] = weight;
+    }
+
+    const r = await fetch(`${API}/api/admin/orchestration-config/class-weights`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ overrides }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(JSON.stringify(data.detail ?? data));
+    showToast('Configuração salva — vale a partir do próximo treino.');
+    await loadConfig();
+  } catch (e) {
+    showToast(e.message, false);
+  }
+}
+
+loadConfig();
+</script>
+</body>
+</html>

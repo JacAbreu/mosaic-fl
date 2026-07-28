@@ -25,6 +25,7 @@ Tabela de parâmetros ajustados em relação aos valores originais:
 Para restaurar os valores originais (máquinas com GPU), substitua RuntimeConfig.device por:
     device: object = field(default_factory=lambda: torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 """
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,6 +49,27 @@ def _resolve_class_labels() -> tuple[str, ...]:
         "melhora_internado_breve",
         "melhora_internado_grave",
     )
+
+
+def _resolve_class_weight_overrides() -> dict[str, float]:
+    """Lê FL_CLASS_WEIGHT_OVERRIDES_JSON (objeto JSON {classe: peso}) — cost-sensitive
+    learning por classe (Strategy pattern, ver mosaicfl.core.class_weighting e
+    docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md, seção 14).
+
+    Vazio por padrão: nenhuma classe usa peso explícito, todas caem em
+    ClassBalancedStrategy (peso por frequência local — comportamento histórico do
+    projeto, preservado intacto até a autora decidir pesos com base em julgamento
+    clínico, não em métrica derivada dos dados)."""
+    raw = os.getenv("FL_CLASS_WEIGHT_OVERRIDES_JSON", "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"FL_CLASS_WEIGHT_OVERRIDES_JSON não é JSON válido: {e}") from e
+    if not isinstance(parsed, dict):
+        raise ValueError("FL_CLASS_WEIGHT_OVERRIDES_JSON deve ser um objeto JSON {classe: peso}")
+    return {str(k): float(v) for k, v in parsed.items()}
 
 
 _CLASS_LABELS = _resolve_class_labels()
@@ -130,6 +152,16 @@ class FedConfig:
     # comportamento do treino.
     collect_resource_metrics: bool = field(
         default_factory=lambda: os.getenv("FL_COLLECT_RESOURCE_METRICS", "1").strip() == "1"
+    )
+    # Peso de classe por Strategy pattern (mosaicfl.core.class_weighting, decisão
+    # 2026-07-27 — ver docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md,
+    # seção 14). class_weight_overrides: classe listada usa CostSensitiveStrategy (peso
+    # explícito, julgamento clínico); classe ausente cai em ClassBalancedStrategy (peso
+    # por frequência local, comportamento padrão do projeto desde sempre — preservado
+    # intacto). Vazio por padrão, não muda nenhum comportamento existente.
+    class_weight_overrides: dict = field(default_factory=_resolve_class_weight_overrides)
+    class_weight_clamp: float = field(
+        default_factory=lambda: float(os.getenv("FL_CLASS_WEIGHT_CLAMP", "15.0"))
     )
 
 

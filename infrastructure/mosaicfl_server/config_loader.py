@@ -5,7 +5,12 @@ Carregadores de configuração de runtime para o orquestrador MOSAIC-FL.
 Uso:
     loader = get_config_loader()
     config = loader.load(round_num=3)
-    # config: {"proximal_mu": 0.01, "pause_seconds": 0.0, "stop": False}
+    # config: {"proximal_mu": 0.01, "pause_seconds": 0.0, "stop": False,
+    #          "class_weight_overrides_json": '{"curado_internado": 25.0}'}
+    # class_weight_overrides_json trafega como string JSON já serializada (mesma
+    # convenção de vocab_json) — cost-sensitive learning por classe, ver
+    # mosaicfl.core.class_weighting e docs/pesquisa_baseline_implementacao_fontes_
+    # bibliograficas.md, seção 14. Ausente/None = nenhuma classe usa peso explícito.
 
 Backends suportados (FL_CONFIG_BACKEND):
     postgres — PostgreSQL, tabela clinical.fl_orchestration_config (padrão)
@@ -37,6 +42,7 @@ _DEFAULTS: Dict = {
     "proximal_mu": None,      # None = não sobrescreve o valor da strategy
     "pause_seconds": 0.0,
     "stop": False,
+    "class_weight_overrides_json": None,  # None = nenhuma classe usa cost-sensitive (ver seção 14 do doc de pesquisa)
 }
 
 
@@ -163,7 +169,7 @@ class PostgreSQLConfigLoader:
         try:
             with self._engine.connect() as conn:
                 row = conn.execute(text(
-                    "SELECT proximal_mu, pause_seconds, stop "
+                    "SELECT proximal_mu, pause_seconds, stop, class_weight_overrides_json "
                     "FROM clinical.fl_orchestration_config WHERE id = 'current'"
                 )).mappings().first()
             if not row:
@@ -174,6 +180,11 @@ class PostgreSQLConfigLoader:
             }
             if row["proximal_mu"] is not None:
                 result["proximal_mu"] = float(row["proximal_mu"])
+            if row["class_weight_overrides_json"] is not None:
+                # Coluna é JSONB — psycopg2 já entrega dict; re-serializa pra manter a
+                # convenção do projeto de que campos "_json" trafegam como string
+                # (mesmo formato de vocab_json, per_class_f1_json etc.) até o cliente.
+                result["class_weight_overrides_json"] = json.dumps(row["class_weight_overrides_json"])
             return result
         except Exception as e:
             logger.warning("config_load_error", extra={"backend": "postgres", "round": round_num, "error": str(e)})
@@ -185,17 +196,22 @@ class PostgreSQLConfigLoader:
             with self._engine.begin() as conn:
                 conn.execute(text("""
                     INSERT INTO clinical.fl_orchestration_config
-                        (id, proximal_mu, pause_seconds, stop, updated_at)
-                    VALUES ('current', :proximal_mu, :pause_seconds, :stop, now())
+                        (id, proximal_mu, pause_seconds, stop, class_weight_overrides_json, updated_at)
+                    VALUES ('current', :proximal_mu, :pause_seconds, :stop,
+                            cast(:class_weight_overrides_json as jsonb), now())
                     ON CONFLICT (id) DO UPDATE SET
                         proximal_mu   = EXCLUDED.proximal_mu,
                         pause_seconds = EXCLUDED.pause_seconds,
                         stop          = EXCLUDED.stop,
+                        class_weight_overrides_json = EXCLUDED.class_weight_overrides_json,
                         updated_at    = now()
                 """), {
                     "proximal_mu":   config.get("proximal_mu"),
                     "pause_seconds": float(config.get("pause_seconds", 0.0)),
                     "stop":          bool(config.get("stop", False)),
+                    # Espera string JSON já serializada (mesma convenção de vocab_json) —
+                    # ex.: '{"curado_internado": 25.0}'. None limpa o override existente.
+                    "class_weight_overrides_json": config.get("class_weight_overrides_json"),
                 })
             logger.info("config_written", extra={"backend": "postgres", "keys": list(config.keys())})
         except Exception as e:
@@ -207,7 +223,8 @@ class PostgreSQLConfigLoader:
             with self._engine.begin() as conn:
                 conn.execute(text("""
                     UPDATE clinical.fl_orchestration_config
-                    SET proximal_mu = NULL, pause_seconds = 0.0, stop = FALSE, updated_at = now()
+                    SET proximal_mu = NULL, pause_seconds = 0.0, stop = FALSE,
+                        class_weight_overrides_json = NULL, updated_at = now()
                     WHERE id = 'current'
                 """))
             logger.info("config_cleared", extra={"backend": "postgres"})

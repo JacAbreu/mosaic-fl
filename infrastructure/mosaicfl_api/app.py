@@ -72,3 +72,11 @@ async def vocab_anomalies_page():
     if page.exists():
         return FileResponse(str(page))
     return {"message": "página não encontrada em static/vocab_anomalies.html"}
+
+
+@app.get("/class-weights", include_in_schema=False)
+async def class_weights_page():
+    page = _STATIC_DIR / "class_weights.html"
+    if page.exists():
+        return FileResponse(str(page))
+    return {"message": "página não encontrada em static/class_weights.html"}

@@ -90,6 +90,75 @@ class TestInjectCurrentVocab:
         assert strategy.should_stop is True
 
 
+class TestInjectClassWeightOverrides:
+    """class_weight_overrides_json (migration 028, clinical.fl_orchestration_config) —
+    mesmo canal já usado por proximal_mu/pause_seconds/stop, empurrado idêntico pros
+    dois hospitais a cada rodada. Ver docs/pesquisa_baseline_implementacao_fontes_
+    bibliograficas.md, seção 14."""
+
+    def test_configure_fit_injects_overrides_from_config_loader(self):
+        strategy = _StrategyUnderTest(vocab={"CLS": 0})
+        strategy.config_loader.load.return_value = {
+            "class_weight_overrides_json": '{"curado_internado": 25.0}',
+        }
+
+        instructions = strategy.configure_fit(1, None, MagicMock())
+
+        _, ins = instructions[0]
+        assert ins.config["class_weight_overrides_json"] == '{"curado_internado": 25.0}'
+
+    def test_configure_evaluate_injects_overrides_from_config_loader(self):
+        strategy = _StrategyUnderTest(vocab={"CLS": 0})
+        strategy.config_loader.load.return_value = {
+            "class_weight_overrides_json": '{"curado_internado": 25.0}',
+        }
+
+        instructions = strategy.configure_evaluate(1, None, MagicMock())
+
+        _, ins = instructions[0]
+        assert ins.config["class_weight_overrides_json"] == '{"curado_internado": 25.0}'
+
+    def test_no_override_configured_leaves_key_absent(self):
+        strategy = _StrategyUnderTest(vocab={"CLS": 0})
+        strategy.config_loader.load.return_value = {}  # sem class_weight_overrides_json
+
+        instructions = strategy.configure_fit(1, None, MagicMock())
+
+        _, ins = instructions[0]
+        assert "class_weight_overrides_json" not in ins.config
+
+    def test_identical_across_multiple_clients_same_round(self):
+        """Dois hospitais, mesma rodada — precisa ser exatamente o mesmo valor nos
+        dois, sem precisar sincronizar .env manualmente entre eles."""
+
+        class _TwoClientBaseStrategy(_FakeBaseStrategy):
+            def configure_fit(self, server_round, parameters, client_manager):
+                return [
+                    (MagicMock(), SimpleNamespace(config={"vocab_json": "OLD", "round": server_round})),
+                    (MagicMock(), SimpleNamespace(config={"vocab_json": "OLD", "round": server_round})),
+                ]
+
+        class _TwoClientStrategy(_FitConfigMixin, _TwoClientBaseStrategy):
+            def __init__(self, vocab):
+                self.vocab = vocab
+                self.config_loader = MagicMock()
+                self.config_loader.load.return_value = {
+                    "class_weight_overrides_json": '{"melhora_pronto": 8.0}',
+                }
+                self.on_round_start = None
+                self.proximal_mu = 0.01
+                self.should_stop = False
+
+            def _start_round_watchdog(self, server_round):
+                pass
+
+        strategy = _TwoClientStrategy(vocab={"CLS": 0})
+        instructions = strategy.configure_fit(1, None, MagicMock())
+
+        values = {ins.config["class_weight_overrides_json"] for _, ins in instructions}
+        assert values == {'{"melhora_pronto": 8.0}'}
+
+
 def json_loads_vocab(raw):
     import json
     return json.loads(raw)

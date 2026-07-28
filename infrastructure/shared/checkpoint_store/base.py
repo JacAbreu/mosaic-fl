@@ -101,11 +101,12 @@ class CheckpointStore(ABC):
         round_durations: Optional[list] = None,
         resource_per_client_jsons: Optional[list] = None,
         calibration_per_client_jsons: Optional[list] = None,
+        per_client_f1_jsons: Optional[list] = None,
     ) -> None:
         """Persiste accuracy, loss, f1_macro, τ_eff, per_class_f1, round_duration_s e o
-        detalhamento por cliente (recurso/calibração, ambos já serializados como string
-        JSON por elemento) por rodada. tau_effs é None por elemento quando o algoritmo é
-        FedAvg. UPSERT por (training_id, round) — chamar a cada rodada é seguro."""
+        detalhamento por cliente (recurso/calibração/per_class_f1, todos já serializados
+        como string JSON por elemento) por rodada. tau_effs é None por elemento quando o
+        algoritmo é FedAvg. UPSERT por (training_id, round) — chamar a cada rodada é seguro."""
 
     @abstractmethod
     def mark_active_model(self, training_id: int) -> None:

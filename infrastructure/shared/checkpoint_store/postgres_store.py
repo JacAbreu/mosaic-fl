@@ -279,6 +279,7 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         round_durations: Optional[list] = None,
         resource_per_client_jsons: Optional[list] = None,
         calibration_per_client_jsons: Optional[list] = None,
+        per_client_f1_jsons: Optional[list] = None,
     ) -> None:
         import json as _json
         import sqlalchemy as sa
@@ -288,6 +289,7 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         _dur   = round_durations              if round_durations              is not None else [None] * len(rounds)
         _res   = resource_per_client_jsons    if resource_per_client_jsons    is not None else [None] * len(rounds)
         _calib = calibration_per_client_jsons if calibration_per_client_jsons is not None else [None] * len(rounds)
+        _pcf1c = per_client_f1_jsons          if per_client_f1_jsons          is not None else [None] * len(rounds)
         rows = [
             {
                 "training_id":     training_id,
@@ -300,9 +302,10 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                 "round_duration_s": float(d)  if d   is not None else None,
                 "resource_per_client_json":    res   if res   is not None else None,
                 "calibration_per_client_json": calib if calib is not None else None,
+                "per_client_f1_json":          pcf1c if pcf1c is not None else None,
             }
-            for r, a, l, t, f, pc, d, res, calib in zip(
-                rounds, accuracies, losses, _tau, _f1, _pcf1, _dur, _res, _calib
+            for r, a, l, t, f, pc, d, res, calib, pcf1c in zip(
+                rounds, accuracies, losses, _tau, _f1, _pcf1, _dur, _res, _calib, _pcf1c
             )
         ]
         if not rows:
@@ -310,23 +313,26 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         sql = sa.text(
             "INSERT INTO metrics.fl_round_history "
             "(training_id, round, accuracy, loss, tau_eff, f1_macro, per_class_f1, round_duration_s, "
-            "resource_per_client_json, calibration_per_client_json) "
+            "resource_per_client_json, calibration_per_client_json, per_client_f1_json) "
             "VALUES (:training_id, :round, :accuracy, :loss, :tau_eff, :f1_macro, "
             "cast(:per_class_f1 as jsonb), :round_duration_s, "
-            "cast(:resource_per_client_json as jsonb), cast(:calibration_per_client_json as jsonb)) "
+            "cast(:resource_per_client_json as jsonb), cast(:calibration_per_client_json as jsonb), "
+            "cast(:per_client_f1_json as jsonb)) "
             "ON CONFLICT (training_id, round) DO UPDATE SET "
             "accuracy=EXCLUDED.accuracy, loss=EXCLUDED.loss, tau_eff=EXCLUDED.tau_eff, "
             "f1_macro=EXCLUDED.f1_macro, per_class_f1=EXCLUDED.per_class_f1, "
             "round_duration_s=EXCLUDED.round_duration_s, "
             "resource_per_client_json=COALESCE(EXCLUDED.resource_per_client_json, metrics.fl_round_history.resource_per_client_json), "
-            "calibration_per_client_json=COALESCE(EXCLUDED.calibration_per_client_json, metrics.fl_round_history.calibration_per_client_json)"
+            "calibration_per_client_json=COALESCE(EXCLUDED.calibration_per_client_json, metrics.fl_round_history.calibration_per_client_json), "
+            "per_client_f1_json=COALESCE(EXCLUDED.per_client_f1_json, metrics.fl_round_history.per_client_f1_json)"
         )
         with self._engine.begin() as conn:
             conn.execute(sql, rows)
         logger.info(
-            "round_history_saved training_id=%d rounds=%d tau=%s f1=%s per_class=%s dur=%s resources=%s calibration=%s",
+            "round_history_saved training_id=%d rounds=%d tau=%s f1=%s per_class=%s dur=%s resources=%s calibration=%s per_client_f1=%s",
             training_id, len(rows),
             tau_effs is not None, f1_macros is not None,
             per_class_f1s is not None, round_durations is not None,
             resource_per_client_jsons is not None, calibration_per_client_jsons is not None,
+            per_client_f1_jsons is not None,
         )

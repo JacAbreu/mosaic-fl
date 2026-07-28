@@ -27,6 +27,25 @@ class _FitConfigMixin:
             ins.config["vocab_json"] = json.dumps(self.vocab)
         return instructions
 
+    def _inject_class_weight_overrides(self, instructions: List[Tuple], runtime: dict) -> List[Tuple]:
+        """Peso de classe explícito (cost-sensitive learning, Strategy pattern em
+        mosaicfl.core.class_weighting — ver docs/pesquisa_baseline_implementacao_fontes_
+        bibliograficas.md, seção 14). Lido de clinical.fl_orchestration_config (mesma
+        fonte de proximal_mu/pause_seconds/stop) e empurrado idêntico pros dois
+        hospitais — sem isso, cada hospital precisaria de .env sincronizado
+        manualmente, e os dois bancos são locais/separados por desenho (dado clínico
+        nunca sai do hospital). Só o valor da PRIMEIRA rodada tem efeito de fato
+        (FedProxClient._ensure_data só carrega/computa uma vez), mas injeta a cada
+        rodada por simplicidade e paridade com _inject_current_vocab. Ausente/None =
+        nenhum override — cliente cai no fallback de FED_CFG.class_weight_overrides
+        (env, dev/simulação)."""
+        overrides_json = runtime.get("class_weight_overrides_json")
+        if overrides_json is None:
+            return instructions
+        for _, ins in instructions:
+            ins.config["class_weight_overrides_json"] = overrides_json
+        return instructions
+
     def configure_fit(
         self, server_round: int, parameters, client_manager
     ) -> List[Tuple]:
@@ -65,16 +84,23 @@ class _FitConfigMixin:
 
         self._start_round_watchdog(server_round)
         instructions = super().configure_fit(server_round, parameters, client_manager)
-        return self._inject_current_vocab(instructions)
+        instructions = self._inject_current_vocab(instructions)
+        return self._inject_class_weight_overrides(instructions, runtime)
 
     def configure_evaluate(
         self, server_round: int, parameters, client_manager
     ) -> List[Tuple]:
         """Mesma injeção de self.vocab que configure_fit() já faz — sem isso, a
         Rodada de avaliação usaria o vocab capturado por closure em superlink.py
-        (achado 2026-07-26, ver initialize_parameters/_discover_and_curate_vocab)."""
+        (achado 2026-07-26, ver initialize_parameters/_discover_and_curate_vocab).
+        Também injeta class_weight_overrides_json (leitura própria de
+        clinical.fl_orchestration_config — configure_fit já rodou nesta mesma rodada,
+        mas configure_evaluate pode ser a PRIMEIRA chamada a chegar no cliente
+        dependendo da ordem do protocolo, e _ensure_data só carrega uma vez)."""
         instructions = super().configure_evaluate(server_round, parameters, client_manager)
-        return self._inject_current_vocab(instructions)
+        instructions = self._inject_current_vocab(instructions)
+        runtime = self.config_loader.load(server_round)
+        return self._inject_class_weight_overrides(instructions, runtime)
 
     def _load_global_weights(self, parameters) -> None:
         """Carrega pesos agregados no modelo global (compatível com client).

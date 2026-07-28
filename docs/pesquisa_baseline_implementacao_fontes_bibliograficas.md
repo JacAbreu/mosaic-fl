@@ -535,6 +535,127 @@ Uma temperatura de ~1,09 é uma correção leve (modelo já quase bem calibrado 
 
 ---
 
+## 13. Achado Empírico — Label Skew Extremo entre BPSP e HSL (Distribuição de Classes de Prognóstico)
+
+Não é literatura — é um achado colateral da investigação da seção sobre o canonical `"183"` (migration 026, ver `docs/Linha_do_Tempo_MOSAIC-FL.md`), descoberto ao comparar a linha de base de classes de prognóstico dos dois hospitais lado a lado pela primeira vez com a mesma consulta e o mesmo filtro. Conecta diretamente com a seção 12 (calibração federada sob non-IID) e com o colapso estrutural de classes raras já registrado no projeto — é, hoje, a explicação estrutural mais forte disponível para os dois.
+
+**Contexto:** `scripts/investigate_183_class_correlation.py` foi escrito para testar uma hipótese sobre o canonical `"183"` (analito de Amilase mal traduzido do HSL), mas sua "linha de base" (todos os atendimentos, mesmo `WHERE co.outcome_class NOT IN (2, 3, 4)` de `_map_outcome()`) acabou expondo algo maior ao ser rodado nas duas máquinas: a distribuição das 5 classes de prognóstico é quase um espelho invertido entre os dois hospitais.
+
+**Dados (mesma consulta, mesmo filtro, rodada em cada máquina em 2026-07-27):**
+
+| Classe | BPSP (n=64.892) | HSL (n=12.522) |
+|---|---|---|
+| `curado_pronto` | 43.638 (**67,2%**) | 191 (**1,5%**) |
+| `curado_internado` | 840 (1,3%) | 54 (0,4%) |
+| `melhora_pronto` | 726 (**1,1%**) | 10.094 (**80,6%**) |
+| `melhora_internado_breve` | 16.858 (26,0%) | 1.583 (12,6%) |
+| `melhora_internado_grave` | 2.830 (4,4%) | 600 (4,8%) |
+
+`curado_pronto` domina o BPSP (67,2%) e é quase inexistente no HSL (1,5%); `melhora_pronto` domina o HSL (80,6%) e é quase inexistente no BPSP (1,1%) — as duas classes praticamente trocam de papel entre os hospitais. `melhora_internado_grave` é a única classe com proporção semelhante nos dois (4,4% vs 4,8%).
+
+**O que isso não é:** não é diferença de volume (já conhecida e é o motivo original da adoção do FedNova, seção 8.3) nem diferença de completude de atributo (seção 10, `birth_year`). É heterogeneidade estatística de **distribuição do rótulo** (*label skew*) — um terceiro eixo de heterogeneidade non-IID entre os dois clientes, distinto dos outros dois já documentados.
+
+**Por que provavelmente explica o colapso de classes raras:** o projeto já havia confirmado, em dois treinos reais (`training_id` 71 e 72, 50 e 110 rounds), que `curado_internado` e `melhora_pronto` colapsam para F1=0,0 de forma estrutural — mais rounds não muda o padrão. A hipótese registrada na época era "diluição do sinal raro na agregação federada" entre um hospital de volume maior e um menor, sem números concretos. Este achado dá o número: `melhora_pronto` é 80,6% do HSL mas só 1,1% do BPSP — quando os pesos dos dois clientes são agregados (FedAvg/FedProx/FedNova, todos fazem alguma forma de média ponderada), o gradiente que o HSL propõe para essa classe é sistematicamente puxado para quase zero pelo peso do BPSP, que quase não vê essa classe. O inverso vale para `curado_pronto`. Não é mais só uma hipótese razoável — é o padrão de dados que produziria exatamente esse efeito.
+
+**Conexão com a seção 12 (calibração):** as duas temperaturas de calibração muito diferentes encontradas no `training_id=76` (T=1,086 vs. T=1,916) e a prova formal do FedCal (Teorema 4.4, seção 9.4) sobre o piso assintótico de erro de calibração sob *label skew* fazem sentido direto à luz desta tabela — os dois clientes não só têm volumes diferentes, têm literalmente distribuições de classe opostas. O mesmo eixo de heterogeneidade (label skew) é candidato a explicar, ao mesmo tempo: (a) o colapso de F1 nas classes raras, e (b) a degradação do ECE pós-calibração federada. Não são dois problemas separados — são duas manifestações do mesmo desalinhamento estrutural entre BPSP e HSL.
+
+**Implicação para o TCC:** este é provavelmente o achado de heterogeneidade mais forte do projeto até agora — mais direto e mais fácil de defender formalmente do que a assimetria de `birth_year` (seção 10) ou o "183" (que motivou a investigação, mas foi descartado como explicação, ver `docs/Linha_do_Tempo_MOSAIC-FL.md`). Vale reportar esta tabela lado a lado com o `per_class_f1` dos treinos 71/72 e com o ECE do `training_id=76` na seção de resultados/limitações — os três números juntos contam uma história coerente de causa e efeito sob non-IID, em vez de três achados isolados.
+
+**Ressalva:** a causa raiz dessa diferença de distribuição de classe entre BPSP e HSL (viés de triagem/admissão diferente entre hospitais? população de pacientes diferente? diferença na definição operacional de alta/melhora entre instituições?) não foi investigada aqui — este achado descreve o efeito no rótulo, não a causa clínica/administrativa por trás dele. Fica como pergunta em aberto, fora do escopo de uma correção de engenharia.
+
+---
+
+## 14. Cost-Sensitive Learning vs. Classificação Ordinal — Estratégia Padrão para Classes de Prognóstico com Custo de Erro Assimétrico
+
+**Motivação:** discussão com a autora sobre o colapso de F1 em `curado_internado`/`melhora_pronto` (seção 13) levantou uma questão de fundo — raridade estatística não é o mesmo que importância clínica (analogia: um caso de Ebola é raro, mas nenhuma raridade justifica ignorá-lo). Isso levanta duas perguntas distintas: (a) o peso de classe atual (`_compute_class_weights`, `client.py:155` — inversamente proporcional à frequência LOCAL, teto 15,0) é uma correção puramente estatística (*class-balanced learning*); ele não sabe se perder uma classe é caro clinicamente. A autora propôs marcar classes específicas como `cost_sensitive_learning` (peso explícito, definido por julgamento clínico) versus deixar o resto cair no comportamento atual (`class_balanced_learning`, por frequência). Pediu revisão da literatura de ML aplicado à medicina antes de decidir, excluindo preprints não revisados por pares.
+
+### 14.1 Elkan — The Foundations of Cost-Sensitive Learning
+
+- **Autor:** Charles Elkan (University of California, San Diego)
+- **Publicação:** Proceedings of the 17th International Joint Conference on Artificial Intelligence (IJCAI 2001), pp. 973–978 — **revisado por pares**
+- **Citação formal (IEEE):** C. Elkan, "The Foundations of Cost-Sensitive Learning," in Proc. 17th Int. Joint Conf. Artificial Intelligence (IJCAI), 2001, pp. 973–978.
+
+**Resultado relevante:** referência fundacional do campo. Caracteriza formalmente quando uma matriz de custo é "razoável" (coerente economicamente — evita definir custos que geram decisões absurdas) e prova, pro caso binário, como reponderar a proporção de exemplos negativos no treino produz a mesma decisão ótima que treinar diretamente com uma matriz de custo — ou seja, mostra a equivalência formal entre reponderação por custo e reponderação por frequência sob certas condições, não como coisas totalmente separadas.
+
+**Avaliação/relevância para o MOSAIC-FL:** é a origem teórica da distinção que a autora propôs (`cost_sensitive` vs. `class_balanced`). Mas o próprio Elkan já mostra que os dois mecanismos, tecnicamente, atuam sobre o mesmo lugar (reponderação da loss/decisão) — a diferença real está em **de onde vem o número**: frequência dos dados vs. julgamento externo sobre o custo do erro. Isso orienta a implementação: não são dois algoritmos diferentes, é a mesma alavanca (`_compute_class_weights`) com duas fontes possíveis de valor.
+
+### 14.2 Idri & Chairi — Cost-sensitive learning for imbalanced medical data: a review
+
+- **Autores:** Ali Idri, Ibtissam Chairi
+- **Publicação:** Artificial Intelligence Review, vol. 57, n. 4, abril de 2024, Springer Nature — **revisado por pares**
+- **DOI:** 10.1007/s10462-023-10652-8
+- **Citação formal (IEEE):** A. Idri and I. Chairi, "Cost-sensitive learning for imbalanced medical data: a review," Artificial Intelligence Review, vol. 57, no. 4, 2024.
+
+**Resultado relevante:** primeira revisão sistemática dedicada a *cost-sensitive learning* (CSL) em dados médicos desbalanceados — 173 artigos analisados (janeiro 2010 a dezembro 2022, 5 bibliotecas digitais). Confirma CSL como uma das estratégias centrais (junto de reamostragem e métodos em nível de algoritmo/ensemble) para lidar com desbalanceamento em ML médico, com vantagem de não alterar a distribuição original dos dados (ao contrário de oversampling/undersampling).
+
+**Avaliação/relevância para o MOSAIC-FL:** confirma que CSL é uma estratégia padrão e estabelecida (não uma ideia exótica) especificamente para o domínio médico — dá base pra tratar a proposta da autora como alinhada à prática corrente, não como invenção ad-hoc.
+
+### 14.3 Zheng, Sherazi & Lee — Cost-sensitive DNN para mortalidade em IAM
+
+- **Autores:** Zheng, H. Sherazi, S.W.A.; Lee, J.
+- **Publicação:** Frontiers in Cardiovascular Medicine, 2024 — **revisado por pares**
+- **Citação formal (IEEE):** H. Zheng, S. W. A. Sherazi, and J. Lee, "A cost-sensitive deep neural network-based prediction model for the mortality in acute myocardial infarction patients with hypertension on imbalanced data," Frontiers in Cardiovascular Medicine, 2024.
+
+**Resultado relevante:** exemplo concreto de CSL aplicado a mortalidade em infarto agudo do miocárdio (5.402 sobreviventes vs. 200 óbitos, razão de desbalanceamento IR=27,01). **Achado importante ao inspecionar o método**: o peso de classe foi derivado **só da razão de desbalanceamento** (`{0:1, 1:27.01}`, refinado por busca em grade pra `{0:1, 1:22.3}`) — não de julgamento clínico sobre o custo de perder um óbito vs. um falso alarme.
+
+**Avaliação/relevância para o MOSAIC-FL — ressalva central desta seção:** mesmo um paper médico peer-reviewed, rotulado como "cost-sensitive", pode na prática só reproduzir uma versão ajustada de reponderação por frequência (o que o MOSAIC-FL já faz hoje). **Isso significa que marcar uma classe como `cost_sensitive_learning` só produz algo genuinamente novo se o peso vier de um julgamento clínico real** (definido pela autora ou por um especialista) — caso contrário, a "classificação" proposta colapsa de volta ao `class_balanced_learning` que já existe, só com um nome diferente.
+
+### 14.4 Gutiérrez et al. — Ordinal Regression Methods: Survey and Experimental Study
+
+- **Autores:** Pedro Antonio Gutiérrez, María Pérez-Ortiz, Javier Sánchez-Monedero, Francisco Fernández-Navarro, César Hervás-Martínez
+- **Publicação:** IEEE Transactions on Knowledge and Data Engineering, vol. 28, n. 1, pp. 127–146, 2016 — **revisado por pares**
+- **DOI:** 10.1109/TKDE.2015.2457911
+- **Citação formal (IEEE):** P. A. Gutiérrez, M. Pérez-Ortiz, J. Sánchez-Monedero, F. Fernández-Navarro, and C. Hervás-Martínez, "Ordinal Regression Methods: Survey and Experimental Study," IEEE Trans. Knowledge and Data Engineering, vol. 28, no. 1, pp. 127–146, 2016.
+
+**Resultado relevante:** survey fundacional da família de métodos de *classificação ordinal* — desenhados especificamente pra problemas em que as classes têm uma ordem natural (aqui: gravidade crescente) e o custo de errar entre classes vizinhas é menor que entre classes distantes. É uma alternativa estrutural à classificação nominal plana (softmax de N vias, o que o MOSAIC-FL usa hoje) mais do que uma variação de peso de loss.
+
+**Avaliação/relevância para o MOSAIC-FL:** as 5 classes de prognóstico (`_map_outcome()`) **têm ordem natural de gravidade**, algo que a arquitetura atual (softmax nominal + peso por classe) não usa como informação — trata `curado_pronto`→`melhora_internado_grave` como categorias sem relação entre si, quando na real há uma hierarquia (outcome × internação × duração). Classificação ordinal é candidata estrutural mais alinhada ao problema do que qualquer ajuste de peso.
+
+### 14.5 Hwangbo et al. — Severidade máxima de COVID-19 (mesmo domínio da pesquisa)
+
+- **Autores:** Suyeon Hwangbo, Youngmee Kim, Chungsoo Lee, Sinyoung Lee, Byungju Oh, Min Kyong Moon, Sang-Wook Kim, Taesung Park
+- **Publicação:** Frontiers in Public Health, vol. 10, artigo 1007205, 2022 — **revisado por pares**
+- **DOI:** 10.3389/fpubh.2022.1007205
+- **Citação formal (IEEE):** S. Hwangbo, Y. Kim, C. Lee, S. Lee, B. Oh, M. K. Moon, S.-W. Kim, and T. Park, "Machine learning models to predict the maximum severity of COVID-19 based on initial hospitalization record," Frontiers in Public Health, vol. 10, 2022.
+
+**Resultado relevante:** mesmo domínio clínico do MOSAIC-FL (predição de gravidade de COVID-19). Os autores definiram 4 categorias ordenadas (leve/moderado/severo/crítico) e tentaram classificação multiclasse direta — desempenho ruim, nas próprias palavras dos autores. Abandonaram a abordagem de 4 vias e reformularam como **3 classificações binárias em cascata** seguindo a hierarquia de gravidade (leve vs. acima-de-moderado; abaixo-de-moderado vs. acima-de-severo; abaixo-de-severo vs. crítico) — AUC subiu para 0,879–0,887, substancialmente melhor que o modelo de 4 grupos.
+
+**Avaliação/relevância para o MOSAIC-FL:** é a evidência mais forte encontrada nesta revisão — **peer-reviewed, no mesmo domínio (severidade de COVID-19)**, mostrando empiricamente que decompor a hierarquia de gravidade em uma cascata de decisões binárias supera a classificação multiclasse plana. Isso corrobora diretamente a hipótese levantada na discussão com a autora (seção 13): que o eixo "internado vs. não" pode ser mais importante clinicamente — e mais aprendível pelo modelo — do que tratar as 5 classes finais como categorias soltas e igualmente ponderadas.
+
+### 14.6 He & Garcia — Learning from Imbalanced Data (taxonomia de referência)
+
+- **Autores:** Haibo He, Edwardo A. Garcia
+- **Publicação:** IEEE Transactions on Knowledge and Data Engineering, vol. 21, n. 9, pp. 1263–1284, 2009 — **revisado por pares**
+- **DOI:** 10.1109/TKDE.2008.239
+- **Citação formal (IEEE):** H. He and E. A. Garcia, "Learning from Imbalanced Data," IEEE Trans. Knowledge and Data Engineering, vol. 21, no. 9, pp. 1263–1284, 2009.
+
+**Resultado relevante:** referência clássica (>25.000 citações) que organiza as estratégias de desbalanceamento em três famílias — nível de dado (reamostragem), nível de algoritmo (cost-sensitive learning, ensembles) e híbridas. Confirma que a distinção "por frequência" vs. "por custo explícito" é uma categorização estabelecida na literatura, não uma dicotomia inventada para este projeto.
+
+### Síntese e avaliação de viabilidade para o MOSAIC-FL
+
+**A proposta original da autora (marcar cada classe como `cost_sensitive_learning` ou cair em `class_balanced_learning`) é tecnicamente viável e barata** — reaproveita `_compute_class_weights()` (`client.py:155`) e o padrão de configuração já usado por `FL_CLASS_LABELS` (`config.py:39-53`). Mas a literatura revela duas ressalvas que mudam a recomendação:
+
+1. **O ganho real depende inteiramente de a "classificação de custo" vir de julgamento clínico genuíno, não de outra forma disfarçada de frequência** (seção 14.3) — sem isso, a nova tag não adiciona nada ao que já existe.
+2. **A literatura no domínio exato do MOSAIC-FL (severidade de COVID-19, seção 14.5) aponta pra uma estratégia estruturalmente diferente e mais forte**: em vez de pesos por classe sobre uma softmax nominal de 5 vias, reformular a decisão como uma hierarquia (ordinal ou cascata binária) que reflete a árvore de decisão que já existe em `_map_outcome()` — outcome × internação × duração. Isso tem respaldo empírico direto (Hwangbo et al., mesmo domínio), não é extrapolação.
+
+**Trade-off em aberto, não decidido:** a rota "tag de custo por classe" é uma mudança pequena e local (só na loss); a rota "classificação ordinal/hierárquica" é uma mudança estrutural maior (cabeça de classificação, possivelmente a arquitetura de decisão), com potencial de ganho maior e evidência mais direta, mas custo de implementação e risco bem mais altos. Decisão de qual rota seguir — ou se seguir as duas em etapas — ainda pendente com a autora.
+
+### Decisão (2026-07-27)
+
+Três opções avaliadas, comparando custo/risco de implementação contra o que cada uma resolve de fato:
+
+| Opção | Custo/risco | O que resolve | O que não resolve |
+|---|---|---|---|
+| **A — Manter como está** | Zero | Nada; vira limitação documentada no TCC | F1=0,0 persistente; se `curado_internado` for caso "não pode perder", fica sem resposta |
+| **B — Tag `cost_sensitive_learning` por classe** (peso explícito, mesma arquitetura) | Baixo — reaproveita `_compute_class_weights()`; reversível via config | Só a parte LOCAL (reforça gradiente daquele cliente) | A diluição na agregação federada entre BPSP/HSL (mecanismo dominante, seção 13); depende de valor de custo vir de julgamento clínico real, senão equivale a A com nome diferente |
+| **C — Classificação ordinal/hierárquica** (reestrutura a decisão seguindo `_map_outcome()`) | Alto — mexe em modelo, agregação, calibração, métricas | Potencialmente a causa estrutural; respaldo direto no mesmo domínio (Hwangbo et al., seção 14.5) | — |
+
+**Decisão: opção D — implementar B primeiro (Strategy pattern, ver abaixo), medir o impacto real via `per_client_f1_json` (migration 027) antes de decidir se C se justifica.** Motivo explícito da autora: pressão real de cronograma, mas sem abrir mão de fazer certo — B é barata, reversível, e não descarta C; só evita investir na opção cara sem evidência de que é necessária.
+
+**Desenho de implementação decidido com a autora:** Strategy pattern com 2 estratégias em namespace próprio (`class_balanced` = comportamento atual por frequência; `cost_sensitive` = peso explícito por classe), roteadas por classe via configuração — uma classe sem override cai automaticamente na estratégia `class_balanced` de hoje, preservando intacto o que já funciona. Sem valores de custo definidos ainda (override vazio por padrão) — a infraestrutura fica pronta pra receber o julgamento clínico da autora quando ela decidir os pesos.
+
+---
+
 ## 6. Regulatório
 
 ### 6.1 ANVISA — RDC 657/2022

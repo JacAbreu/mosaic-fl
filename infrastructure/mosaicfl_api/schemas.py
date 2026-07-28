@@ -189,3 +189,23 @@ class VocabAnomalyCorrectionResponse(BaseModel):
     merged:            bool = Field(description="True se new_canonical já existia (juntou com ele); "
                                                   "False se foi um rename simples")
     exam_records_updated: int
+
+
+class OrchestrationConfigResponse(BaseModel):
+    """Peso de classe explícito (cost-sensitive learning) — ver mosaicfl.core.class_weighting
+    e docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md, seção 14. Lido de
+    clinical.fl_orchestration_config (migration 028), o mesmo canal que já entrega
+    proximal_mu/stop pro cliente a cada rodada — idêntico nos dois hospitais."""
+    class_weight_overrides: dict[str, float] = Field(
+        description="Classe presente aqui usa peso explícito; ausente cai em class_balanced "
+                     "(frequência local, comportamento padrão do projeto)"
+    )
+    class_labels: list[str] = Field(description="Todas as classes de prognóstico configuradas (FL_CLASS_LABELS)")
+    class_weight_clamp: float = Field(description="Teto de estabilidade aplicado a qualquer peso, mesmo explícito")
+
+
+class ClassWeightOverridesUpdate(BaseModel):
+    overrides: dict[str, float] = Field(
+        description="Substitui o conjunto inteiro de overrides (não é merge parcial). "
+                     "Objeto vazio remove todos os overrides — todas as classes voltam pra class_balanced."
+    )

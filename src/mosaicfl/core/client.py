@@ -30,6 +30,7 @@ from collections import Counter
 
 from mosaicfl.core.model import SimplifiedBEHRT
 from .calibration import IsotonicCalibrator, TemperatureScaler
+from .class_weighting import compute_class_weights
 from .config import FED_CFG, MODEL_CFG, RUNTIME_CFG
 from .resources import sample_gpu_power_w
 
@@ -100,8 +101,8 @@ class FedProxClient(fl.client.NumPyClient):
         elif loader_factory is None:
             raise ValueError("FedProxClient precisa de train_loader ou loader_factory.")
 
-    def _init_criterion(self) -> None:
-        class_weights = self._compute_class_weights(self.train_loader).to(RUNTIME_CFG.device)
+    def _init_criterion(self, config: Optional[Dict] = None) -> None:
+        class_weights = self._compute_class_weights(self.train_loader, config).to(RUNTIME_CFG.device)
         self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
     def _ensure_data(self, config: Dict) -> None:
@@ -124,7 +125,7 @@ class FedProxClient(fl.client.NumPyClient):
             )
         self.vocab = json.loads(vocab_json)  # usado por extract_rag_patterns() em evaluate()
         self.train_loader, self.val_loader = self._loader_factory(vocab_json)
-        self._init_criterion()
+        self._init_criterion(config)
 
     def set_parameters(self, parameters: List[np.ndarray]) -> None:
         """
@@ -152,27 +153,47 @@ class FedProxClient(fl.client.NumPyClient):
         """
         return [v.cpu().detach().numpy().copy() for v in self.model.state_dict().values()]
 
-    def _compute_class_weights(self, loader: DataLoader) -> torch.Tensor:
+    def _compute_class_weights(self, loader: DataLoader, config: Optional[Dict] = None) -> torch.Tensor:
         """
-        Pesos inversamente proporcionais à frequência de cada classe no loader local.
+        Roteia o peso de cada classe pra sua estratégia (Strategy pattern, ver
+        mosaicfl.core.class_weighting e docs/pesquisa_baseline_implementacao_fontes_
+        bibliograficas.md, seção 14): classe com override usa peso explícito
+        (cost-sensitive, julgamento clínico); classe ausente cai em ClassBalancedStrategy
+        (peso por frequência local — comportamento padrão do projeto desde sempre,
+        preservado intacto quando não há override nenhum).
 
-        Classes ausentes no conjunto de treino recebem peso 0.0 — não contribuem
-        para o gradiente. Usar count=1 como fallback para classes ausentes inflaria
-        o peso para valores como total/(n*1) >> peso das classes presentes, o que
-        distorce a loss em direção a classes inexistentes.
+        Fonte do override, em ordem de prioridade:
+        1. config["class_weight_overrides_json"] — vem do servidor a cada rodada
+           (clinical.fl_orchestration_config, ver fit_config_mixin.py), idêntico nos
+           dois hospitais. Autoritativo em produção federada real.
+        2. FED_CFG.class_weight_overrides (env FL_CLASS_WEIGHT_OVERRIDES_JSON) — usado
+           quando não há config de rodada (simulação/testes/dev sem servidor real).
         """
         counts: Counter = Counter()
         for _, batch_y, *_ in loader:
             counts.update(batch_y.tolist())
-        n = MODEL_CFG.num_classes
-        total = sum(counts.values()) or 1
-        weights = torch.tensor(
-            [total / (n * counts[i]) if counts.get(i, 0) > 0 else 0.0 for i in range(n)],
-            dtype=torch.float,
-        ).clamp(max=15.0)  # teto: peso 47 no BPSP causava explosão de gradiente
+
+        overrides = FED_CFG.class_weight_overrides
+        raw = (config or {}).get("class_weight_overrides_json")
+        if raw:
+            try:
+                overrides = json.loads(raw)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(
+                    "class_weight_overrides_parse_error client_id=%s error=%s — usando fallback local",
+                    self.client_id, e,
+                )
+
+        weights = compute_class_weights(
+            counts=counts,
+            class_labels=MODEL_CFG.class_labels,
+            overrides=overrides,
+            clamp_max=FED_CFG.class_weight_clamp,
+        )
         logger.info(
-            "class_weights client_id=%s weights=%s counts=%s",
+            "class_weights client_id=%s weights=%s counts=%s overrides_source=%s",
             self.client_id, [round(w, 3) for w in weights.tolist()], dict(counts),
+            "server_round_config" if raw else "env_fallback",
         )
         return weights
 

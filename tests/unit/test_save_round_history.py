@@ -2,9 +2,10 @@
 Testes para CheckpointStore.save_round_history() — persistência incremental por
 rodada (achado 2026-07-26: antes só uma chamada em lote no fim do treino; um crash
 no meio perdia o histórico rodada-a-rodada do banco, sobrevivia só em
-logs/round_N_metrics.json). Cobre também os dois campos novos (resource_per_client_json,
-calibration_per_client_json — migration 025), incluindo o COALESCE que impede uma
-chamada sem esses campos de apagar um valor já persistido por uma chamada anterior.
+logs/round_N_metrics.json). Cobre também os campos novos (resource_per_client_json,
+calibration_per_client_json — migration 025; per_client_f1_json — migration 027),
+incluindo o COALESCE que impede uma chamada sem esses campos de apagar um valor já
+persistido por uma chamada anterior.
 """
 import sys
 from pathlib import Path
