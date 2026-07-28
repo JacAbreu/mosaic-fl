@@ -64,7 +64,25 @@ def main() -> None:
         print(json.dumps(current, indent=2, ensure_ascii=False))
         return
 
-    overrides = {} if args.clear else json.loads(args.overrides)
+    if args.clear:
+        overrides = {}
+    else:
+        if not args.overrides or not args.overrides.strip():
+            print(
+                "ERRO: --overrides veio vazio. Passe um JSON, ex.:\n"
+                "  make server-set-class-weights OVERRIDES='{\"curado_internado\": 25}'\n"
+                "  make client-set-class-weights OVERRIDES='{\"melhora_pronto\": 8}'\n"
+                "Pra limpar todos os overrides, use --clear (ou o alvo make equivalente "
+                "sem OVERRIDES não faz isso sozinho — passe --clear explicitamente).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        try:
+            overrides = json.loads(args.overrides)
+        except json.JSONDecodeError as e:
+            print(f"ERRO: --overrides não é JSON válido: {e}\nRecebido: {args.overrides!r}", file=sys.stderr)
+            sys.exit(1)
+
     try:
         validate_overrides(overrides, MODEL_CFG.class_labels)
     except ValueError as e:
