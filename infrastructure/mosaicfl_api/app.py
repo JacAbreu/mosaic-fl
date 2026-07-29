@@ -88,3 +88,19 @@ async def fl_training_results_page():
     if page.exists():
         return FileResponse(str(page))
     return {"message": "página não encontrada em static/fl_training_results.html"}
+
+
+@app.get("/predict", include_in_schema=False)
+async def predict_page():
+    page = _STATIC_DIR / "predict.html"
+    if page.exists():
+        return FileResponse(str(page))
+    return {"message": "página não encontrada em static/predict.html"}
+
+
+@app.get("/rag-evaluation", include_in_schema=False)
+async def rag_evaluation_page():
+    page = _STATIC_DIR / "rag_evaluation.html"
+    if page.exists():
+        return FileResponse(str(page))
+    return {"message": "página não encontrada em static/rag_evaluation.html"}

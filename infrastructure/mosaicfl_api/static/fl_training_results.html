@@ -53,12 +53,12 @@
         <thead class="table-light">
           <tr>
             <th></th><th>ID</th><th>Tipo</th><th>Algoritmo</th><th>Status</th>
-            <th>Rounds</th><th>Melhor round</th><th>Accuracy</th><th>Macro F1</th>
+            <th>Rounds</th><th>Melhor round</th><th>Checkpoint</th><th>Accuracy</th><th>Macro F1</th>
             <th>Macro AUC</th><th>ECE (pré→pós)</th><th>Convergiu</th><th>Duração</th><th>DP</th>
           </tr>
         </thead>
         <tbody id="tr-tbody">
-          <tr><td colspan="14" class="text-muted small text-center py-3">Carregando…</td></tr>
+          <tr><td colspan="15" class="text-muted small text-center py-3">Carregando…</td></tr>
         </tbody>
       </table>
     </div>
@@ -111,6 +111,7 @@ async function loadComparison() {
         <div class="cmp-col">
           <div class="small text-muted">${title}</div>
           <div class="fw-bold">#${t.id} <span class="badge ${badge}">${t.run_classification || '—'}</span></div>
+          <div class="small text-muted">${t.algorithm || '—'} · ${t.partition_mode || '—'}</div>
           <table class="table table-sm mt-2 mb-0">
             <tr><td class="text-muted">accuracy</td><td>${fmt(t.best_accuracy)}</td></tr>
             <tr><td class="text-muted">macro_f1</td><td>${fmt(t.macro_f1)}</td></tr>
@@ -134,19 +135,28 @@ async function loadComparison() {
 
 async function loadTrainingsList() {
   const tbody = document.getElementById('tr-tbody');
-  tbody.innerHTML = '<tr><td colspan="14" class="text-muted small text-center py-3">Carregando…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="15" class="text-muted small text-center py-3">Carregando…</td></tr>';
   try {
     const r = await fetch(`${API}/api/admin/fl-training-results`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
     if (!data.trainings.length) {
-      tbody.innerHTML = '<tr><td colspan="14" class="text-muted small text-center py-3">Nenhum treinamento encontrado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="15" class="text-muted small text-center py-3">Nenhum treinamento encontrado.</td></tr>';
       return;
     }
     tbody.innerHTML = data.trainings.map(t => {
       const typeBadge = t.run_classification === 'treinamento_real' ? 'badge-real' : 'badge-ajuste';
       const convBadge = t.converged ? 'badge-yes' : 'badge-no';
-      const dp = t.dp_noise_multiplier ? `σ=${t.dp_noise_multiplier} (${t.dp_noise_strategy || 'uniform'})` : 'desligado';
+      let dp = 'desligado';
+      if (t.dp_noise_multiplier) {
+        dp = `σ=${t.dp_noise_multiplier} (${t.dp_noise_strategy || 'uniform'})`;
+        if (t.dp_epsilon_simple != null) dp += ` · ε≈${fmt(t.dp_epsilon_simple, 1)}`;
+        if (t.dp_epsilon_rdp != null) dp += ` (RDP ${fmt(t.dp_epsilon_rdp, 1)})`;
+      }
+      const ckptCell = t.checkpoint_round == null ? '—' :
+        (t.checkpoint_mismatch
+          ? `<span class="badge badge-no" title="checkpoint salvo (round ${t.checkpoint_round}) diverge do melhor round (${t.best_round})">round ${t.checkpoint_round} ⚠</span>`
+          : `<span class="badge badge-yes">round ${t.checkpoint_round}</span>`);
       return `
         <tr class="tr-row" style="cursor:pointer" onclick="toggleRound(${t.id})">
           <td>▸</td>
@@ -156,6 +166,7 @@ async function loadTrainingsList() {
           <td>${t.status || '—'}</td>
           <td>${t.n_rounds_done ?? '—'}</td>
           <td>${t.best_round ?? '—'}</td>
+          <td>${ckptCell}</td>
           <td>${fmt(t.best_accuracy)}</td>
           <td>${fmt(t.macro_f1)}</td>
           <td>${fmt(t.macro_auc)}</td>
@@ -165,11 +176,11 @@ async function loadTrainingsList() {
           <td class="text-muted">${dp}</td>
         </tr>
         <tr class="round-detail" id="detail-${t.id}">
-          <td colspan="14" class="bg-light"><div id="detail-body-${t.id}" class="p-2 text-muted small">Carregando ao expandir…</div></td>
+          <td colspan="15" class="bg-light"><div id="detail-body-${t.id}" class="p-2 text-muted small">Carregando ao expandir…</div></td>
         </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="14" class="text-danger small text-center py-3">Erro: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="15" class="text-danger small text-center py-3">Erro: ${e.message}</td></tr>`;
   }
 }
 
@@ -200,7 +211,15 @@ async function toggleRound(trainingId) {
       return `<tr class="${isBest ? 'table-warning' : ''}"><td>${rd.round}${isBest ? ' ★' : ''}</td><td>${fmt(rd.accuracy,3)}</td><td>${fmt(rd.f1_macro,3)}</td>${pcfCells}<td class="small">${clientCell}</td></tr>`;
     }).join('');
 
-    body.innerHTML = `<div style="max-height:400px; overflow-y:auto;"><table class="table table-sm mb-0">${header}${rows}</table></div>`;
+    let evalBlock = '';
+    if (data.evaluation_json) {
+      evalBlock = `<details class="mb-2">
+        <summary class="text-muted small">evaluation_json completo (checkpoint round ${data.checkpoint_round ?? '—'})</summary>
+        <pre class="small bg-white border rounded p-2" style="max-height:300px; overflow:auto;">${JSON.stringify(data.evaluation_json, null, 2)}</pre>
+      </details>`;
+    }
+
+    body.innerHTML = `${evalBlock}<div style="max-height:400px; overflow-y:auto;"><table class="table table-sm mb-0">${header}${rows}</table></div>`;
   } catch (e) {
     body.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
   }

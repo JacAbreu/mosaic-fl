@@ -50,6 +50,7 @@ def _make_strategy(tmp_path):
     strategy._best_criterion_value = 0.0
     strategy._best_round = 0
     strategy._best_state_dict = None
+    strategy._best_confusion_matrix = None
     strategy._rdp_accountant = None
     strategy._dp_epsilon_simple = None
     strategy._dp_last_group_multipliers = None
@@ -85,6 +86,31 @@ class TestBuildEvaluationJson:
         assert payload["ece"] == 0.11
         assert payload["ece_pre"] == 0.08
         assert len(payload["class_labels"]) == 5
+
+    def test_confusion_matrix_stats_none_when_never_set(self, tmp_path, monkeypatch):
+        import infrastructure.mosaicfl_server.strategy.core as core_module
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setattr(core_module, "FED_CFG", FedConfig())
+
+        strategy = _make_strategy(tmp_path)
+        payload = strategy._build_evaluation_json(best_round=1, best_per_class_f1=None)
+        assert payload["confusion_matrix_stats"] is None
+
+    def test_confusion_matrix_stats_derived_when_present(self, tmp_path, monkeypatch):
+        import infrastructure.mosaicfl_server.strategy.core as core_module
+        from mosaicfl.core.config import FedConfig
+        monkeypatch.setattr(core_module, "FED_CFG", FedConfig())
+
+        strategy = _make_strategy(tmp_path)
+        strategy._best_confusion_matrix = [
+            [10, 0, 0, 0, 0], [0, 8, 0, 0, 0], [0, 0, 6, 0, 0], [0, 0, 0, 4, 0], [0, 0, 0, 0, 2],
+        ]
+        payload = strategy._build_evaluation_json(best_round=1, best_per_class_f1=None)
+        stats = payload["confusion_matrix_stats"]
+        assert stats is not None
+        assert stats["accuracy_p_hat"] == 1.0
+        assert stats["n_total"] == 30
+        assert "accuracy_ci_95_wilson" in stats
 
     def test_dp_fields_none_when_dp_disabled(self, tmp_path, monkeypatch):
         import infrastructure.mosaicfl_server.strategy.core as core_module

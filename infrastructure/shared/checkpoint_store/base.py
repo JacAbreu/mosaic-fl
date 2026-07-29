@@ -16,6 +16,7 @@ class CheckpointStore(ABC):
         checkpoint_criterion: str = "f1_macro",
         partition_mode: str = "natural",
         run_classification: str = "ajuste",
+        local_only_hospital: Optional[str] = None,
     ) -> int:
         """Registra um novo treinamento antes do loop FL. Retorna training_id.
 
@@ -25,7 +26,12 @@ class CheckpointStore(ABC):
         FL_RUN_CLASSIFICATION — nunca fica ambíguo/dependente de doc externo.
 
         partition_mode: "natural" (hospital real = cliente) ou "iid_simulado"
-        (pool embaralhado — Experimento 3 / fase 5, contraste non-IID vs. IID)."""
+        (pool embaralhado — Experimento 3 / fase 5, contraste non-IID vs. IID).
+
+        local_only_hospital: None (treino federado normal) ou "BPSP"/"HSL"
+        (Caminho B rodado com um único hospital conectado, min-clients=1 —
+        baseline local pra comparar contra o federado na mesma rede real,
+        migration 030)."""
 
     @abstractmethod
     def complete_training(
@@ -60,6 +66,8 @@ class CheckpointStore(ABC):
         dp_epsilon_rdp: Optional[float] = None,
         dp_noise_strategy: Optional[str] = None,
         dp_noise_group_multipliers_json: Optional[str] = None,
+        rag_precision_at_k: Optional[float] = None,
+        rag_k: Optional[int] = None,
     ) -> None:
         """Grava em fl_trainings o AUC-ROC/F1/ECE pós-calibração (+ ECE pré-calibração,
         ece_pre) e, quando DP-FedAvg está habilitado, os parâmetros e o ε acumulado
@@ -70,7 +78,14 @@ class CheckpointStore(ABC):
         dp_noise_strategy/dp_noise_group_multipliers_json (migration 029): qual
         estratégia de ruído (mosaicfl.core.dp_noise) foi usada e os multiplicadores
         efetivos por grupo — "uniform" sempre resulta em {"all": dp_noise_multiplier};
-        "layer_group" varia por camada. NULL quando DP está desligado."""
+        "layer_group" varia por camada. NULL quando DP está desligado.
+
+        rag_precision_at_k/rag_k (migration 031): qualidade da recuperação do RAG —
+        fração dos k casos recuperados que têm o mesmo desfecho da consulta,
+        agregada entre clientes (mosaicfl.core.rag.precision.eval_precision_at_k,
+        rodado localmente por hospital, nunca centraliza amostra). NULL quando
+        nenhum cliente recebeu rag_patterns_json ainda (primeira rodada de
+        avaliação de cada treino)."""
 
     @abstractmethod
     def save(

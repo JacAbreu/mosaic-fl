@@ -39,10 +39,11 @@ class SQLiteCheckpointStore(CheckpointStore):
         checkpoint_criterion: str = "f1_macro",
         partition_mode: str = "natural",
         run_classification: str = "ajuste",
+        local_only_hospital: Optional[str] = None,
     ) -> int:
-        # fl_trainings do SQLite não tem coluna partition_mode/run_classification
-        # (mesma lacuna já existente para checkpoint_criterion/métricas de recurso
-        # nesta classe).
+        # fl_trainings do SQLite não tem coluna partition_mode/run_classification/
+        # local_only_hospital (mesma lacuna já existente para checkpoint_criterion/
+        # métricas de recurso nesta classe).
         started_at = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self._db_path) as conn:
             cur = conn.execute(
@@ -53,8 +54,9 @@ class SQLiteCheckpointStore(CheckpointStore):
             training_id = cur.lastrowid
         logger.info(
             "training_registered_sqlite id=%d algorithm=%s criterion=%s partition_mode=%s "
-            "run_classification=%s (não persistido)",
+            "run_classification=%s local_only_hospital=%s (não persistido)",
             training_id, algorithm, checkpoint_criterion, partition_mode, run_classification,
+            local_only_hospital,
         )
         return training_id
 
@@ -101,6 +103,8 @@ class SQLiteCheckpointStore(CheckpointStore):
         dp_epsilon_rdp: Optional[float] = None,
         dp_noise_strategy: Optional[str] = None,
         dp_noise_group_multipliers_json: Optional[str] = None,
+        rag_precision_at_k: Optional[float] = None,
+        rag_k: Optional[int] = None,
     ) -> None:
         # fl_trainings do SQLite ainda não tem essas colunas (schema local, sem
         # Alembic — mesma lacuna já existente para as métricas de recurso
@@ -108,9 +112,11 @@ class SQLiteCheckpointStore(CheckpointStore):
         # evaluation_json, salvo por save(). Loga para não perder o dado silenciosamente.
         logger.info(
             "training_evaluation_metrics_sqlite_not_persisted id=%d macro_auc=%s macro_f1=%s ece=%s ece_pre=%s "
-            "dp_sigma=%s dp_clip=%s dp_eps_simple=%s dp_eps_rdp=%s (ver evaluation_json no checkpoint)",
+            "dp_sigma=%s dp_clip=%s dp_eps_simple=%s dp_eps_rdp=%s rag_precision_at_k=%s rag_k=%s "
+            "(ver evaluation_json no checkpoint)",
             training_id, macro_auc, macro_f1, ece, ece_pre,
             dp_noise_multiplier, dp_max_grad_norm, dp_epsilon_simple, dp_epsilon_rdp,
+            rag_precision_at_k, rag_k,
         )
 
     def mark_active_model(self, training_id: int) -> None:

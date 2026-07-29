@@ -144,6 +144,7 @@ def run_federated_learning_manual(
     best_accuracy      = 0.0  # accuracy na rodada do melhor checkpoint (sempre rastreado)
     best_round         = 0
     dp_epsilon_simple: Optional[float] = None  # None quando DP desabilitado (FL_DP_NOISE=0)
+    dp_group_multipliers: Optional[dict] = None  # {"all": sigma} (uniform) ou por grupo (layer_group)
     checkpoint_store = override_checkpoint_store if override_checkpoint_store is not None else get_checkpoint_store(FL_DB_URL)
 
     # RDP (Rényi DP) via opacus — cota mais apertada que a composição simples acima,
@@ -236,10 +237,17 @@ def run_federated_learning_manual(
             tau_eff = None
 
         if DP_NOISE_MULTIPLIER > 0:
-            dp_epsilon_simple = apply_dp_noise(
+            dp_epsilon_simple, dp_group_multipliers = apply_dp_noise(
                 global_state, round_num, len(client_loaders), DP_NOISE_MULTIPLIER, DP_MAX_GRAD_NORM
             )
-            _rdp_accountant.step(noise_multiplier=DP_NOISE_MULTIPLIER, sample_rate=1.0)
+            # Achado 2026-07-28 (auditoria Caminho A vs B): contabiliza RDP por
+            # grupo com o multiplicador EFETIVO (não sempre o base) — mesmo padrão
+            # já usado pelo Caminho B (strategy/core.py::_apply_dp_noise_to_
+            # aggregated). Sem isso, dp_noise_strategy="layer_group" subestimava o
+            # epsilon real (contabilidade fingia ruído uniforme quando não era).
+            for _group, _multiplier in dp_group_multipliers.items():
+                if _multiplier > 0:
+                    _rdp_accountant.step(noise_multiplier=_multiplier, sample_rate=1.0)
 
         global_model.load_state_dict(global_state)
 
@@ -535,6 +543,15 @@ def run_federated_learning_manual(
                 dp_max_grad_norm=DP_MAX_GRAD_NORM if dp_epsilon_simple is not None else None,
                 dp_epsilon_simple=dp_epsilon_simple,
                 dp_epsilon_rdp=dp_epsilon_rdp,
+                # Achado 2026-07-28 (auditoria Caminho A vs B): sem isso, as linhas
+                # de fl_trainings de um comparativo uniform×layer_group ficavam
+                # indistinguíveis por essas colunas (sempre NULL) — só dava pra
+                # saber qual foi qual relendo o log bruto. Mesmo padrão do
+                # Caminho B (strategy/core.py).
+                dp_noise_strategy=FED_CFG.dp_noise_strategy if dp_epsilon_simple is not None else None,
+                dp_noise_group_multipliers_json=(
+                    json.dumps(dp_group_multipliers) if dp_group_multipliers is not None else None
+                ),
             )
         except Exception as exc:
             logger.warning("Falha ao salvar macro_auc/macro_f1/ece/ece_pre/dp_* em fl_trainings: %s", exc)

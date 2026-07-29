@@ -403,6 +403,7 @@ class SequencePipeline:
                 int(group["outcome_class"].iloc[0]),
                 float(group["duration_days"].iloc[0]),
                 str(group["attendance_type"].iloc[0]),
+                internado_breve_max_days=MODEL_CFG.internado_breve_max_days,
             )
             if label < 0:
                 continue

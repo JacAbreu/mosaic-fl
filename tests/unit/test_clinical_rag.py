@@ -118,6 +118,45 @@ class TestClinicalRAG:
         assert isinstance(results, list)
         assert len(results) == 0
 
+    # ── judge_justification (LLM-como-juiz, complementar ao Likert humano) ──
+
+    def test_judge_justification_parses_score_and_rationale(self):
+        rag, _, _ = self._make_rag()
+        rag.generator.return_value = [{
+            "generated_text": "NOTA: 4\nMOTIVO: Coerente com os casos recuperados."
+        }]
+        score, rationale = rag.judge_justification(
+            "curado_pronto", "Paciente com PCR baixo, evolução favorável.",
+            [{"metadata": {"desfecho": "curado_pronto"}}],
+        )
+        assert score == 4
+        assert "coerente" in rationale.lower()
+
+    def test_judge_justification_returns_none_when_unparseable(self):
+        rag, _, _ = self._make_rag()
+        rag.generator.return_value = [{"generated_text": "resposta bagunçada sem o formato pedido"}]
+        score, rationale = rag.judge_justification("curado_pronto", "justificativa qualquer", [])
+        assert score is None
+        assert rationale  # ainda guarda o texto bruto pra auditoria
+
+    def test_judge_justification_handles_generation_error(self):
+        rag, _, _ = self._make_rag()
+        rag.generator.side_effect = RuntimeError("modelo indisponível")
+        score, rationale = rag.judge_justification("curado_pronto", "texto", [])
+        assert score is None
+        assert "erro" in rationale.lower()
+
+    def test_judge_justification_via_ollama_backend(self):
+        rag, _, _ = self._make_rag()
+        rag._llm_backend = "ollama"
+        rag._llm_model = "gemma3:4b"
+        with patch("mosaicfl.core.rag._generate_ollama", return_value="NOTA: 5\nMOTIVO: Excelente.") as mock_gen:
+            score, rationale = rag.judge_justification(
+                "melhora_pronto", "Justificativa clara.", [{"metadata": {"desfecho": "melhora_pronto"}}],
+            )
+        mock_gen.assert_called_once()
+        assert score == 5
+
     def test_end_to_end_with_model_mocked(self):
         rag, mock_collection, mock_embedder = self._make_rag()
         mock_embedder.encode.return_value = np.random.rand(1, 384).astype(np.float32)

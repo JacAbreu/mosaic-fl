@@ -27,6 +27,19 @@ class _FitConfigMixin:
             ins.config["vocab_json"] = json.dumps(self.vocab)
         return instructions
 
+    def _inject_rag_patterns(self, instructions: List[Tuple]) -> List[Tuple]:
+        """Reenvia os padrões do RAG (self._last_rag_patterns_json, cacheados em
+        _build_rag_knowledge_base) pra cada cliente avaliar Precision@k localmente
+        (client.py::evaluate(), ver mosaicfl.core.rag.precision.eval_precision_at_k).
+        Ausente/None antes da 1ª vez que algum cliente enviou padrões — não injeta
+        nada, cliente não recebe a chave e pula o cálculo (Precision@k só fica
+        disponível a partir da 2ª rodada de avaliação em diante)."""
+        if not self._last_rag_patterns_json:
+            return instructions
+        for _, ins in instructions:
+            ins.config["rag_patterns_json"] = self._last_rag_patterns_json
+        return instructions
+
     def _inject_class_weight_overrides(self, instructions: List[Tuple], runtime: dict) -> List[Tuple]:
         """Peso de classe explícito (cost-sensitive learning, Strategy pattern em
         mosaicfl.core.class_weighting — ver docs/pesquisa_baseline_implementacao_fontes_
@@ -99,6 +112,7 @@ class _FitConfigMixin:
         dependendo da ordem do protocolo, e _ensure_data só carrega uma vez)."""
         instructions = super().configure_evaluate(server_round, parameters, client_manager)
         instructions = self._inject_current_vocab(instructions)
+        instructions = self._inject_rag_patterns(instructions)
         runtime = self.config_loader.load(server_round)
         return self._inject_class_weight_overrides(instructions, runtime)
 

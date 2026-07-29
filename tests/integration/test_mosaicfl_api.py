@@ -407,6 +407,29 @@ class TestFLStatusEndpoint:
         finally:
             svc._CHECKPOINT_DIR = orig
 
+    def test_prefers_loaded_engine_over_stale_file(self, client_state, tmp_path):
+        """Achado 2026-07-28: um round_1.pt obsoleto em FL_CHECKPOINT_DIR não pode
+        sobrescrever o que a engine EM MEMÓRIA está de fato servindo (ex.: um
+        checkpoint muito mais recente carregado via CheckpointStore/banco)."""
+        client, mock_engine, svc = client_state
+        ckpt_dir = tmp_path / "ckpts_stale"
+        ckpt_dir.mkdir()
+        (ckpt_dir / "round_1.pt").touch()
+        orig_dir = svc._CHECKPOINT_DIR
+        svc._CHECKPOINT_DIR = ckpt_dir
+        mock_engine._checkpoint_round = 95
+        mock_engine._checkpoint_path = "<checkpoint_store>"
+        mock_engine._checkpoint_at = "2026-07-28T20:00:00+00:00"
+        try:
+            data = client.get("/api/fl/status").json()
+            assert data["rounds_completed"] == 95
+            assert data["checkpoint_path"] == "<checkpoint_store>"
+        finally:
+            svc._CHECKPOINT_DIR = orig_dir
+            del mock_engine._checkpoint_round
+            del mock_engine._checkpoint_path
+            del mock_engine._checkpoint_at
+
 
 class TestAuthentication:
     _EXAM = {"patient_id": "P001", "exams": [{"exam_name": "WBC", "date": "2020-03-01", "value": 8.0, "phase": "IN"}]}

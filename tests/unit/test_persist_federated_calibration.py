@@ -23,6 +23,7 @@ def _make_strategy():
     # Pesos/round/accuracy da "melhor rodada" (achado 2026-07-28) — usados por
     # _persist_federated_calibration() em vez dos pesos da rodada atual.
     strategy._best_state_dict = None  # cai no fallback self.global_model.state_dict()
+    strategy._best_confusion_matrix = None
     strategy._best_round = 7
     strategy._best_accuracy = 0.7
     # Usados por _build_evaluation_json() (achado #6 da auditoria Caminho A vs B).

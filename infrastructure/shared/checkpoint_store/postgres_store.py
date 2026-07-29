@@ -27,14 +27,17 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         checkpoint_criterion: str = "f1_macro",
         partition_mode: str = "natural",
         run_classification: str = "ajuste",
+        local_only_hospital: Optional[str] = None,
     ) -> int:
         import sqlalchemy as sa
         with self._engine.begin() as conn:
             row = conn.execute(
                 sa.text(
                     "INSERT INTO metrics.fl_trainings "
-                    "(algorithm, log_file, n_rounds_max, checkpoint_criterion, partition_mode, run_classification) "
-                    "VALUES (:algorithm, :log_file, :n_rounds_max, :checkpoint_criterion, :partition_mode, :run_classification) "
+                    "(algorithm, log_file, n_rounds_max, checkpoint_criterion, partition_mode, "
+                    "run_classification, local_only_hospital) "
+                    "VALUES (:algorithm, :log_file, :n_rounds_max, :checkpoint_criterion, :partition_mode, "
+                    ":run_classification, :local_only_hospital) "
                     "RETURNING id"
                 ),
                 {
@@ -44,12 +47,15 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "checkpoint_criterion": checkpoint_criterion,
                     "partition_mode":       partition_mode,
                     "run_classification":   run_classification,
+                    "local_only_hospital":  local_only_hospital,
                 },
             ).fetchone()
         training_id = row[0]
         logger.info(
-            "training_registered_postgres id=%d algorithm=%s criterion=%s partition_mode=%s run_classification=%s",
+            "training_registered_postgres id=%d algorithm=%s criterion=%s partition_mode=%s "
+            "run_classification=%s local_only_hospital=%s",
             training_id, algorithm, checkpoint_criterion, partition_mode, run_classification,
+            local_only_hospital,
         )
         return training_id
 
@@ -113,6 +119,8 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         dp_epsilon_rdp: Optional[float] = None,
         dp_noise_strategy: Optional[str] = None,
         dp_noise_group_multipliers_json: Optional[str] = None,
+        rag_precision_at_k: Optional[float] = None,
+        rag_k: Optional[int] = None,
     ) -> None:
         import sqlalchemy as sa
         with self._engine.begin() as conn:
@@ -123,7 +131,8 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "dp_noise_multiplier=:dp_noise_multiplier, dp_max_grad_norm=:dp_max_grad_norm, "
                     "dp_epsilon_simple=:dp_epsilon_simple, dp_epsilon_rdp=:dp_epsilon_rdp, "
                     "dp_noise_strategy=:dp_noise_strategy, "
-                    "dp_noise_group_multipliers_json=cast(:dp_noise_group_multipliers_json as jsonb) "
+                    "dp_noise_group_multipliers_json=cast(:dp_noise_group_multipliers_json as jsonb), "
+                    "rag_precision_at_k=:rag_precision_at_k, rag_k=:rag_k "
                     "WHERE id=:training_id"
                 ),
                 {
@@ -138,13 +147,17 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "dp_epsilon_rdp":      dp_epsilon_rdp,
                     "dp_noise_strategy":   dp_noise_strategy,
                     "dp_noise_group_multipliers_json": dp_noise_group_multipliers_json,
+                    "rag_precision_at_k":  rag_precision_at_k,
+                    "rag_k":               rag_k,
                 },
             )
         logger.info(
             "training_evaluation_metrics_saved id=%d macro_auc=%s macro_f1=%s ece=%s ece_pre=%s "
-            "dp_sigma=%s dp_clip=%s dp_eps_simple=%s dp_eps_rdp=%s dp_strategy=%s",
+            "dp_sigma=%s dp_clip=%s dp_eps_simple=%s dp_eps_rdp=%s dp_strategy=%s "
+            "rag_precision_at_k=%s rag_k=%s",
             training_id, macro_auc, macro_f1, ece, ece_pre,
             dp_noise_multiplier, dp_max_grad_norm, dp_epsilon_simple, dp_epsilon_rdp, dp_noise_strategy,
+            rag_precision_at_k, rag_k,
         )
 
     def mark_active_model(self, training_id: int) -> None:

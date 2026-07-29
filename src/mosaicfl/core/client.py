@@ -91,7 +91,11 @@ class FedProxClient(fl.client.NumPyClient):
         self._loader_factory = loader_factory
         self._vocab_discovery_fn = vocab_discovery_fn
         self.vocab: Optional[Dict[str, int]] = None  # setado em _ensure_data(); usado por extract_rag_patterns()
-        self.model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
+        # demo_dim (MODEL_CFG.demo_dim, achado 2026-07-28): DEVE ser idêntico ao do
+        # servidor (superlink.py) e de todos os outros clientes — dimensões diferentes
+        # quebrariam a agregação de pesos (FedAvg/FedProx/FedNova somam tensores
+        # posição a posição). Default 0 preserva o comportamento histórico.
+        self.model = SimplifiedBEHRT(use_cls_token=True, demo_dim=MODEL_CFG.demo_dim).to(RUNTIME_CFG.device)
         self._eval_criterion = torch.nn.CrossEntropyLoss()  # sem peso para comparação entre rounds
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=FED_CFG.lr)
         self.global_params: Optional[List[torch.Tensor]] = None
@@ -254,13 +258,20 @@ class FedProxClient(fl.client.NumPyClient):
         for epoch in range(local_epochs):
             running_loss = 0.0
             total_samples = 0
-            for batch_x, batch_y, batch_dia in self.train_loader:
+            for batch in self.train_loader:
                 try:
+                    # 4º elemento (demographics) só presente quando MODEL_CFG.demo_dim > 0
+                    # (achado 2026-07-28, late fusion — ver sgbd.py::load()). Detecta pelo
+                    # tamanho da tupla em vez de checar o config, pra se adaptar sozinho ao
+                    # que o loader de fato produz (simulação/testes podem montar TensorDataset
+                    # sem demográficos mesmo com demo_dim>0 — model.py já faz zero-pad nesse caso).
+                    batch_x, batch_y, batch_dia = batch[0], batch[1], batch[2]
+                    batch_demo = batch[3].to(RUNTIME_CFG.device) if len(batch) > 3 else None
                     batch_x   = batch_x.to(RUNTIME_CFG.device)
                     batch_y   = batch_y.to(RUNTIME_CFG.device)
                     batch_dia = batch_dia.to(RUNTIME_CFG.device)
                     self.optimizer.zero_grad()
-                    outputs = self.model(batch_x, dia_relativo=batch_dia)
+                    outputs = self.model(batch_x, demographics=batch_demo, dia_relativo=batch_dia)
                     loss = self.criterion(outputs, batch_y)
                     loss = self._proximal_loss(loss, proximal_mu)
                     loss.backward()
@@ -360,11 +371,14 @@ class FedProxClient(fl.client.NumPyClient):
         all_labels: List[int] = []
         all_logits: List[torch.Tensor] = []
         with torch.no_grad():
-            for batch_x, batch_y, batch_dia in self.val_loader:
+            for batch in self.val_loader:
+                # Mesmo desempacotamento adaptável do fit() acima — ver comentário lá.
+                batch_x, batch_y, batch_dia = batch[0], batch[1], batch[2]
+                batch_demo = batch[3].to(RUNTIME_CFG.device) if len(batch) > 3 else None
                 batch_x = batch_x.to(RUNTIME_CFG.device)
                 batch_y = batch_y.to(RUNTIME_CFG.device)
                 batch_dia = batch_dia.to(RUNTIME_CFG.device)
-                outputs = self.model(batch_x, dia_relativo=batch_dia)
+                outputs = self.model(batch_x, demographics=batch_demo, dia_relativo=batch_dia)
                 loss = self._eval_criterion(outputs, batch_y)
                 loss_sum += loss.item() * batch_y.size(0)
                 _, predicted = torch.max(outputs.data, 1)
@@ -399,11 +413,29 @@ class FedProxClient(fl.client.NumPyClient):
             f1_macro = 0.0
             per_class_f1 = [0.0] * num_classes
 
+        # Matriz de confusão LOCAL (achado 2026-07-29: só existia no Caminho A,
+        # via evaluate() com test_loader centralizado — src/mosaicfl/core/
+        # evaluation.py, chamado só por manual_loop.py/ray_loop.py/ablation.py e
+        # por _run_calibration, código morto no Caminho B). É um agregado de
+        # CONTAGENS (NxN, uma célula por par previsto×real), não predição/rótulo
+        # bruto por paciente — mesma garantia de privacidade de per_class_f1/AUC
+        # acima. O servidor soma as matrizes de cada hospital célula a célula
+        # (exatamente equivalente a computar uma matriz global) e deriva
+        # precisão/recall/especificidade/CI a partir da soma agregada.
+        from sklearn.metrics import confusion_matrix as _sk_confusion_matrix
+        if total > 0:
+            confusion_matrix = _sk_confusion_matrix(
+                all_labels, all_preds, labels=list(range(num_classes)),
+            ).tolist()
+        else:
+            confusion_matrix = [[0] * num_classes for _ in range(num_classes)]
+
         metrics = {
             "accuracy": accuracy,
             "client_id": self.client_id,
             "f1_macro": f1_macro,
             "per_class_f1_json": json.dumps(per_class_f1),
+            "confusion_matrix_json": json.dumps(confusion_matrix),
         }
 
         # AUC-ROC macro (one-vs-rest) — mesmo padrão de privacidade do F1: calculado
@@ -454,6 +486,33 @@ class FedProxClient(fl.client.NumPyClient):
                 torch.cat(all_logits),
                 torch.tensor(all_labels),
             ))
+
+        # Precision@k do RAG — achado 2026-07-28: só existia no Caminho A, contra um
+        # test_loader centralizado (impossível aqui por design de privacidade). O
+        # servidor reenvia rag_patterns_json (perfis prototípicos agregados entre os
+        # dois hospitais na rodada anterior, sem dado identificável — ver
+        # _extract_rag_patterns acima) via configure_evaluate; cada cliente constrói
+        # sua PRÓPRIA cópia local do knowledge base (ClinicalRAG usa FL_DB_URL local
+        # por padrão) e avalia contra self.val_loader real — nunca centraliza
+        # amostra. Só roda quando o servidor já construiu uma base pelo menos uma
+        # vez (chave ausente na 1ª rodada de avaliação de cada treino).
+        rag_patterns_json = config.get("rag_patterns_json")
+        if rag_patterns_json and self.vocab and total > 0:
+            try:
+                from mosaicfl.core.rag import ClinicalRAG
+                from mosaicfl.core.rag.precision import eval_precision_at_k
+                local_rag = ClinicalRAG()
+                local_rag.build_knowledge_base(json.loads(rag_patterns_json))
+                vocab_inverse = {v: k for k, v in self.vocab.items()}
+                precision_metrics = eval_precision_at_k(
+                    local_rag, self.val_loader, vocab_inverse,
+                    list(MODEL_CFG.class_labels), k=FED_CFG.top_k,
+                )
+                metrics["rag_precision_at_k"] = precision_metrics[f"precision_at_{FED_CFG.top_k}"]
+                metrics["rag_k"] = FED_CFG.top_k
+                metrics["rag_n_queries"] = precision_metrics["n_queries"]
+            except Exception as e:
+                logger.warning("rag_precision_at_k_error client_id=%s error=%s", self.client_id, e)
 
         return float(avg_loss), total, metrics
 

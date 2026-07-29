@@ -38,6 +38,7 @@ class _StrategyUnderTest(_FitConfigMixin, _FakeBaseStrategy):
         self.on_round_start = None
         self.proximal_mu = 0.01
         self.should_stop = False
+        self._last_rag_patterns_json = None
 
     def _start_round_watchdog(self, server_round):
         pass
@@ -88,6 +89,42 @@ class TestInjectCurrentVocab:
 
         assert instructions == []
         assert strategy.should_stop is True
+
+
+class TestInjectRagPatterns:
+    """rag_patterns_json (achado 2026-07-28) — servidor reenvia os padrões mais
+    recentes (self._last_rag_patterns_json, cacheado em _build_rag_knowledge_base)
+    pra cada cliente avaliar Precision@k localmente. None antes da 1ª vez que
+    algum cliente enviou padrões — só configure_evaluate injeta (Precision@k é
+    métrica de avaliação, não de treino)."""
+
+    def test_configure_evaluate_injects_when_present(self):
+        strategy = _StrategyUnderTest(vocab={"CLS": 0})
+        strategy._last_rag_patterns_json = '[{"desfecho": "curado_pronto"}]'
+
+        instructions = strategy.configure_evaluate(1, None, MagicMock())
+
+        _, ins = instructions[0]
+        assert ins.config["rag_patterns_json"] == '[{"desfecho": "curado_pronto"}]'
+
+    def test_configure_evaluate_omits_key_when_never_built(self):
+        strategy = _StrategyUnderTest(vocab={"CLS": 0})
+        # _last_rag_patterns_json já é None por default no __init__
+
+        instructions = strategy.configure_evaluate(1, None, MagicMock())
+
+        _, ins = instructions[0]
+        assert "rag_patterns_json" not in ins.config
+
+    def test_configure_fit_never_injects_rag_patterns(self):
+        """Precision@k é métrica de avaliação — não faz sentido no fit()."""
+        strategy = _StrategyUnderTest(vocab={"CLS": 0})
+        strategy._last_rag_patterns_json = '[{"desfecho": "curado_pronto"}]'
+
+        instructions = strategy.configure_fit(1, None, MagicMock())
+
+        _, ins = instructions[0]
+        assert "rag_patterns_json" not in ins.config
 
 
 class TestInjectClassWeightOverrides:

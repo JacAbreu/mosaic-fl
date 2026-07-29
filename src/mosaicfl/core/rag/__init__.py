@@ -17,7 +17,7 @@ chamada quando o nome é importado no mesmo módulo que o utiliza.
 """
 import logging
 import os
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import sqlalchemy as sa
 from sentence_transformers import SentenceTransformer
@@ -214,3 +214,60 @@ class ClinicalRAG:
             "llm_model_used":       self._llm_model,
             "llm_was_fallback":     self._llm_was_fallback,
         }
+
+    def judge_justification(
+        self, predicted_label: str, justificativa: str, fontes: List[Dict],
+    ) -> Tuple[Optional[int], str]:
+        """Nota 1-5 AUTOMÁTICA (LLM-como-juiz) sobre a própria justificativa
+        gerada — métrica complementar à avaliação humana Likert (achado
+        2026-07-29, decisão explícita da autora), NUNCA um substituto dela.
+        Mesmo backend/modelo já configurado pro RAG, mesma rubrica 1-5 usada
+        na avaliação humana (scripts/rag_likert_evaluation.py).
+
+        Retorna (score, rationale). score=None quando o LLM não devolveu um
+        dígito 1-5 parseável — melhor não persistir um número inventado do
+        que fingir confiança que a leitura da resposta não tem.
+        """
+        fontes_resumo = "; ".join(
+            str(f.get("metadata", {}).get("desfecho", f)) if isinstance(f, dict) else str(f)
+            for f in fontes[:3]
+        )
+        prompt = (
+            "Você é um avaliador clínico independente. Avalie a JUSTIFICATIVA abaixo, "
+            "gerada por um sistema de IA para explicar a predição de um modelo de "
+            "prognóstico clínico.\n\n"
+            f"Classe prevista pelo modelo: {predicted_label}\n"
+            f"Casos similares usados como base: {fontes_resumo or 'nenhum'}\n"
+            f"Justificativa gerada: \"{justificativa}\"\n\n"
+            "Dê uma nota de 1 a 5 pra essa justificativa:\n"
+            "1 = inútil ou contém alucinação (contradiz os casos ou a classe prevista)\n"
+            "2 = fraca, pouco relacionada aos casos\n"
+            "3 = razoável, mas vaga ou genérica\n"
+            "4 = clara e coerente com os casos\n"
+            "5 = totalmente clara e correta, bem fundamentada nos casos\n\n"
+            "Responda EXATAMENTE neste formato, sem mais nada:\n"
+            "NOTA: <um dígito de 1 a 5>\n"
+            "MOTIVO: <uma frase>"
+        )
+        try:
+            if self._llm_backend == "ollama":
+                raw = _generate_ollama(self._llm_model, prompt, max_tokens=80)
+            else:
+                prompt_ids = self.tokenizer.encode(prompt, max_length=900, truncation=True)
+                truncated_prompt = self.tokenizer.decode(prompt_ids, skip_special_tokens=True)
+                output = self.generator(
+                    truncated_prompt, max_new_tokens=80, do_sample=False, num_return_sequences=1,
+                )
+                raw = output[0]["generated_text"].replace(truncated_prompt, "").strip()
+        except Exception as exc:
+            logger.warning("rag_llm_judge_generation_error: %s", exc)
+            return None, f"erro ao gerar julgamento automático: {exc}"
+
+        import re
+        match = re.search(r"NOTA:?\s*([1-5])", raw, re.IGNORECASE)
+        score = int(match.group(1)) if match else None
+        motivo_match = re.search(r"MOTIVO:?\s*(.+)", raw, re.IGNORECASE | re.DOTALL)
+        rationale = motivo_match.group(1).strip()[:500] if motivo_match else raw[:500]
+        if score is None:
+            logger.warning("rag_llm_judge_score_unparseable raw=%r", raw[:200])
+        return score, rationale

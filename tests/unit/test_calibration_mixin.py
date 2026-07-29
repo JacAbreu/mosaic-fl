@@ -32,6 +32,7 @@ def _make_strategy():
     strategy._best_round = 3
     strategy._best_accuracy = 0.7
     strategy._best_state_dict = None  # None = não troca, usa self.global_model como está
+    strategy._best_confusion_matrix = None
     return strategy
 
 

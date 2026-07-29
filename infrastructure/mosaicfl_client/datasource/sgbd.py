@@ -107,16 +107,22 @@ class SGBDDataSource(DataSource):
             max_vocab_size=len(standard_vocab) if standard_vocab else self.vocab_size,
         )
         # build() retorna 5 valores (sequences, labels, vocab, demographics, dia_relativos).
-        # FedProxClient.fit()/evaluate() (src/mosaicfl/core/client.py) iteram o loader como
-        # (batch_x, batch_y, batch_dia) — 3 elementos, dia_relativo obrigatório (usado em
-        # model(batch_x, dia_relativo=batch_dia)) — por isso precisa estar no TensorDataset.
-        # demographics fica de fora: é usado só pela ablation study (late fusion), que tem seu
-        # próprio client/loop de treino separado — não o FedProxClient usado neste datasource.
-        sequences, labels, vocab, _demographics, dia_relativos = pipeline.build(vocab=standard_vocab)
+        # FedProxClient.fit()/evaluate() (src/mosaicfl/core/client.py) desempacotam o batch
+        # de forma adaptável: 3 elementos (batch_x, batch_y, batch_dia) quando MODEL_CFG.
+        # demo_dim=0 (default, comportamento histórico), 4 quando >0 (late fusion — achado
+        # 2026-07-28, ver model.py::SimplifiedBEHRT.forward(demographics=...)). demo_dim
+        # PRECISA ser igual nas duas máquinas (servidor + todos os clientes), senão a
+        # agregação de pesos quebra — nunca configure só um lado.
+        from mosaicfl.core.config import MODEL_CFG
+
+        sequences, labels, vocab, demographics, dia_relativos = pipeline.build(vocab=standard_vocab)
         self.vocab = vocab
         self._n_sequences = len(sequences)
 
-        dataset = TensorDataset(sequences, labels, dia_relativos)
+        if MODEL_CFG.demo_dim > 0 and demographics is not None:
+            dataset = TensorDataset(sequences, labels, dia_relativos, demographics)
+        else:
+            dataset = TensorDataset(sequences, labels, dia_relativos)
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
         logger.info(
             "[SGBD] DataLoader pronto: %d sequências, %d batches, vocab_size=%d",

@@ -14,6 +14,10 @@ from ..schemas import (
     ClassWeightOverridesUpdate,
     FLStatus,
     OrchestrationConfigResponse,
+    RagEvaluationEntry,
+    RagEvaluationListResponse,
+    RagEvaluationReportResponse,
+    RagEvaluationScoreRequest,
     TrainingComparisonResponse,
     TrainingComparisonSide,
     TrainingResultSummary,
@@ -108,6 +112,25 @@ async def startup_checks() -> None:
 
 @router.get("/api/fl/status", response_model=FLStatus)
 async def fl_status():
+    """Reflete o que a engine EM MEMÓRIA está de fato servindo — não um re-scan
+    do diretório de checkpoints em arquivo. Achado 2026-07-28: um round_1.pt
+    obsoleto (de 2026-07-06) sobrevivia em FL_CHECKPOINT_DIR e o status antigo
+    sempre priorizava esse arquivo, mesmo quando a engine já tinha carregado um
+    checkpoint muito mais recente via CheckpointStore (banco) — "1 round" ao lado
+    de "Modelo pronto" mentia sobre o que estava realmente em produção.
+
+    state._engine._checkpoint_round só é int em uma engine real (carregada via
+    _load()/load_from_store()); em mocks de teste é um MagicMock, isinstance()
+    falha e cai no fallback de arquivo (mantém os testes antigos válidos)."""
+    engine = state._engine
+    if engine is not None and isinstance(getattr(engine, "_checkpoint_round", None), int):
+        return FLStatus(
+            model_ready=True,
+            checkpoint_path=str(engine._checkpoint_path) if engine._checkpoint_path else None,
+            rounds_completed=engine._checkpoint_round,
+            last_updated=engine._checkpoint_at,
+        )
+
     ckpt = state._latest_checkpoint()
     rounds, last_updated = 0, None
     if ckpt:
@@ -393,14 +416,25 @@ async def set_class_weight_overrides(
     )
 
 
+# LEFT JOIN com fl_checkpoints pra expor checkpoint_round — sanity-check direto
+# na tela do achado #checkpoint (2026-07-28): fl_checkpoints.round DEVE bater com
+# fl_trainings.best_round; ver project_bug_checkpoint_nao_era_melhor_rodada.
 _TRAINING_SUMMARY_COLUMNS = (
-    "id, algorithm, run_classification, partition_mode, status, started_at, completed_at, "
-    "n_rounds_done, best_round, best_accuracy, converged, macro_f1, macro_auc, ece, ece_pre, "
-    "total_duration_s, dp_noise_multiplier, dp_noise_strategy, is_active_model"
+    "t.id, t.algorithm, t.run_classification, t.partition_mode, t.status, t.started_at, t.completed_at, "
+    "t.n_rounds_done, t.best_round, t.best_accuracy, t.converged, t.macro_f1, t.macro_auc, t.ece, t.ece_pre, "
+    "t.total_duration_s, t.dp_noise_multiplier, t.dp_noise_strategy, t.dp_epsilon_simple, t.dp_epsilon_rdp, "
+    "t.is_active_model, c.round AS checkpoint_round"
+)
+_TRAINING_SUMMARY_FROM = (
+    "metrics.fl_trainings t LEFT JOIN metrics.fl_checkpoints c ON c.training_id = t.id"
 )
 
 
 def _row_to_training_summary(r) -> TrainingResultSummary:
+    mismatch = (
+        r.best_round is not None and r.checkpoint_round is not None
+        and r.best_round != r.checkpoint_round
+    )
     return TrainingResultSummary(
         id=r.id, algorithm=r.algorithm, run_classification=r.run_classification,
         partition_mode=r.partition_mode, status=r.status,
@@ -410,7 +444,9 @@ def _row_to_training_summary(r) -> TrainingResultSummary:
         converged=r.converged, macro_f1=r.macro_f1, macro_auc=r.macro_auc, ece=r.ece,
         ece_pre=r.ece_pre, total_duration_s=r.total_duration_s,
         dp_noise_multiplier=r.dp_noise_multiplier, dp_noise_strategy=r.dp_noise_strategy,
+        dp_epsilon_simple=r.dp_epsilon_simple, dp_epsilon_rdp=r.dp_epsilon_rdp,
         is_active_model=r.is_active_model,
+        checkpoint_round=r.checkpoint_round, checkpoint_mismatch=mismatch,
     )
 
 
@@ -425,7 +461,7 @@ async def list_training_results(fingerprint: str = Depends(_get_token_fingerprin
     try:
         with state._db._engine.connect() as conn:
             rows = conn.execute(_text(
-                f"SELECT {_TRAINING_SUMMARY_COLUMNS} FROM metrics.fl_trainings ORDER BY id DESC"
+                f"SELECT {_TRAINING_SUMMARY_COLUMNS} FROM {_TRAINING_SUMMARY_FROM} ORDER BY t.id DESC"
             )).fetchall()
     except Exception as exc:
         logger.warning("training_results_query_error error=%s", exc)
@@ -450,6 +486,9 @@ async def get_training_rounds(training_id: int, fingerprint: str = Depends(_get_
             best_round_row = conn.execute(_text(
                 "SELECT best_round FROM metrics.fl_trainings WHERE id = :id"
             ), {"id": training_id}).mappings().first()
+            checkpoint_row = conn.execute(_text(
+                "SELECT round, evaluation_json FROM metrics.fl_checkpoints WHERE training_id = :id"
+            ), {"id": training_id}).mappings().first()
             rows = conn.execute(_text("""
                 SELECT round, accuracy, f1_macro, per_class_f1, per_client_f1_json
                 FROM metrics.fl_round_history WHERE training_id = :id ORDER BY round
@@ -472,6 +511,8 @@ async def get_training_rounds(training_id: int, fingerprint: str = Depends(_get_
         training_id=training_id,
         class_labels=list(MODEL_CFG.class_labels),
         best_round=best_round_row["best_round"] if best_round_row else None,
+        checkpoint_round=checkpoint_row["round"] if checkpoint_row else None,
+        evaluation_json=checkpoint_row["evaluation_json"] if checkpoint_row else None,
         rounds=rounds,
     )
 
@@ -480,7 +521,14 @@ async def get_training_rounds(training_id: int, fingerprint: str = Depends(_get_
 async def compare_training_results(fingerprint: str = Depends(_get_token_fingerprint)):
     """Compara o treinamento MAIS RECENTE contra o de MELHOR macro_f1 até hoje —
     mesma comparação feita manualmente pra avaliar se um ajuste (peso de classe,
-    ruído seletivo etc.) melhorou ou piorou em relação ao que já se tinha."""
+    ruído seletivo etc.) melhorou ou piorou em relação ao que já se tinha.
+
+    Restrito a partition_mode='natural' (achado 2026-07-29): sem esse filtro, um
+    treino do Caminho A com FL_PARTITION_MODE=iid_simulado (dado artificialmente
+    embaralhado/balanceado, muito mais fácil de acertar macro_f1 do que o non-IID
+    real de BPSP/HSL) podia vencer a comparação e parecer "o melhor modelo" —
+    maçã com laranja, não avalia a mesma coisa. Ver seção "Paridade Caminho A x B"
+    em docs/Metodologia_Executada_MOSAIC-FL.tex."""
     from sqlalchemy import text as _text
 
     from mosaicfl.core.config import MODEL_CFG
@@ -488,13 +536,15 @@ async def compare_training_results(fingerprint: str = Depends(_get_token_fingerp
     try:
         with state._db._engine.connect() as conn:
             latest_row = conn.execute(_text(
-                f"SELECT {_TRAINING_SUMMARY_COLUMNS} FROM metrics.fl_trainings "
-                "WHERE status = 'completed' ORDER BY id DESC LIMIT 1"
+                f"SELECT {_TRAINING_SUMMARY_COLUMNS} FROM {_TRAINING_SUMMARY_FROM} "
+                "WHERE t.status = 'completed' AND t.partition_mode = 'natural' "
+                "ORDER BY t.id DESC LIMIT 1"
             )).fetchone()
             best_row = conn.execute(_text(
-                f"SELECT {_TRAINING_SUMMARY_COLUMNS} FROM metrics.fl_trainings "
-                "WHERE status = 'completed' AND macro_f1 IS NOT NULL "
-                "ORDER BY macro_f1 DESC LIMIT 1"
+                f"SELECT {_TRAINING_SUMMARY_COLUMNS} FROM {_TRAINING_SUMMARY_FROM} "
+                "WHERE t.status = 'completed' AND t.macro_f1 IS NOT NULL "
+                "AND t.partition_mode = 'natural' "
+                "ORDER BY t.macro_f1 DESC LIMIT 1"
             )).fetchone()
 
             def _per_class_f1_at_best_round(training_id: int, best_round: int):
@@ -520,4 +570,130 @@ async def compare_training_results(fingerprint: str = Depends(_get_token_fingerp
         best=TrainingComparisonSide(
             training=_row_to_training_summary(best_row), per_class_f1=best_pcf1,
         ) if best_row else None,
+    )
+
+
+_RAG_EVAL_COLUMNS = (
+    "id, patient_id_hash, predicted_label, risk_score, justificativa, fontes_json, "
+    "llm_backend, llm_model_used, llm_was_fallback, alucinacao_detectada, confiavel, "
+    "likert_score, llm_judge_score, llm_judge_rationale, evaluator, checkpoint_round, created_at"
+)
+
+
+def _row_to_rag_evaluation(r) -> RagEvaluationEntry:
+    return RagEvaluationEntry(
+        id=r.id, patient_id_hash=r.patient_id_hash, predicted_label=r.predicted_label,
+        risk_score=r.risk_score, justificativa=r.justificativa, fontes_json=r.fontes_json,
+        llm_backend=r.llm_backend, llm_model_used=r.llm_model_used,
+        llm_was_fallback=r.llm_was_fallback, alucinacao_detectada=r.alucinacao_detectada,
+        confiavel=r.confiavel, likert_score=r.likert_score, llm_judge_score=r.llm_judge_score,
+        llm_judge_rationale=r.llm_judge_rationale, evaluator=r.evaluator,
+        checkpoint_round=r.checkpoint_round,
+        created_at=r.created_at.isoformat() if r.created_at else None,
+    )
+
+
+@router.get("/api/admin/rag-evaluations", response_model=RagEvaluationListResponse)
+async def list_rag_evaluations(
+    pending_only: bool = True,
+    fingerprint: str = Depends(_get_token_fingerprint),
+):
+    """Amostras geradas por scripts/rag_likert_evaluation.py --generate.
+    pending_only=True (default): só as que ainda não têm likert_score (nota
+    HUMANA) — é a fila de trabalho de quem vai avaliar. pending_only=False:
+    todas, incluindo já avaliadas (revisão/auditoria)."""
+    from sqlalchemy import text as _text
+
+    where = "likert_score IS NULL" if pending_only else "1=1"
+    try:
+        with state._db._engine.connect() as conn:
+            rows = conn.execute(_text(
+                f"SELECT {_RAG_EVAL_COLUMNS} FROM metrics.rag_likert_evaluations "
+                f"WHERE {where} ORDER BY id"
+            )).fetchall()
+    except Exception as exc:
+        logger.warning("rag_evaluations_query_error error=%s", exc)
+        raise HTTPException(status_code=503, detail=f"Não foi possível consultar as avaliações: {exc}")
+
+    return RagEvaluationListResponse(evaluations=[_row_to_rag_evaluation(r) for r in rows])
+
+
+@router.post("/api/admin/rag-evaluations/{evaluation_id}/score")
+async def score_rag_evaluation(
+    evaluation_id: int,
+    body: RagEvaluationScoreRequest,
+    fingerprint: str = Depends(_get_token_fingerprint),
+):
+    """Registra a nota HUMANA (likert_score) de uma amostra já gerada — nunca
+    inferida automaticamente (ver llm_judge_score, métrica complementar
+    separada, achado 2026-07-29)."""
+    from sqlalchemy import text as _text
+
+    try:
+        with state._db._engine.connect() as conn:
+            result = conn.execute(_text(
+                "UPDATE metrics.rag_likert_evaluations "
+                "SET likert_score = :score, evaluator = :evaluator "
+                "WHERE id = :id"
+            ), {"score": body.likert_score, "evaluator": body.evaluator, "id": evaluation_id})
+            conn.commit()
+    except Exception as exc:
+        logger.error("rag_evaluation_score_error id=%s error=%s", evaluation_id, exc)
+        raise HTTPException(status_code=503, detail=f"Não foi possível salvar a nota: {exc}")
+
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail=f"Avaliação id={evaluation_id} não encontrada")
+
+    audit.log_access("rag_evaluation_scored", token_fp=fingerprint, evaluation_id=evaluation_id)
+    return {"id": evaluation_id, "likert_score": body.likert_score}
+
+
+@router.get("/api/admin/rag-evaluations/report", response_model=RagEvaluationReportResponse)
+async def rag_evaluations_report(fingerprint: str = Depends(_get_token_fingerprint)):
+    """Mesmo resumo de `rag_likert_evaluation.py --report`, via API — as duas
+    métricas (humana e automática) sempre lado a lado, nunca uma no lugar da
+    outra."""
+    from sqlalchemy import text as _text
+
+    try:
+        with state._db._engine.connect() as conn:
+            rows = conn.execute(_text(
+                "SELECT likert_score, llm_judge_score, alucinacao_detectada, confiavel "
+                "FROM metrics.rag_likert_evaluations"
+            )).fetchall()
+    except Exception as exc:
+        logger.warning("rag_evaluations_report_error error=%s", exc)
+        raise HTTPException(status_code=503, detail=f"Não foi possível montar o resumo: {exc}")
+
+    n_total = len(rows)
+    if n_total == 0:
+        return RagEvaluationReportResponse(n_total=0, n_hallucination=0, n_confiavel=0, n_human_scored=0, n_judge_scored=0, n_both_scored=0)
+
+    n_hallucination = sum(1 for r in rows if r.alucinacao_detectada)
+    n_confiavel = sum(1 for r in rows if r.confiavel)
+
+    human = [r for r in rows if r.likert_score is not None]
+    human_dist: dict[int, int] = {}
+    for r in human:
+        human_dist[r.likert_score] = human_dist.get(r.likert_score, 0) + 1
+    human_pct_ge4 = 100 * sum(1 for r in human if r.likert_score >= 4) / len(human) if human else None
+
+    judged = [r for r in rows if r.llm_judge_score is not None]
+    judge_dist: dict[int, int] = {}
+    for r in judged:
+        judge_dist[r.llm_judge_score] = judge_dist.get(r.llm_judge_score, 0) + 1
+    judge_pct_ge4 = 100 * sum(1 for r in judged if r.llm_judge_score >= 4) / len(judged) if judged else None
+
+    both = [r for r in rows if r.likert_score is not None and r.llm_judge_score is not None]
+    agreement_exact = 100 * sum(1 for r in both if r.likert_score == r.llm_judge_score) / len(both) if both else None
+    agreement_ge4 = (
+        100 * sum(1 for r in both if (r.likert_score >= 4) == (r.llm_judge_score >= 4)) / len(both)
+        if both else None
+    )
+
+    return RagEvaluationReportResponse(
+        n_total=n_total, n_hallucination=n_hallucination, n_confiavel=n_confiavel,
+        n_human_scored=len(human), human_pct_ge4=human_pct_ge4, human_distribution=human_dist,
+        n_judge_scored=len(judged), judge_pct_ge4=judge_pct_ge4, judge_distribution=judge_dist,
+        n_both_scored=len(both), agreement_exact_pct=agreement_exact, agreement_ge4_pct=agreement_ge4,
     )

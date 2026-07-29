@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOSAIC-FL — Avaliação do RAG</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .badge-yes { background: #d1e7dd; color: #0a3622; }
+    .badge-no  { background: #f8d7da; color: #58151c; }
+    .badge-warn { background: #fff3cd; color: #664d03; }
+    .score-btn { min-width: 2.5rem; }
+    .score-btn.chosen { box-shadow: 0 0 0 2px #0d6efd inset; }
+    .eval-card.done { opacity: .55; }
+    .bar-track { background: #e9ecef; border-radius: .25rem; height: .5rem; overflow: hidden; }
+    .bar-fill-human { background: #146c43; height: 100%; }
+    .bar-fill-judge { background: #6f42c1; height: 100%; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark mb-3 px-3">
+  <span class="navbar-brand fw-bold">MOSAIC-FL</span>
+  <a href="/" class="text-white-50 small">&larr; Painel Clínico</a>
+</nav>
+
+<div class="container-fluid" style="max-width: 1000px;">
+
+  <div class="card shadow-sm mb-3 border-primary">
+    <div class="card-header bg-primary bg-opacity-10">
+      <strong>Como avaliar</strong>
+      <div class="text-muted small">Leia antes de dar a primeira nota.</div>
+    </div>
+    <div class="card-body">
+      <p class="small mb-2">
+        Pra cada amostra, o modelo previu uma classe de prognóstico e o RAG gerou uma
+        <strong>justificativa em texto</strong>, apoiada em <strong>casos similares recuperados</strong>
+        (listados como "Casos usados"). Sua nota deve responder: <em>essa justificativa é clara e
+        realmente sustentada pelos casos mostrados?</em> — não se a predição do modelo está certa.
+      </p>
+      <div class="row g-2 small mb-2">
+        <div class="col-md-6"><strong>Onde olhar:</strong>
+          <ul class="mb-0">
+            <li>A justificativa faz sentido clínico com a classe prevista?</li>
+            <li>Ela realmente se apoia nos "Casos usados", ou ignora/contradiz eles?</li>
+            <li>É específica (cita achados concretos) ou genérica/vaga?</li>
+            <li>Os badges "alucinação detectada"/"confiável" (heurística automática) batem com sua leitura?</li>
+          </ul>
+        </div>
+        <div class="col-md-6"><strong>Escala 1-5:</strong>
+          <ul class="mb-0">
+            <li><strong>1</strong> — inútil ou contém alucinação (contradiz os casos/a classe prevista)</li>
+            <li><strong>2</strong> — fraca, pouco relacionada aos casos recuperados</li>
+            <li><strong>3</strong> — razoável, mas vaga ou genérica demais</li>
+            <li><strong>4</strong> — clara e coerente com os casos usados</li>
+            <li><strong>5</strong> — totalmente clara e correta, bem fundamentada nos casos</li>
+          </ul>
+        </div>
+      </div>
+      <div class="small text-muted">
+        A "nota automática" (roxa, ao lado de cada amostra) segue a MESMA escala, gerada por um LLM
+        julgando a própria resposta — é só referência, não deve influenciar sua nota. As duas notas
+        nunca são combinadas: sua nota é a única citável como "avaliação humana" no TCC.
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <strong>Resumo</strong>
+        <div class="text-muted small">
+          Nota <strong>humana</strong> (likert_score) é a única que conta como "avaliação humana" no TCC.
+          Nota <strong>automática</strong> (llm_judge_score) é métrica complementar — nunca substitui a sua.
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadAll()">↺</button>
+    </div>
+    <div class="card-body" id="report-container">
+      <div class="text-muted small">Carregando…</div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <strong>Amostras pendentes de nota humana</strong>
+        <div class="text-muted small">Geradas por <code>make server-app-full</code> (ou <code>rag_likert_evaluation.py --generate</code>) — falta só a sua nota.</div>
+      </div>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="show-all-toggle" onchange="loadList()">
+        <label class="form-check-label small" for="show-all-toggle">mostrar também já avaliadas</label>
+      </div>
+    </div>
+    <div class="card-body" id="eval-list">
+      <div class="text-muted small">Carregando…</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 999">
+  <div id="toast" class="toast align-items-center border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toast-body"></div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const API = '';
+const SCORE_LEGEND = {
+  1: '1 = inútil ou contém alucinação (contradiz os casos/a classe prevista)',
+  2: '2 = fraca, pouco relacionada aos casos recuperados',
+  3: '3 = razoável, mas vaga ou genérica demais',
+  4: '4 = clara e coerente com os casos usados',
+  5: '5 = totalmente clara e correta, bem fundamentada nos casos',
+};
+
+function showToast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  const body = document.getElementById('toast-body');
+  body.textContent = msg;
+  el.className = `toast align-items-center border-0 text-bg-${ok ? 'success' : 'danger'}`;
+  bootstrap.Toast.getOrCreateInstance(el, { delay: 3000 }).show();
+}
+
+function fmtPct(v) {
+  return v === null || v === undefined ? '—' : `${v.toFixed(1)}%`;
+}
+
+async function loadAll() {
+  await Promise.all([loadReport(), loadList()]);
+}
+
+function distBars(dist, cls) {
+  const max = Math.max(1, ...Object.values(dist || {}));
+  return [1, 2, 3, 4, 5].map(score => {
+    const n = (dist || {})[score] || 0;
+    const pct = (n / max) * 100;
+    return `<div class="d-flex align-items-center gap-2 small mb-1">
+      <span style="width:1rem">${score}</span>
+      <div class="bar-track flex-grow-1"><div class="${cls}" style="width:${pct}%; height:100%"></div></div>
+      <span style="width:1.5rem" class="text-muted">${n}</span>
+    </div>`;
+  }).join('');
+}
+
+async function loadReport() {
+  const el = document.getElementById('report-container');
+  try {
+    const r = await fetch(`${API}/api/admin/rag-evaluations/report`, { headers: authHeaders() });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    if (d.n_total === 0) {
+      el.innerHTML = '<div class="text-muted">Nenhuma amostra gerada ainda.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="row g-4">
+        <div class="col-md-4">
+          <div class="small text-muted">Amostras totais</div>
+          <div class="fs-4 fw-bold">${d.n_total}</div>
+          <div class="small">Alucinação detectada: ${fmtPct(100 * d.n_hallucination / d.n_total)}</div>
+          <div class="small">Marcado confiável: ${fmtPct(100 * d.n_confiavel / d.n_total)}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted fw-bold">Nota HUMANA (${d.n_human_scored}/${d.n_total})</div>
+          <div class="small mb-1">% com nota ≥4: <strong>${fmtPct(d.human_pct_ge4)}</strong></div>
+          ${distBars(d.human_distribution, 'bar-fill-human')}
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted fw-bold">Nota automática — não-humana (${d.n_judge_scored}/${d.n_total})</div>
+          <div class="small mb-1">% com nota ≥4: <strong>${fmtPct(d.judge_pct_ge4)}</strong></div>
+          ${distBars(d.judge_distribution, 'bar-fill-judge')}
+        </div>
+      </div>
+      ${d.n_both_scored > 0 ? `
+      <hr>
+      <div class="small text-muted">Concordância humano × automático (${d.n_both_scored} amostras com as duas notas):
+        nota idêntica ${fmtPct(d.agreement_exact_pct)} · concordância em "≥4 ou não" ${fmtPct(d.agreement_ge4_pct)}</div>
+      ` : ''}`;
+  } catch (e) {
+    el.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
+  }
+}
+
+function authHeaders() {
+  const token = localStorage.getItem('mosaicfl_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
+async function loadList() {
+  const el = document.getElementById('eval-list');
+  el.innerHTML = '<div class="text-muted small">Carregando…</div>';
+  const pendingOnly = !document.getElementById('show-all-toggle').checked;
+  try {
+    const r = await fetch(`${API}/api/admin/rag-evaluations?pending_only=${pendingOnly}`, { headers: authHeaders() });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (!data.evaluations.length) {
+      el.innerHTML = '<div class="text-muted">Nenhuma amostra pendente. 🎉</div>';
+      return;
+    }
+    el.innerHTML = data.evaluations.map(renderEvalCard).join('');
+  } catch (e) {
+    el.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
+  }
+}
+
+function renderEvalCard(ev) {
+  const done = ev.likert_score !== null && ev.likert_score !== undefined;
+  const fontes = (ev.fontes_json || []).map(f => {
+    const desfecho = (f && f.metadata && f.metadata.desfecho) ? f.metadata.desfecho : JSON.stringify(f);
+    return `<li>${desfecho}</li>`;
+  }).join('');
+  const scoreButtons = [1, 2, 3, 4, 5].map(s => `
+    <button type="button" class="btn btn-sm btn-outline-primary score-btn ${done && ev.likert_score === s ? 'chosen' : ''}"
+            title="${SCORE_LEGEND[s]}"
+            onclick="submitScore(${ev.id}, ${s})" ${done ? 'disabled' : ''}>${s}</button>
+  `).join(' ');
+
+  return `
+    <div class="card mb-3 eval-card ${done ? 'done' : ''}" id="eval-card-${ev.id}">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <span class="badge bg-primary">${ev.predicted_label}</span>
+            <span class="text-muted small ms-2">risk_score=${ev.risk_score.toFixed(4)} · paciente ${ev.patient_id_hash.slice(0, 10)}…</span>
+          </div>
+          <div>
+            <span class="badge ${ev.alucinacao_detectada ? 'badge-no' : 'badge-yes'}">${ev.alucinacao_detectada ? 'alucinação detectada' : 'sem alucinação'}</span>
+            <span class="badge ${ev.confiavel ? 'badge-yes' : 'badge-warn'}">${ev.confiavel ? 'confiável' : 'baixa confiança'}</span>
+          </div>
+        </div>
+        <p class="mt-2 mb-1">${ev.justificativa}</p>
+        ${fontes ? `<div class="small text-muted">Casos usados: <ul class="mb-1">${fontes}</ul></div>` : ''}
+        <div class="small text-muted">backend: ${ev.llm_backend || '—'} · modelo: ${ev.llm_model_used || '—'}
+          ${ev.llm_was_fallback ? ' · <span class="text-warning">fallback ativado</span>' : ''}</div>
+
+        <div class="small text-muted mt-2">
+          [não-humano] nota automática: <strong>${ev.llm_judge_score ?? '—'}</strong>
+          ${ev.llm_judge_rationale ? ` — "${ev.llm_judge_rationale}"` : ''}
+        </div>
+
+        <hr>
+        ${done
+          ? `<div class="small">Sua nota: <span class="badge bg-success fs-6">${ev.likert_score}</span> (avaliador: ${ev.evaluator || '—'})</div>`
+          : `<div class="d-flex align-items-center gap-2">
+               <span class="small text-muted">Sua nota (1=inútil/alucinação .. 5=totalmente clara e correta):</span>
+               ${scoreButtons}
+             </div>`
+        }
+      </div>
+    </div>`;
+}
+
+async function submitScore(id, score) {
+  const evaluator = localStorage.getItem('mosaicfl_evaluator_name') || prompt('Seu nome (fica salvo pra próxima vez):');
+  if (!evaluator) return;
+  localStorage.setItem('mosaicfl_evaluator_name', evaluator);
+
+  try {
+    const r = await fetch(`${API}/api/admin/rag-evaluations/${id}/score`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ likert_score: score, evaluator }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    showToast(`Nota ${score} registrada.`);
+    await loadAll();
+  } catch (e) {
+    showToast(`Erro ao salvar: ${e.message}`, false);
+  }
+}
+
+loadAll();
+</script>
+</body>
+</html>

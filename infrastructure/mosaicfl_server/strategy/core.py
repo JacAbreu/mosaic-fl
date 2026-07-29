@@ -159,6 +159,19 @@ class ProductionFedProxStrategy(
         self._ece: Optional[float] = None
         self._training_completed = False
 
+        # Precision@k do RAG (achado 2026-07-28: só existia no Caminho A,
+        # test_loader centralizado — impossível no Caminho B por design de
+        # privacidade). Aqui cada cliente avalia LOCALMENTE, contra sua própria
+        # val_loader real, usando uma cópia local do knowledge base recebida do
+        # servidor (rag_patterns_json injetado em configure_evaluate — ver
+        # fit_config_mixin.py); nunca centraliza amostra. self._last_rag_patterns_json
+        # cacheia os padrões mais recentes (de _build_rag_knowledge_base) pra
+        # reenviar aos clientes na PRÓXIMA rodada de avaliação — por isso
+        # Precision@k só fica disponível a partir da 2ª rodada em diante.
+        self._last_rag_patterns_json: Optional[str] = None
+        self._rag_precision_at_k: Optional[float] = None
+        self._rag_k: Optional[int] = None
+
         # DP-FedAvg (McMahan et al. 2018) — portado do Caminho A (achado 2026-07-28:
         # "o que tem no Caminho A tem que ter no Caminho B", decisão da autora — o
         # ruído nunca tinha sido aplicado aqui, só no manual_loop.py de simulação).
@@ -179,6 +192,10 @@ class ProductionFedProxStrategy(
         # persistir a calibração sobrescreveria o checkpoint da melhor rodada com os
         # pesos da última, reintroduzindo o mesmo bug que a correção de hoje resolve.
         self._best_state_dict: Optional[Dict[str, "torch.Tensor"]] = None
+        # Matriz de confusão agregada da MELHOR rodada (achado 2026-07-29) — mesmo
+        # cache em memória de _best_state_dict, pelo mesmo motivo: a rodada final
+        # configurada não é necessariamente a melhor.
+        self._best_confusion_matrix: Optional[List[List[int]]] = None
 
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -342,6 +359,22 @@ class ProductionFedProxStrategy(
                 dp_epsilon_rdp = self._rdp_accountant.get_epsilon(delta=1e-5)
             except Exception:
                 pass
+
+        # Matriz de confusão + estatísticas derivadas (precisão, recall/
+        # sensibilidade, especificidade por classe, accuracy=p̂ com IC 95% de
+        # Wilson) — achado 2026-07-29, ver mosaicfl.core.confusion_stats.
+        # None quando ainda não há matriz agregada nenhuma (1ª rodada de
+        # avaliação, ou nenhum cliente enviou).
+        confusion_stats = None
+        if self._best_confusion_matrix is not None:
+            try:
+                from mosaicfl.core.confusion_stats import derive_stats_from_confusion_matrix
+                confusion_stats = derive_stats_from_confusion_matrix(
+                    self._best_confusion_matrix, list(MODEL_CFG.class_labels),
+                )
+            except Exception as e:
+                logger.warning("confusion_stats_error training_id=%s error=%s", self._training_id, e)
+
         return {
             "best_round": best_round,
             "total_rounds_so_far": self.round_counter,
@@ -357,6 +390,7 @@ class ProductionFedProxStrategy(
             "dp_epsilon_simple": self._dp_epsilon_simple,
             "dp_epsilon_rdp": dp_epsilon_rdp,
             "dp_noise_strategy": FED_CFG.dp_noise_strategy if FED_CFG.dp_noise_multiplier > 0 else None,
+            "confusion_matrix_stats": confusion_stats,
         }
 
     def _apply_dp_noise_to_aggregated(self, aggregated_parameters, server_round: int, n_clients: int):
@@ -503,8 +537,21 @@ class ProductionFedProxStrategy(
         macro_auc = aggregated_metrics.get("macro_auc") if aggregated_metrics else None
         per_class_f1_json = aggregated_metrics.get("per_class_f1_json") if aggregated_metrics else None
         per_class_f1 = json.loads(per_class_f1_json) if per_class_f1_json else None
+        confusion_matrix_json = aggregated_metrics.get("confusion_matrix_json") if aggregated_metrics else None
+        confusion_matrix = json.loads(confusion_matrix_json) if confusion_matrix_json else None
         rag_patterns_json = aggregated_metrics.get("rag_patterns_json") if aggregated_metrics else None
         calibration_method = aggregated_metrics.get("calibration_method") if aggregated_metrics else None
+
+        # Precision@k do RAG — presente só quando algum cliente recebeu
+        # rag_patterns_json em configure_evaluate() e conseguiu avaliar (ver
+        # client.py::evaluate() e federated.py::weighted_average_evaluate_metrics).
+        if aggregated_metrics and aggregated_metrics.get("rag_precision_at_k") is not None:
+            self._rag_precision_at_k = aggregated_metrics["rag_precision_at_k"]
+            self._rag_k = aggregated_metrics.get("rag_k")
+            logger.info(
+                "rag_precision_at_k_aggregated round=%d precision=%.4f k=%s",
+                server_round, self._rag_precision_at_k, self._rag_k,
+            )
 
         # Calibração por cliente ANTES da agregação — só o T/isotônico federado final
         # (pós-agregação) ia pro checkpoint; o valor individual de cada hospital só
@@ -664,6 +711,7 @@ class ProductionFedProxStrategy(
             # última rodada, pra não sobrescrever o checkpoint da melhor rodada com
             # os pesos da última (ver comentário em __init__).
             self._best_state_dict = {k: v.clone() for k, v in self.global_model.state_dict().items()}
+            self._best_confusion_matrix = confusion_matrix
 
             # Checkpoint salvo SÓ quando a rodada melhora o critério (achado
             # 2026-07-28 — mesmo padrão de manual_loop.py, Caminho A, linha 278-284).
@@ -804,6 +852,8 @@ class ProductionFedProxStrategy(
                     dp_epsilon_simple=self._dp_epsilon_simple,
                     dp_epsilon_rdp=dp_epsilon_rdp,
                     dp_noise_strategy=FED_CFG.dp_noise_strategy if FED_CFG.dp_noise_multiplier > 0 else None,
+                    rag_precision_at_k=self._rag_precision_at_k,
+                    rag_k=self._rag_k,
                     dp_noise_group_multipliers_json=(
                         json.dumps(self._dp_last_group_multipliers)
                         if self._dp_last_group_multipliers is not None else None
@@ -879,6 +929,11 @@ class ProductionFedProxStrategy(
             from mosaicfl.core.rag import ClinicalRAG
             ClinicalRAG().build_knowledge_base(patterns)
             logger.info("rag_knowledge_base_built", extra={"n_patterns": len(patterns)})
+            # Cacheia pra reenviar aos clientes na PRÓXIMA rodada de avaliação
+            # (configure_evaluate → _inject_rag_patterns) — cada cliente constrói sua
+            # PRÓPRIA cópia local do knowledge base (FL_DB_URL local) e avalia
+            # Precision@k contra sua val_loader real, sem centralizar amostra.
+            self._last_rag_patterns_json = patterns_json
         except Exception as e:
             logger.warning("rag_knowledge_base_build_error", extra={"error": str(e)})
 

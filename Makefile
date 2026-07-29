@@ -401,6 +401,47 @@ server-app:
 	FL_CALIBRATION_METHOD=$(FL_CALIBRATION_METHOD) \
 	$(FLWR) run . production
 
+# Sobe o ServerApp em modo LOCAL-ONLY: um único hospital conectado, sem
+# federação de verdade — baseline "local" comparável ao federado na mesma
+# rede real (migration 030, metrics.fl_trainings.local_only_hospital).
+# Ex: make server-app-local-only LOCAL_ONLY_HOSPITAL=BPSP
+# Depois suba SÓ o SuperNode desse hospital (make supernode FL_CLIENT_ID=BPSP
+# FL_DATA_SOURCE=sgbd) — NÃO suba o outro simultaneamente, senão min-clients=1
+# aceita o primeiro que conectar e o treino deixa de ser local-only de verdade.
+server-app-local-only:
+	@if [ -z "$(LOCAL_ONLY_HOSPITAL)" ]; then \
+		echo "ERRO: defina LOCAL_ONLY_HOSPITAL=BPSP ou LOCAL_ONLY_HOSPITAL=HSL"; \
+		exit 1; \
+	fi
+	FL_LLM_BACKEND=$(FL_LLM_BACKEND) \
+	FL_LLM_MODEL=$(FL_LLM_MODEL) \
+	FL_LLM_HF_MODEL=$(FL_LLM_HF_MODEL) \
+	FL_CALIBRATION_METHOD=$(FL_CALIBRATION_METHOD) \
+	$(FLWR) run . production --run-config 'min-clients=1 local-only-hospital="$(LOCAL_ONLY_HOSPITAL)"'
+
+# ── Hooks pós-treino (achado 2026-07-29) ──────────────────────────────────────
+# `make server-app`/`server-app-local-only` SUBMETEM o treino e retornam quase
+# na hora — o treino em si roda assíncrono no ServerApp. Os alvos abaixo
+# encadeiam a submissão com scripts/post_training_hooks.py, que ESPERA (poll no
+# banco) o treino terminar e então: (3) gera amostras de avaliação do RAG
+# (nota humana ainda pendente — make rag-score-pending depois) e (4) roda
+# significância estatística se já houver 2+ execuções da mesma config. Rodam
+# no terminal que ficar aberto até o treino acabar (pode levar horas) — se
+# preferir não bloquear o terminal, rode `make server-app` normal e depois
+# `python3 scripts/post_training_hooks.py` manualmente quando o treino terminar.
+server-app-full: server-app
+	.venv/bin/python scripts/post_training_hooks.py
+
+server-app-local-only-full: server-app-local-only
+	.venv/bin/python scripts/post_training_hooks.py
+
+# Avalia manualmente (nota HUMANA de verdade) as amostras que --generate criou.
+rag-score-pending:
+	.venv/bin/python scripts/rag_likert_evaluation.py --score-pending
+
+rag-report:
+	.venv/bin/python scripts/rag_likert_evaluation.py --report
+
 # Inicia um SuperNode (cliente) conectando ao SuperLink.
 # Ex: make supernode FL_CLIENT_ID=hospital_1 FL_DATA_SOURCE=sgbd
 supernode:

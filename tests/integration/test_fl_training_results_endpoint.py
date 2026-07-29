@@ -20,7 +20,8 @@ def _training_row(**kwargs):
         status="completed", started_at=None, completed_at=None, n_rounds_done=110,
         best_round=95, best_accuracy=0.75, converged=True, macro_f1=0.42, macro_auc=0.83,
         ece=0.11, ece_pre=0.08, total_duration_s=15621.6, dp_noise_multiplier=None,
-        dp_noise_strategy=None, is_active_model=False,
+        dp_noise_strategy=None, dp_epsilon_simple=None, dp_epsilon_rdp=None,
+        is_active_model=False, checkpoint_round=95,
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -70,6 +71,22 @@ class TestListTrainingResults:
         assert data[0]["id"] == 77
         assert data[0]["macro_f1"] == pytest.approx(0.42)
 
+    def test_checkpoint_mismatch_flagged(self, client_with_engine):
+        """Achado 2026-07-28: fl_checkpoints.round divergindo de best_round é o
+        bug do checkpoint nunca ser da melhor rodada (ver
+        project_bug_checkpoint_nao_era_melhor_rodada). A tela precisa sinalizar
+        isso, não só mostrar os dois números lado a lado sem destaque."""
+        from infrastructure.mosaicfl_api import state
+        state._db._engine = _mock_engine_connect(fetchall_result=[
+            _training_row(id=77, best_round=95, checkpoint_round=110),
+            _training_row(id=78, best_round=30, checkpoint_round=30),
+        ])
+
+        r = client_with_engine.get("/api/admin/fl-training-results", headers={"X-API-Key": "k"})
+        data = r.json()["trainings"]
+        assert data[0]["checkpoint_mismatch"] is True
+        assert data[1]["checkpoint_mismatch"] is False
+
     def test_empty_list(self, client_with_engine):
         from infrastructure.mosaicfl_api import state
         state._db._engine = _mock_engine_connect(fetchall_result=[])
@@ -114,6 +131,40 @@ class TestGetTrainingRounds:
         assert data["rounds"][0]["per_class_f1"][1] == pytest.approx(0.17)
         assert data["rounds"][0]["per_client_f1"][0]["client_id"] == 1
 
+    def test_returns_checkpoint_round_and_evaluation_json(self, client_with_engine):
+        from infrastructure.mosaicfl_api import state
+        round_row = SimpleNamespace(
+            round=95, accuracy=0.75, f1_macro=0.42,
+            per_class_f1=[0.84, 0.17, 0.0, 0.58, 0.50], per_client_f1_json=None,
+        )
+        conn = MagicMock()
+
+        def _execute(stmt, params=None):
+            result = MagicMock()
+            sql = str(stmt)
+            if "fl_trainings" in sql:
+                result.mappings.return_value.first.return_value = {"best_round": 95}
+            elif "fl_checkpoints" in sql:
+                result.mappings.return_value.first.return_value = {
+                    "round": 95, "evaluation_json": {"best_round": 95, "best_f1_macro": 0.42},
+                }
+            elif "fl_round_history" in sql:
+                result.fetchall.return_value = [round_row]
+            return result
+
+        conn.execute.side_effect = _execute
+        conn.__enter__.return_value = conn
+        conn.__exit__.return_value = False
+        engine = MagicMock()
+        engine.connect.return_value = conn
+        state._db._engine = engine
+
+        r = client_with_engine.get("/api/admin/fl-training-results/77/rounds", headers={"X-API-Key": "k"})
+        assert r.status_code == 200
+        data = r.json()
+        assert data["checkpoint_round"] == 95
+        assert data["evaluation_json"]["best_f1_macro"] == pytest.approx(0.42)
+
     def test_unknown_training_id_returns_404(self, client_with_engine):
         from infrastructure.mosaicfl_api import state
         state._db._engine = _mock_engine_connect(fetchall_result=[], first_results=[None])
@@ -130,6 +181,26 @@ class TestGetTrainingRounds:
 
 
 class TestCompareTrainingResults:
+    def test_queries_restrict_to_partition_mode_natural(self, client_with_engine):
+        """Achado 2026-07-29: sem esse filtro, um treino do Caminho A com
+        FL_PARTITION_MODE=iid_simulado (dado artificialmente balanceado, muito
+        mais fácil de acertar macro_f1) podia vencer a comparação contra o
+        non-IID real de BPSP/HSL — maçã com laranja."""
+        from infrastructure.mosaicfl_api import state
+        conn = MagicMock()
+        conn.execute.return_value.fetchone.return_value = None
+        conn.__enter__.return_value = conn
+        conn.__exit__.return_value = False
+        engine = MagicMock()
+        engine.connect.return_value = conn
+        state._db._engine = engine
+
+        client_with_engine.get("/api/admin/fl-training-results/compare", headers={"X-API-Key": "k"})
+
+        sql_calls = [str(c.args[0]) for c in conn.execute.call_args_list]
+        assert any("partition_mode = 'natural'" in sql for sql in sql_calls)
+        assert len(sql_calls) == 2  # latest + best, ambas filtradas
+
     def test_compares_latest_and_best(self, client_with_engine):
         from infrastructure.mosaicfl_api import state
         latest = _training_row(id=77, macro_f1=0.42, best_round=95)
@@ -142,9 +213,9 @@ class TestCompareTrainingResults:
             call_count["n"] += 1
             result = MagicMock()
             sql = str(stmt)
-            if "ORDER BY id DESC LIMIT 1" in sql:
+            if "ORDER BY t.id DESC LIMIT 1" in sql:
                 result.fetchone.return_value = latest
-            elif "ORDER BY macro_f1 DESC LIMIT 1" in sql:
+            elif "ORDER BY t.macro_f1 DESC LIMIT 1" in sql:
                 result.fetchone.return_value = best
             elif "fl_round_history" in sql:
                 pcf = [0.84, 0.17, 0.0, 0.58, 0.50] if params.get("tid") == 77 else [0.85, 0.0, 0.0, 0.68, 0.53]
@@ -193,5 +264,12 @@ class TestCompareTrainingResults:
 class TestFlTrainingResultsPage:
     def test_page_served(self, client_with_engine):
         r = client_with_engine.get("/fl-training-results")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+
+
+class TestPredictPage:
+    def test_page_served(self, client_with_engine):
+        r = client_with_engine.get("/predict")
         assert r.status_code == 200
         assert "text/html" in r.headers["content-type"]

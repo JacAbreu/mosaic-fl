@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import pandas as pd
 from sqlalchemy import create_engine, text
 
+from mosaicfl.core.config import MODEL_CFG
 from mosaicfl.core.preprocessor import _map_outcome
 
 _CLASS_NAMES = {
@@ -59,10 +60,16 @@ def main() -> None:
 
     print(f"Atendimentos elegíveis (outcome 0/1, datas consistentes): {len(df):,}\n")
 
-    # Aplica a MESMA função usada em produção — garante que a auditoria reflete
-    # exatamente o que o pipeline real produz, não uma reimplementação paralela.
+    # Aplica a MESMA função e o MESMO limiar usados em produção (MODEL_CFG.
+    # internado_breve_max_days, env FL_INTERNADO_BREVE_MAX_DAYS) — garante que a
+    # auditoria reflete exatamente o que o pipeline real produz, não uma
+    # reimplementação paralela nem um valor desatualizado.
+    limiar_atual = MODEL_CFG.internado_breve_max_days
     df["classe"] = df.apply(
-        lambda r: _map_outcome(r["outcome_class"], r["duration_days"], r["attendance_type"]),
+        lambda r: _map_outcome(
+            r["outcome_class"], r["duration_days"], r["attendance_type"],
+            internado_breve_max_days=limiar_atual,
+        ),
         axis=1,
     )
     df["classe_nome"] = df["classe"].map(_CLASS_NAMES)
@@ -83,9 +90,9 @@ def main() -> None:
     tabela = pd.crosstab(df["hospital_id"], df["classe_nome"], normalize="index") * 100
     print(tabela.round(1).to_string())
 
-    # --- Auditoria do limiar de 10 dias -------------------------------------
+    # --- Auditoria do limiar atual -------------------------------------------
     print("\n" + "=" * 60)
-    print("Auditoria do limiar de 10 dias (melhora_internado_breve vs. grave)")
+    print(f"Auditoria do limiar de {limiar_atual} dias (melhora_internado_breve vs. grave)")
     print("=" * 60)
     internados_melhora = df[(df["outcome_class"] == 1) & (df["attendance_type"] == "Internado")]
     if len(internados_melhora) == 0:
@@ -95,19 +102,20 @@ def main() -> None:
     desc = internados_melhora["duration_days"].describe(percentiles=[0.25, 0.5, 0.75, 0.9])
     print(desc.to_string())
 
-    n_breve = (internados_melhora["duration_days"] <= 10).sum()
-    n_grave = (internados_melhora["duration_days"] > 10).sum()
+    n_breve = (internados_melhora["duration_days"] <= limiar_atual).sum()
+    n_grave = (internados_melhora["duration_days"] > limiar_atual).sum()
     total = len(internados_melhora)
-    print(f"\n  Com o corte atual (10 dias): breve={n_breve:,} ({n_breve/total*100:.1f}%), "
+    print(f"\n  Com o corte atual ({limiar_atual} dias): breve={n_breve:,} ({n_breve/total*100:.1f}%), "
           f"grave={n_grave:,} ({n_grave/total*100:.1f}%)")
 
     mediana = internados_melhora["duration_days"].median()
     print(f"  Mediana real de duration_days neste grupo: {mediana:.1f} dias")
-    if abs(mediana - 10) > 3:
-        print(f"  >>> O corte de 10 dias está longe da mediana ({mediana:.1f}) — "
-              f"pode estar produzindo uma divisão desbalanceada entre breve/grave.")
+    if abs(mediana - limiar_atual) > 3:
+        print(f"  >>> O corte de {limiar_atual} dias está longe da mediana ({mediana:.1f}) — "
+              f"pode estar produzindo uma divisão desbalanceada entre breve/grave. "
+              f"Ajuste via FL_INTERNADO_BREVE_MAX_DAYS se decidir trocar.")
     else:
-        print("  >>> O corte de 10 dias está próximo da mediana — divisão razoavelmente equilibrada.")
+        print(f"  >>> O corte de {limiar_atual} dias está próximo da mediana — divisão razoavelmente equilibrada.")
 
 
 if __name__ == "__main__":

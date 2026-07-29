@@ -55,6 +55,9 @@ def _make_strategy(tmp_path):
     strategy._rdp_accountant = None
     strategy._dp_epsilon_simple = None
     strategy._dp_last_group_multipliers = None
+    strategy._last_rag_patterns_json = None
+    strategy._rag_precision_at_k = None
+    strategy._rag_k = None
     strategy._best_criterion_value = 0.0
     strategy._best_round = 0
     strategy._train_start_time = 0.0

@@ -66,6 +66,22 @@ def weighted_average_evaluate_metrics(metrics: List[Tuple[int, Dict[str, Any]]])
         ]
         result["per_class_f1_json"] = json.dumps(per_class_f1)
 
+    # Matriz de confusão (achado 2026-07-29, ver mosaicfl.core.client::evaluate) —
+    # soma célula a célula entre hospitais, NÃO média ponderada como as métricas
+    # acima. Somar contagens de matrizes de confusão de populações disjuntas é
+    # matematicamente equivalente a computar uma única matriz sobre a união das
+    # duas populações — exatamente o que uma avaliação centralizada faria, sem
+    # nunca ter centralizado uma amostra bruta.
+    cm_lists = [json.loads(m["confusion_matrix_json"]) for _, m in metrics if "confusion_matrix_json" in m]
+    if cm_lists:
+        n_classes_cm = len(cm_lists[0])
+        summed = [[0] * n_classes_cm for _ in range(n_classes_cm)]
+        for cm in cm_lists:
+            for i in range(n_classes_cm):
+                for j in range(n_classes_cm):
+                    summed[i][j] += cm[i][j]
+        result["confusion_matrix_json"] = json.dumps(summed)
+
     # macro_auc: nem todo cliente necessariamente envia (ver _macro_auc_ovr em client.py —
     # omitido quando nenhuma classe tem as duas categorias presentes localmente). Média
     # ponderada só entre quem enviou, com o peso de amostras de quem enviou — não do total
@@ -74,6 +90,22 @@ def weighted_average_evaluate_metrics(metrics: List[Tuple[int, Dict[str, Any]]])
     if auc_entries:
         auc_total = sum(n for n, _ in auc_entries)
         result["macro_auc"] = sum(n * v for n, v in auc_entries) / auc_total
+
+    # Precision@k do RAG (achado 2026-07-28, ver mosaicfl.core.rag.precision) — só
+    # presente quando o servidor já reenviou rag_patterns_json (configure_evaluate)
+    # e o cliente conseguiu avaliar localmente. Mesma média ponderada por n_examples
+    # de accuracy/f1_macro acima — n_queries (k × nº de amostras avaliadas) seria
+    # tecnicamente mais preciso, mas não está disponível neste ponto (só escalar
+    # rag_precision_at_k chega a este agregador) e n é proporcional o suficiente.
+    rag_precision_entries = [
+        (n, m["rag_precision_at_k"]) for n, m in metrics if m.get("rag_precision_at_k") is not None
+    ]
+    if rag_precision_entries:
+        rag_total = sum(n for n, _ in rag_precision_entries)
+        result["rag_precision_at_k"] = sum(n * v for n, v in rag_precision_entries) / rag_total
+        k_values = [m["rag_k"] for _, m in metrics if m.get("rag_k") is not None]
+        if k_values:
+            result["rag_k"] = k_values[0]  # k é global (FED_CFG.top_k), igual em todo cliente
 
     # Padrões pro RAG (rag_patterns_json) — só presentes na rodada em que o servidor
     # pediu (config extract_rag_patterns). Diferente de accuracy/F1, NÃO se faz média —

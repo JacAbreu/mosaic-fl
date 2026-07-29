@@ -3,6 +3,7 @@ import pytest
 import numpy as np
 import torch
 from pathlib import Path
+from unittest.mock import MagicMock
 from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
@@ -252,6 +253,18 @@ class TestFedProxClient:
         result = weighted_average_accuracy(broken)
         assert result == {"accuracy": 0.0}
 
+    def test_evaluate_includes_confusion_matrix_json(self, evaluate_result):
+        """Achado 2026-07-29: matriz de confusão só existia no Caminho A. Cada
+        cliente agora manda a sua LOCAL (contagens agregadas, não predição/
+        rótulo bruto por paciente) — servidor soma célula a célula."""
+        import json
+        _, n_samples, metrics = evaluate_result
+        assert "confusion_matrix_json" in metrics
+        cm = json.loads(metrics["confusion_matrix_json"])
+        assert len(cm) == NUM_CLASSES
+        assert all(len(row) == NUM_CLASSES for row in cm)
+        assert sum(sum(row) for row in cm) == n_samples
+
     def test_evaluate_is_deterministic(self, contract_client):
         params = contract_client.get_parameters({})
         loss_a, _, _ = contract_client.evaluate(params, {})
@@ -397,6 +410,147 @@ class TestFedProxClient:
         assert metrics["calibration_method"] in ("temperature", "isotonic")
         assert "ece_pre_bin_stats_json" in metrics
         assert "ece_post_bin_stats_json" in metrics
+
+
+class TestEvaluateRagPrecisionAtK:
+    """Precision@k do RAG portado pro Caminho B (achado 2026-07-28) — cliente
+    constrói uma cópia LOCAL do knowledge base (nunca centraliza amostra) a
+    partir de rag_patterns_json recebido do servidor e avalia contra sua
+    própria val_loader real. ClinicalRAG é mockado — não precisa de banco/
+    embeddings de verdade pra testar a fiação client.py <-> mosaicfl.core.rag.precision."""
+
+    SEQ_LEN = 16
+
+    @pytest.fixture
+    def rag_test_client(self):
+        from mosaicfl.core.client import FedProxClient
+        x   = torch.randint(1, VOCAB_SIZE, (8, self.SEQ_LEN))
+        y   = torch.randint(0, NUM_CLASSES, (8,))
+        dia = torch.randint(0, 100, (8, self.SEQ_LEN))
+        loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
+        return FedProxClient(client_id=99, train_loader=loader, val_loader=loader)
+
+    def test_without_rag_patterns_json_no_rag_keys(self, rag_test_client):
+        params = rag_test_client.get_parameters({})
+        _, _, metrics = rag_test_client.evaluate(params, {})
+        assert "rag_precision_at_k" not in metrics
+        assert "rag_k" not in metrics
+
+    def test_with_rag_patterns_json_but_no_vocab_skips_silently(self, rag_test_client):
+        """self.vocab vazio (default do cliente) — não deve tentar construir RAG,
+        não deve quebrar."""
+        params = rag_test_client.get_parameters({})
+        _, _, metrics = rag_test_client.evaluate(
+            params, {"rag_patterns_json": '[{"desfecho": "curado_pronto"}]'}
+        )
+        assert "rag_precision_at_k" not in metrics
+
+    def test_with_vocab_and_patterns_computes_precision(self, rag_test_client, monkeypatch):
+        import mosaicfl.core.rag as rag_module
+
+        fake_rag_instance = MagicMock()
+        fake_rag_instance.retrieve.return_value = [
+            {"metadata": {"desfecho": "curado_pronto"}},
+        ] * 3
+        monkeypatch.setattr(rag_module, "ClinicalRAG", lambda *a, **kw: fake_rag_instance)
+        rag_test_client.vocab = {"CLS": 0, "PAD": 1, "UNK": 2, "WBC_ALTO": 3}
+        # val_loader com token conhecido (3="WBC_ALTO") — token aleatório do fixture
+        # padrão quase nunca cai nos 4 IDs mapeados no vocab pequeno acima, o que
+        # deixaria eval_precision_at_k sem nenhuma query válida.
+        x = torch.full((4, self.SEQ_LEN), 3, dtype=torch.long)
+        y = torch.zeros(4, dtype=torch.long)
+        dia = torch.zeros(4, self.SEQ_LEN, dtype=torch.long)
+        rag_test_client.val_loader = DataLoader(TensorDataset(x, y, dia), batch_size=4)
+
+        params = rag_test_client.get_parameters({})
+        _, _, metrics = rag_test_client.evaluate(
+            params, {"rag_patterns_json": '[{"desfecho": "curado_pronto"}]'}
+        )
+
+        assert metrics["rag_precision_at_k"] == 1.0
+        assert metrics["rag_k"] == 3
+        fake_rag_instance.build_knowledge_base.assert_called_once()
+
+    def test_rag_error_does_not_crash_evaluate(self, rag_test_client, monkeypatch):
+        """RAG é enriquecimento — uma falha aqui (ex.: banco fora do ar) não pode
+        derrubar a avaliação inteira, mesma filosofia do resto do arquivo."""
+        import mosaicfl.core.rag as rag_module
+
+        def _boom(*a, **kw):
+            raise RuntimeError("banco local indisponível")
+        monkeypatch.setattr(rag_module, "ClinicalRAG", _boom)
+        rag_test_client.vocab = {"CLS": 0, "PAD": 1, "UNK": 2, "WBC_ALTO": 3}
+
+        params = rag_test_client.get_parameters({})
+        loss, total, metrics = rag_test_client.evaluate(
+            params, {"rag_patterns_json": '[{"desfecho": "curado_pronto"}]'}
+        )
+        assert "rag_precision_at_k" not in metrics
+        assert total > 0  # avaliação normal continuou intacta
+
+
+class TestFedProxClientDemographics:
+    """Late fusion demográfica (MODEL_CFG.demo_dim) portada do ablation study
+    (Caminho A, experiments/training/core/ablation.py) pro FedProxClient real
+    (Caminho B) — achado 2026-07-28. demo_dim=0 (default) precisa continuar
+    bit-a-bit idêntico ao comportamento anterior; demo_dim=2 precisa aceitar
+    batches de 4 elementos (com demographics) sem quebrar. MODEL_CFG é um
+    dataclass frozen — object.__setattr__ contorna isso só para o teste,
+    sempre restaurado no finally (singleton de módulo, mesmo padrão de
+    TestFedProxClientResourceMetrics abaixo)."""
+
+    SEQ_LEN = 16
+
+    def _loader_with_demo(self, n=8):
+        x    = torch.randint(1, VOCAB_SIZE, (n, self.SEQ_LEN))
+        y    = torch.randint(0, NUM_CLASSES, (n,))
+        dia  = torch.randint(0, 100, (n, self.SEQ_LEN))
+        demo = torch.rand(n, 2)  # [age_norm, sex_binary]
+        return DataLoader(TensorDataset(x, y, dia, demo), batch_size=4)
+
+    def _loader_without_demo(self, n=8):
+        x   = torch.randint(1, VOCAB_SIZE, (n, self.SEQ_LEN))
+        y   = torch.randint(0, NUM_CLASSES, (n,))
+        dia = torch.randint(0, 100, (n, self.SEQ_LEN))
+        return DataLoader(TensorDataset(x, y, dia), batch_size=4)
+
+    def test_demo_dim_zero_model_has_no_demo_head(self):
+        from mosaicfl.core.client import FedProxClient
+        loader = self._loader_without_demo()
+        client = FedProxClient(0, loader, loader)
+        assert client.model.demo_dim == 0
+
+    def test_demo_dim_two_fit_and_evaluate_accept_4tuple_batches(self):
+        from mosaicfl.core.client import FedProxClient
+        from mosaicfl.core.config import MODEL_CFG
+        original = MODEL_CFG.demo_dim
+        object.__setattr__(MODEL_CFG, "demo_dim", 2)
+        try:
+            loader = self._loader_with_demo()
+            client = FedProxClient(0, loader, loader)
+            assert client.model.demo_dim == 2
+
+            params = client.get_parameters({})
+            new_params, total, _ = client.fit(params, {})
+            assert total > 0
+
+            loss, total, metrics = client.evaluate(new_params, {})
+            assert total > 0
+            assert isinstance(loss, float)
+        finally:
+            object.__setattr__(MODEL_CFG, "demo_dim", original)
+
+    def test_demo_dim_zero_still_works_with_3tuple_batches(self):
+        """Comportamento default (demo_dim=0) precisa continuar exatamente como
+        antes desta funcionalidade existir — regressão mais importante deste bloco."""
+        from mosaicfl.core.client import FedProxClient
+        loader = self._loader_without_demo()
+        client = FedProxClient(0, loader, loader)
+        params = client.get_parameters({})
+        new_params, total, _ = client.fit(params, {})
+        assert total > 0
+        loss, total, _ = client.evaluate(new_params, {})
+        assert total > 0
 
 
 class TestFedProxClientResourceMetrics:

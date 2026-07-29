@@ -29,7 +29,9 @@
     <div id="fl-status-nav" class="d-flex align-items-center gap-2 text-white-50" style="font-size:.8rem">
       Carregando status FL…
     </div>
-    <a href="/vocab-anomalies" class="text-white-50 small">Vocabulário ⚠</a>
+    <a href="/predict" class="text-white-50 small">Predição Pontual</a>
+    <a href="/rag-evaluation" class="text-white-50 small">Avaliação do RAG</a>
+    <a href="/vocab-anomalies" id="vocab-nav-link" class="text-white-50 small">Vocabulário</a>
     <a href="/class-weights" class="text-white-50 small">Peso de Classe</a>
     <a href="/fl-training-results" class="text-white-50 small">Avaliação de Treinamentos</a>
   </div>
@@ -80,18 +82,25 @@
               </div>
             </div>
             <div class="mb-2">
-              <label class="form-label form-label-sm">Exames (JSON)</label>
-              <textarea class="form-control form-control-sm font-monospace"
-                id="in-exams" rows="6" placeholder='[
-  {
-    "exam_name": "WBC",
-    "date": "2020-03-01",
-    "value": 8.5,
-    "phase": "IN",
-    "ref_low": 4.0,
-    "ref_high": 11.0
-  }
-]'></textarea>
+              <label class="form-label form-label-sm d-flex justify-content-between align-items-center mb-1">
+                <span>Exames</span>
+                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" onclick="addExamRow()">+ exame</button>
+              </label>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0" id="exam-rows-table">
+                  <thead>
+                    <tr class="small text-muted">
+                      <th style="min-width:100px">Exame</th>
+                      <th style="min-width:135px">Data</th>
+                      <th style="min-width:75px">Valor</th>
+                      <th style="min-width:65px">Ref. min</th>
+                      <th style="min-width:65px">Ref. máx</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="exam-rows-tbody"></tbody>
+                </table>
+              </div>
             </div>
             <div class="mb-2">
               <label class="form-label form-label-sm">Fase padrão</label>
@@ -167,7 +176,7 @@ async function loadFLStatus() {
     const nav = document.getElementById('fl-status-nav');
     if (s.model_ready) {
       nav.innerHTML = `<span class="badge bg-success" id="fl-badge">Modelo pronto</span>
-        <span>${s.rounds_completed} rounds</span>
+        <span>melhor rodada: ${s.rounds_completed ?? '—'}</span>
         <span class="text-white-50">·</span>
         <span>${s.last_updated ? s.last_updated.slice(0, 16) : ''}</span>`;
     } else {
@@ -181,11 +190,13 @@ async function loadFLStatus() {
 
 async function loadVocabAnomalyBanner() {
   const banner = document.getElementById('vocab-anomaly-banner');
+  const navLink = document.getElementById('vocab-nav-link');
   try {
     const r = await fetch(`${API}/api/admin/vocab-anomalies`);
     if (!r.ok) { banner.classList.add('d-none'); return; }
     const data = await r.json();
     const n = data.anomalies.length;
+    navLink.textContent = n > 0 ? `Vocabulário (${n} pendente${n > 1 ? 's' : ''})` : 'Vocabulário';
     if (n === 0) {
       banner.classList.add('d-none');
       return;
@@ -340,6 +351,40 @@ function renderChart(history) {
   });
 }
 
+// ── linhas dinâmicas de exame ────────────────────────────────────────────────
+
+let _examRowSeq = 0;
+
+function examRowHtml(seq) {
+  return `
+    <tr data-row="${seq}">
+      <td><input type="text" class="form-control form-control-sm exam-name" placeholder="WBC"></td>
+      <td><input type="date" class="form-control form-control-sm exam-date"></td>
+      <td><input type="number" step="any" class="form-control form-control-sm exam-value"></td>
+      <td><input type="number" step="any" class="form-control form-control-sm exam-ref-low"></td>
+      <td><input type="number" step="any" class="form-control form-control-sm exam-ref-high"></td>
+      <td><button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeExamRow(this)">&times;</button></td>
+    </tr>`;
+}
+
+function addExamRow() {
+  _examRowSeq++;
+  document.getElementById('exam-rows-tbody').insertAdjacentHTML('beforeend', examRowHtml(_examRowSeq));
+}
+
+function removeExamRow(btn) {
+  const tbody = document.getElementById('exam-rows-tbody');
+  btn.closest('tr').remove();
+  if (!tbody.children.length) addExamRow();
+}
+
+function resetExamRows() {
+  document.getElementById('exam-rows-tbody').innerHTML = '';
+  addExamRow();
+}
+
+addExamRow();
+
 // ── formulário de ingestão ───────────────────────────────────────────────────
 
 document.getElementById('ingest-form').addEventListener('submit', async (e) => {
@@ -353,8 +398,22 @@ document.getElementById('ingest-form').addEventListener('submit', async (e) => {
 
   let exams;
   try {
-    exams = JSON.parse(document.getElementById('in-exams').value);
-    if (!Array.isArray(exams)) throw new Error('exams deve ser um array JSON');
+    const rows = [...document.querySelectorAll('#exam-rows-tbody tr')];
+    exams = rows.map(row => {
+      const name  = row.querySelector('.exam-name').value.trim();
+      const date  = row.querySelector('.exam-date').value;
+      const value = parseFloat(row.querySelector('.exam-value').value);
+      if (!name || !date || Number.isNaN(value)) {
+        throw new Error('Cada exame precisa de nome, data e valor preenchidos.');
+      }
+      const refLow  = row.querySelector('.exam-ref-low').value;
+      const refHigh = row.querySelector('.exam-ref-high').value;
+      const ex = { exam_name: name, date, value };
+      if (refLow  !== '') ex.ref_low  = parseFloat(refLow);
+      if (refHigh !== '') ex.ref_high = parseFloat(refHigh);
+      return ex;
+    });
+    if (!exams.length) throw new Error('Adicione ao menos um exame.');
     const phase = document.getElementById('in-phase').value;
     exams = exams.map(ex => ({ phase, ...ex }));
   } catch (err) {
@@ -386,6 +445,7 @@ document.getElementById('ingest-form').addEventListener('submit', async (e) => {
         Score: <span class="risk-badge ${cls}">${data.risk_score.toFixed(4)}</span>
       </div>`;
     showToast(`Score gerado: ${data.risk_score.toFixed(4)}`);
+    resetExamRows();
     await loadPatients();
     if (_selectedPatient === body.patient_id) await selectPatient(body.patient_id);
   } catch (err) {

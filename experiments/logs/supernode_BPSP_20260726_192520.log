@@ -4760,3 +4760,1855 @@
 [pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
 [pipeline] conexão OK
 [pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.9s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 80]
+[92mINFO [0m:      Sending: train message (ID: 4fc68b6b425ab5f6ac93aa2c3c645682e14b336aaeba959d3bc8538edf051171)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 80]
+[92mINFO [0m:      Receiving: evaluate message (ID: 13d7f07c975097db322171972e9b1a7b3fffd72e0faf92dbaeca2d617190a169)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.2s
+[pipeline] concluído em 13.9s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 80]
+[92mINFO [0m:      Sending: evaluate message (ID: 845ac493f62914082064323b83a7477818cd56916039fa81af190c74c4c2b2de)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 81]
+[92mINFO [0m:      Receiving: train message (ID: 99323eb00f659885365c384dfc1d91d2d6364518fc85c60553f9704fbe493967)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.2s
+[pipeline] concluído em 14.0s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 81]
+[92mINFO [0m:      Sending: train message (ID: a29efd167ba14565409b2c5734241df904735cc0fd1cd97911d03f93693cc838)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 81]
+[92mINFO [0m:      Receiving: evaluate message (ID: 26f2af835c55efc1aeed91eee967ffe250627a13abf2faaca7fddadbf6e6008f)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 81]
+[92mINFO [0m:      Sending: evaluate message (ID: 43b1f65939862212b97e0e0f34398582051f0276261ceb5b2de70a99660999eb)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 82]
+[92mINFO [0m:      Receiving: train message (ID: 32af8a1709e82c8cebcbe0d483546f57980007f354bbb84ac4917ac40d04dea7)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 82]
+[92mINFO [0m:      Sending: train message (ID: f2b7b050718b540039426fd52c370548b82bc3b0453c6b82e12d6ad5236ce0f3)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 82]
+[92mINFO [0m:      Receiving: evaluate message (ID: 4853e6c644aee0079b9aa9f7b229cd703c1e94dacc501413cdc3f9ce5bea782f)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.5s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 14.1s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 82]
+[92mINFO [0m:      Sending: evaluate message (ID: 303b40e015b2bf8d034ef1e0b1c6ca47c49262ae5b1fc49eccad9ad2eb3c4217)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 83]
+[92mINFO [0m:      Receiving: train message (ID: 79ddd9183cbf7d857a1646fd87a8419a62bf5a9f4cc9cfb712475040ea10d640)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.9s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 83]
+[92mINFO [0m:      Sending: train message (ID: f823cdf5490c1b2f731aeb2b84734b64239209a81fa91513b1f574e79eb41a74)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 83]
+[92mINFO [0m:      Receiving: evaluate message (ID: 53789806a6f5b3137e715234c5aaa8191a679e4590a85dc74fb02eee4698811d)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.2s
+[pipeline] concluído em 13.9s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 83]
+[92mINFO [0m:      Sending: evaluate message (ID: 424edff3b0070d57212b123fd400feedb6a3765ea9e5a5035810b9a7ba806828)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 84]
+[92mINFO [0m:      Receiving: train message (ID: f3693a3e937f498f3e76cb797835dcbabe946fa4081743a314ee6674c7cf8db1)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.3s
+[pipeline] concluído em 14.0s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 84]
+[92mINFO [0m:      Sending: train message (ID: d8c39c511a5ac11bdc98e0a1bbc9066d302ecd87395acd57fdb2cf292a987649)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 84]
+[92mINFO [0m:      Receiving: evaluate message (ID: 9ecbbd41d4f5cdfc42ef8c53f702f98bcf7b76e9d789a78a8f66cf02d82294ae)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 84]
+[92mINFO [0m:      Sending: evaluate message (ID: e3fd439a136217246d5e437aa229339217f771127a9cf7244fd72941d19b742a)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 85]
+[92mINFO [0m:      Receiving: train message (ID: 44d7f51aee7e15dd3a4d77e0f9728088f16278a7629ae35276d3bedd30f29189)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.2s
+[pipeline] concluído em 14.0s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 85]
+[92mINFO [0m:      Sending: train message (ID: d52dd9f172c47c6499131182c410c3a9bab66777bea885d3f2dfb588232b3a17)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 85]
+[92mINFO [0m:      Receiving: evaluate message (ID: 239f6ad570e53066d3bf8aa36033bbc0d90b2c4cad2364f316d0d23965b0b7a9)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 85]
+[92mINFO [0m:      Sending: evaluate message (ID: 0c8e3b77982400915a3d0c6f6e1112a428984a644ae2b896e8077c030a7ae607)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 86]
+[92mINFO [0m:      Receiving: train message (ID: ca41ee0a4dce8523a89148c5bd04220d62db35cd437ddd6ebb130cebe38ece97)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 86]
+[92mINFO [0m:      Sending: train message (ID: 0f8439c68e7add56f34371e04b73c87ebc2c56bec2ad49621e0db81a758cd4b2)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 86]
+[92mINFO [0m:      Receiving: evaluate message (ID: 24a71bf3e98c77e515443d123bf6905980e0b48687540a04fed60bedf72f4413)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 86]
+[92mINFO [0m:      Sending: evaluate message (ID: a75103cfb4a29df530a5cac7c9acb699eb6d099bbb1f006f7cd067dfb4aa1627)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 87]
+[92mINFO [0m:      Receiving: train message (ID: 4be9390ddf8acafa3dec272d9d196f5cb8055230dca0c43896a17ffac21f73f5)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 87]
+[92mINFO [0m:      Sending: train message (ID: 7c386159b583fd7e10cbb8d170f1b9211bd94f0a19ad64fac6a08aa91d9b8c36)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 87]
+[92mINFO [0m:      Receiving: evaluate message (ID: 84c212e898c68f5b8c9cc9a49743f7dae6e21d216ac413146fa6487384e93758)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.9s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 87]
+[92mINFO [0m:      Sending: evaluate message (ID: 5c3c952bda5dabc640b6b422e8b80edb1bd5b4c0101b727c83957227bf7b0297)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 88]
+[92mINFO [0m:      Receiving: train message (ID: 85c8152f922670814312a7e0772063d2f9828204c86d3e7f5d09c00c447c0c01)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.9s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 88]
+[92mINFO [0m:      Sending: train message (ID: 46a9ac344bada398cc957b17b07229cdeb47af8d87c80ee51d6a4017743af40b)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 88]
+[92mINFO [0m:      Receiving: evaluate message (ID: e538096a4becdf16a924b222fc1a8d2214efe89469d06cea549cac28905c80c2)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 88]
+[92mINFO [0m:      Sending: evaluate message (ID: 58acb12f92805b10cba3565b3e464aa53b9c7e4ead25655a0daa5fa48d9baf13)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 89]
+[92mINFO [0m:      Receiving: train message (ID: 129fccc9155adf280e6739545c0c753708c724db31d4e51e2cf3b623711210ec)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 89]
+[92mINFO [0m:      Sending: train message (ID: 84e34887f5dd5ed94cd5a3857f9b0e86ad3adba674fbce4c175541618b3d571f)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 89]
+[92mINFO [0m:      Receiving: evaluate message (ID: 7314698ac00ef047760c5c981035224d1d9ed3ae643eda32c15c6eee62834b0c)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.5s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 89]
+[92mINFO [0m:      Sending: evaluate message (ID: 6bb33fa0fb89349e10206604ecd3c7b26264458ec4d126de08df3c4ea7ee9b9c)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 90]
+[92mINFO [0m:      Receiving: train message (ID: f69176ea5bf195990c86378683bff2b2fdb686cc6529eed460d3a25050ed2d1d)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 4.9s
+[pipeline] concluído em 13.5s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 90]
+[92mINFO [0m:      Sending: train message (ID: 3cd8b19f847dfc3b880f24551992b2a329db2203f5e0d7c9bddf415cbd1a293f)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 90]
+[92mINFO [0m:      Receiving: evaluate message (ID: 52d33b8a92127f1ea63813df2bbbd9febee510edcab411223d3f3276d0304d47)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 90]
+[92mINFO [0m:      Sending: evaluate message (ID: 60ebe3254f522ed32ba3ff66bbf6f3739dd707c6f06fd8532f446d5989fcad1b)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 91]
+[92mINFO [0m:      Receiving: train message (ID: c63f0eee718ffcdd138037fae559f7ef7615ea3ec9e0a91604610a8661ed035d)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 91]
+[92mINFO [0m:      Sending: train message (ID: 02f344637f27986df1852b7e91c84e9ae47e5ece0bac0f8e26d27264b123174b)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 91]
+[92mINFO [0m:      Receiving: evaluate message (ID: 79ad60794a7d3387565d8db0dfeb8aae744d2882bf07664202b7dd7f965248e7)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 91]
+[92mINFO [0m:      Sending: evaluate message (ID: 7281ebd39764a8cb8e4a44e67c48f6b13c15af18a854c632bcdfb113f9de6b80)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 92]
+[92mINFO [0m:      Receiving: train message (ID: 310181bcd5b372fa950b18182850cbd7835402581938971f513707144f4214e5)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 92]
+[92mINFO [0m:      Sending: train message (ID: 2eabff359433aca5f964b9506babf858ba5a6ebf8d9258f6a59b9227bab3e766)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 92]
+[92mINFO [0m:      Receiving: evaluate message (ID: d07cbf8f379c84e0fef1622e6a81c1b6b2c366de7bd6d04e3683b8c40f021723)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 4.9s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 92]
+[92mINFO [0m:      Sending: evaluate message (ID: 5252adef687396b6acbf79f8f18c5f4348861446327a242cee83da70afdeb476)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 93]
+[92mINFO [0m:      Receiving: train message (ID: 71dce285d9181db29423a422c74f02890c33e0c7a9d69e653c66c403464ea8c2)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.5s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 93]
+[92mINFO [0m:      Sending: train message (ID: 26633704cdcee6266a43845775918782555cbd0383314564356faf148739a442)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 93]
+[92mINFO [0m:      Receiving: evaluate message (ID: 2b9f525dc6ccd5123e0d52309f042a3bcac5ab771ffabff8a914d89656725635)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 93]
+[92mINFO [0m:      Sending: evaluate message (ID: 9b0bf9bded55b4205e2cd955da6729dbf9a21c25e4031951b07d631275dc054e)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 94]
+[92mINFO [0m:      Receiving: train message (ID: 1f4104928cd26602103c0dd742abfe89db75ffe279e3c3e6289e0141770ad86c)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 94]
+[92mINFO [0m:      Sending: train message (ID: 629a6f57940f8a6ccc7e03661b3070159dc071ba6ce7614381088029621f9b2d)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 94]
+[92mINFO [0m:      Receiving: evaluate message (ID: c7a88b44e87d0db275cc747eda74a8145cf235cdcfad51f5ffe4349a501f3de5)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 94]
+[92mINFO [0m:      Sending: evaluate message (ID: b39aa3aac2d68327a69f225ee1466026e683cac879cf992f08495601b03e40a5)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 95]
+[92mINFO [0m:      Receiving: train message (ID: 4dff06aa054509345cf943ba2189804d0ec4769de9f4a3ace59292d74faa7779)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 95]
+[92mINFO [0m:      Sending: train message (ID: 0725e887091f2103f0fc9f09d60b9b077374feda2509bd3ca60500cfcb412601)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 95]
+[92mINFO [0m:      Receiving: evaluate message (ID: fe5dbf6061f35565e31456e639c3faa08dabef8bbf83e9c25cc348d26990f72c)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 95]
+[92mINFO [0m:      Sending: evaluate message (ID: ab7729c636064abfde9a84925dd0a5095d4a3ca5829f5265bd4a16af0219381e)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 96]
+[92mINFO [0m:      Receiving: train message (ID: 9e997361b457c82f8165c60d89fc21a7c3bffa04ab9aba376dddab5b41af95cf)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 96]
+[92mINFO [0m:      Sending: train message (ID: cf125ddca96c3f9d2273eed0ea81c79a88c468e23f096ad7ffec37889fff95a4)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 96]
+[92mINFO [0m:      Receiving: evaluate message (ID: 7ab7854f63146aa9d80711edc1f9fa8e79c983748f1c6115722c742e4dbd624b)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.9s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 96]
+[92mINFO [0m:      Sending: evaluate message (ID: b0a4951396b8744554eee52f90541c6cbb7e0746b1b37d0fa0c618ae33d0cd0d)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 97]
+[92mINFO [0m:      Receiving: train message (ID: 872510e425e5c1e971d171696ac96f68d3ff035ae8fa1ce2359a1367ffba4500)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 97]
+[92mINFO [0m:      Sending: train message (ID: 3b0b4c534b4de006cc5ae21b03070e2d2a94ca77aa794c232f103cf98b1b393d)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 97]
+[92mINFO [0m:      Receiving: evaluate message (ID: cb096f4b291abf73f99f4fb5ec342651f02bfcff00266b64768b2ed55974f8ef)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 97]
+[92mINFO [0m:      Sending: evaluate message (ID: d31275b610307eb238020e6976bb52118f2b92a61c98b509a3baebcfc5274d63)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 98]
+[92mINFO [0m:      Receiving: train message (ID: e16088c117e2a56d6ba1a7ef6d310a081f99313ee1af66b28c48be25ef783674)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 98]
+[92mINFO [0m:      Sending: train message (ID: 75290fb4d66b91eb392edc3a0bef62d9e9a9bfbc3123a015b3abee2f6142ebe8)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 98]
+[92mINFO [0m:      Receiving: evaluate message (ID: 0718e394fea0291b009b341e5030736140f152ca3df726abaa64e40f74b1e629)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.9s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 98]
+[92mINFO [0m:      Sending: evaluate message (ID: c4237e32e73e82e4f09d31dfa91c26a0508a7f2b6113c36851c79174ea3db02c)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 99]
+[92mINFO [0m:      Receiving: train message (ID: 896465ce94f17224286ef29eb7b895d865717600f5e24b154c35351e741a67a4)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 99]
+[92mINFO [0m:      Sending: train message (ID: 1c8e8503d0ea35a72585cf4b525d6cbb82b34eaf4b9e4d44a8647e83742654bc)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 99]
+[92mINFO [0m:      Receiving: evaluate message (ID: e133ac267965ebf5a3042407edad2e56d2459c5fd67dd244a782174291d1ad6d)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.9s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 99]
+[92mINFO [0m:      Sending: evaluate message (ID: bac73645b41594ef66812e2ac88f8d338526d9bb28b278de29515d2fd9c16f53)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 100]
+[92mINFO [0m:      Receiving: train message (ID: aa72c425e5ac6d23bd92b1e884959d2efac46a535a8e4936d51770ac16813d4e)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 100]
+[92mINFO [0m:      Sending: train message (ID: d067fa9329151d31bb71021159a67661cee457853ef74a5fd768e961e8145107)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 100]
+[92mINFO [0m:      Receiving: evaluate message (ID: 451af3e002bd316dd19457c4aabce287fa4bd3d7f3499227f113749bdbc83ef6)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 100]
+[92mINFO [0m:      Sending: evaluate message (ID: 56997c60b7608efffb31d9a41f52536c731661e16d1c8166f6ec7614977f098d)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 101]
+[92mINFO [0m:      Receiving: train message (ID: 12ed26c5671d2208d711ef283389d6cc04ff46b97458561201b6e29af6f85e3b)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 101]
+[92mINFO [0m:      Sending: train message (ID: 8e6a39a3c222f31610228fcdb20bf479470fc17474db71eeb7448daf78663acd)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 101]
+[92mINFO [0m:      Receiving: evaluate message (ID: 79cd2ba86bafe773410a242df480b18e8614cd87732a325bd4d1be3102063a25)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 101]
+[92mINFO [0m:      Sending: evaluate message (ID: 6d0fe6e794c68cabba52994e44306e53839ed2e1cf6f1df957ebbf596e19fbbe)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 102]
+[92mINFO [0m:      Receiving: train message (ID: 46c347065ca0b86d0ccd8e8d7a68fc868064d33eeaca6cc021c53fe146e499cb)
+[92mINFO [0m:      Start `flwr-clientapp` process
+[92mINFO [0m:      Received successfully
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 102]
+[92mINFO [0m:      Sending: train message (ID: 536d6b3b2b62a6ffd2336d40a823aaa263cf0f1e1e0f3e42d436086609a1cccb)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 102]
+[92mINFO [0m:      Receiving: evaluate message (ID: ce720c01242b7fc6c636489fda3a34bb7b2ddecf03ffadd6854957302fc0fc68)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 102]
+[92mINFO [0m:      Sending: evaluate message (ID: 638446f8e5e663920a6f046f84035a01b234492ee3c13e456e41021d22a6e239)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 103]
+[92mINFO [0m:      Receiving: train message (ID: aac637c25c8bd30f7b742b9ebc0a67d619047a0df078c0406646b0299e895f81)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 103]
+[92mINFO [0m:      Sending: train message (ID: b359e1fcb013b31cbae11ba7d458d7a492b0d9e479fa7465999aa6f163f4bc3a)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 103]
+[92mINFO [0m:      Receiving: evaluate message (ID: a8111f6e8ee449f92f11a546adce6e7c6f61eae1e95def40f8706e14781b5581)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 4.9s
+[pipeline] concluído em 13.5s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 103]
+[92mINFO [0m:      Sending: evaluate message (ID: 4691a462c1c60ce0ab6321e322cfcd32ad3f0f4b7929250cf74356502166bc2c)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 104]
+[92mINFO [0m:      Receiving: train message (ID: ac506c03e8502138c0aa840885e6958b03913abe59c296a494bb5ad3a5888d12)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 104]
+[92mINFO [0m:      Sending: train message (ID: 8019a194bd5ef31737da43e5aac644e697e172103ed93a450c02e838ebfcdcd3)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 104]
+[92mINFO [0m:      Receiving: evaluate message (ID: ace110ea78870e15a234115385942f66454096033f38914fd931a470522e7a20)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 104]
+[92mINFO [0m:      Sending: evaluate message (ID: ac823441972c2c5c1d68cc9e93c73b8cad39148c06d1c545c7cb18ac716266eb)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 105]
+[92mINFO [0m:      Receiving: train message (ID: c3ea47ea794aa74f7a856307342a4271236fa2912ed1de4e43bee8ce6c9a6083)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 105]
+[92mINFO [0m:      Sending: train message (ID: 51ad4f2bc3779980263e42f81289cdf51610e3121ef6a97f91366defc0d88bf4)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 105]
+[92mINFO [0m:      Receiving: evaluate message (ID: b7eeec87a4170da6c04f6505f3429b8a313007ae06b18f556557861f58bafd6b)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 105]
+[92mINFO [0m:      Sending: evaluate message (ID: ba9b1453328b7817407cc534454fa4fa197318e90ed9535be6ae7f69c30c7240)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 106]
+[92mINFO [0m:      Receiving: train message (ID: 37eec99c1a812d4d0ebc4cb5e294858be6b20f39195e3584388f77b0a71fe06e)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 106]
+[92mINFO [0m:      Sending: train message (ID: 3826c5b378f0c018fc004f34c252ec71f98549fa1835494259e3d8e22b577a8c)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 106]
+[92mINFO [0m:      Receiving: evaluate message (ID: 26835a7004f475ba619c3de47f2d2325f48c1c181e4501bc89cad16ac8732dab)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 106]
+[92mINFO [0m:      Sending: evaluate message (ID: e02fc91ad77c98ffac1da9daaa008e6e7813222a756ae3dc09140f6ca86aa338)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 107]
+[92mINFO [0m:      Receiving: train message (ID: 27d32cac02c816656ea5f18ed534c0fd1f20150ac8579b1cc72f6b11f3d64ef8)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 107]
+[92mINFO [0m:      Sending: train message (ID: 018f5e5e45fe81c71ab0b9f8051b203b40b7b7159b196ebe16837b480970977e)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 107]
+[92mINFO [0m:      Receiving: evaluate message (ID: d84c3e1ab092f96a76221cc8b626463ae6a43450a83ae7ce8001ab12bfa50038)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 107]
+[92mINFO [0m:      Sending: evaluate message (ID: be2a9133385e622dbb2a3c9e8f6bbff016d716ffefa0a2d4b5cfe0668fd5f4ee)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 108]
+[92mINFO [0m:      Receiving: train message (ID: 1dbd7c0af8bfeff68e7e7f4b1ece7dec2cdf979a4b3d4e4d78367c69e161cab7)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.2s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.1s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 108]
+[92mINFO [0m:      Sending: train message (ID: 558d60ca054af9adaa4e93ae2349eac03a8dcf6f9615ae10788b72ccb833ce08)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 108]
+[92mINFO [0m:      Receiving: evaluate message (ID: 558961ddaf947b20673115183d3ee2422d37363f312d71d9d210004c85c1818b)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.7s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 108]
+[92mINFO [0m:      Sending: evaluate message (ID: 52f51a0d92a2f886e7b8a03d567d7612c2073fb5fa04da57dc30e6b5ee87abdd)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 109]
+[92mINFO [0m:      Receiving: train message (ID: fe409580d74cdeb65d2337a48e9049591f3a608e21dd9ac64d091db9aca56f6b)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 109]
+[92mINFO [0m:      Sending: train message (ID: 57842e042bb0636ea3450f85b0b77a45b3539b4fbad2cf5ede9bf30059d8b90c)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 109]
+[92mINFO [0m:      Receiving: evaluate message (ID: 57a5959cce3dbea795731c2a7c8018e7fe5b6a2eea1b02ec11a7a7fbdc2682ec)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.4s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 109]
+[92mINFO [0m:      Sending: evaluate message (ID: e2eff85bda92d8b7169da1a75eff8d71d23960499e23a4baec834b37d480f203)
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 110]
+[92mINFO [0m:      Receiving: train message (ID: 20b3072dece710e243a555c29ec94cffbcd220cdcdacd1582558238fb7050520)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.6s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 110]
+[92mINFO [0m:      Sending: train message (ID: 9d54ef8522ee63f2e334a827d23ba6fda5a889c68be15605f672334b16d6d0d4)
+[92mINFO [0m:      
+[92mINFO [0m:      Sent successfully
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 110]
+[92mINFO [0m:      Receiving: evaluate message (ID: e790a9dd40ff4b2cc09e61be1b6117023716238f654be4de3a446a791b47345e)
+[92mINFO [0m:      Received successfully
+[92mINFO [0m:      Start `flwr-clientapp` process
+[pipeline] conectando ao banco: postgresql://mosaicfl:senhaForte@localhost:5432/mo...
+[pipeline] conexão OK
+[pipeline] executando query (max_seq_len=128 — pode levar alguns minutos)...
+[pipeline] query concluída em 8.3s — 1,681,666 linhas
+[pipeline] filtrado para hospital_id='BPSP' — 1,681,666 linhas
+[pipeline] 43,105 atendimentos únicos encontrados
+[pipeline] usando vocabulário pré-compartilhado — 541 tokens
+[pipeline] construindo tensores para 43,105 sequências...
+[pipeline] tensores: 4,310/43,105 (10%)
+[pipeline] tensores: 8,620/43,105 (20%)
+[pipeline] tensores: 12,930/43,105 (30%)
+[pipeline] tensores: 17,240/43,105 (40%)
+[pipeline] tensores: 21,550/43,105 (50%)
+[pipeline] tensores: 25,860/43,105 (60%)
+[pipeline] tensores: 30,170/43,105 (70%)
+[pipeline] tensores: 34,480/43,105 (80%)
+[pipeline] tensores: 38,790/43,105 (90%)
+[pipeline] tensores: 43,100/43,105 (100%)
+[pipeline] tensores prontos em 5.0s
+[pipeline] concluído em 13.8s total — 43,105 pacientes | dist={0: 29385, 1: 380, 2: 249, 3: 10267, 4: 2824} | demográficos: age_mean=0.49 sex_M=20267/43105
+[92mINFO [0m:      
+[92mINFO [0m:      
+[92mINFO [0m:      [RUN 10048486011876909256, ROUND 110]
+[92mINFO [0m:      Sending: evaluate message (ID: 2ebd7036d6119bf81715aa6e55461462757b1cc8bbf96bf20f596552fdee287c)
+[92mINFO [0m:      Sent successfully

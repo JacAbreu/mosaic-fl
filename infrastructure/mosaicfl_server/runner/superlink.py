@@ -13,7 +13,7 @@ import torch
 from flwr.common import Context
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 
-from mosaicfl.core.config import FED_CFG, RUNTIME_CFG
+from mosaicfl.core.config import FED_CFG, MODEL_CFG, RUNTIME_CFG
 from mosaicfl.core.federated import weighted_average_evaluate_metrics, weighted_average_loss
 from mosaicfl.core.model import SimplifiedBEHRT
 
@@ -94,7 +94,10 @@ def _make_server_components(context: Context) -> ServerAppComponents:
     state_store.save(previous_state)
 
     # ── Modelo: carrega checkpoint da sessão anterior se disponível ──────────
-    model = SimplifiedBEHRT(use_cls_token=True).to(RUNTIME_CFG.device)
+    # demo_dim (MODEL_CFG.demo_dim, achado 2026-07-28): DEVE ser idêntico nas duas
+    # máquinas (servidor e todos os clientes) — dimensões diferentes quebrariam a
+    # agregação de pesos. Default 0 preserva o comportamento histórico.
+    model = SimplifiedBEHRT(use_cls_token=True, demo_dim=MODEL_CFG.demo_dim).to(RUNTIME_CFG.device)
     initial_parameters: Optional[fl.common.Parameters] = None
     recovered_vocab: Dict = {}
 
@@ -157,6 +160,19 @@ def _make_server_components(context: Context) -> ServerAppComponents:
     checkpoint_store = get_checkpoint_store(RUNTIME_CFG.db_url)
     _health.start()
 
+    # local-only-hospital (run-config, default ""): "BPSP"/"HSL" quando este treino
+    # roda com um único hospital conectado (min-clients=1) — baseline local pra
+    # comparar contra o federado na mesma rede real (migration 030). None = treino
+    # federado normal. Declarado explicitamente por quem sobe o SuperLink, não
+    # inferido automaticamente — evita marcar errado um treino federado de verdade.
+    local_only_hospital = str(context.run_config.get("local-only-hospital", "")).strip().upper() or None
+    if local_only_hospital and min_clients != 1:
+        logger.warning(
+            "local_only_hospital_com_min_clients_maior_que_1 valor=%s min_clients=%d — "
+            "provável erro de configuração: treino local-only deveria usar min-clients=1",
+            local_only_hospital, min_clients,
+        )
+
     training_id = checkpoint_store.register_training(
         algorithm="FedProx",
         log_file="",
@@ -164,6 +180,7 @@ def _make_server_components(context: Context) -> ServerAppComponents:
         checkpoint_criterion=FED_CFG.checkpoint_criterion,
         partition_mode="natural",
         run_classification=run_classification,
+        local_only_hospital=local_only_hospital,
     )
     logger.info(
         "training_registered",
@@ -172,6 +189,7 @@ def _make_server_components(context: Context) -> ServerAppComponents:
             "algorithm": "FedProx",
             "n_rounds_max": num_rounds,
             "run_classification": run_classification,
+            "local_only_hospital": local_only_hospital,
             "run_id": context.run_id,
         },
     )

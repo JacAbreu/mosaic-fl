@@ -51,3 +51,21 @@ class TestModelConfig:
         from mosaicfl.core.config import ModelConfig
         with pytest.raises(ValueError, match="FL_CLASS_LABELS"):
             ModelConfig(num_classes=3, class_labels=("a", "b"))
+
+    def test_internado_breve_max_days_default_preserves_historical_behavior(self):
+        from mosaicfl.core.config import MODEL_CFG
+        assert MODEL_CFG.internado_breve_max_days == 10
+
+    def test_internado_breve_max_days_reads_env(self, monkeypatch):
+        from mosaicfl.core.config import ModelConfig
+        monkeypatch.setenv("FL_INTERNADO_BREVE_MAX_DAYS", "5")
+        assert ModelConfig().internado_breve_max_days == 5
+
+    def test_demo_dim_default_preserves_historical_behavior(self):
+        from mosaicfl.core.config import MODEL_CFG
+        assert MODEL_CFG.demo_dim == 0
+
+    def test_demo_dim_reads_env(self, monkeypatch):
+        from mosaicfl.core.config import ModelConfig
+        monkeypatch.setenv("FL_DEMO_DIM", "2")
+        assert ModelConfig().demo_dim == 2

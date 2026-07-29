@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOSAIC-FL — Predição Pontual</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .risk-badge { font-size: 1rem; padding: .4rem .8rem; border-radius: .4rem; }
+    .risk-low    { background: #d1e7dd; color: #0a3622; }
+    .risk-medium { background: #fff3cd; color: #664d03; }
+    .risk-high   { background: #f8d7da; color: #58151c; }
+    .pred-label  { background: #cfe2ff; color: #084298; }
+    .badge-yes { background: #d1e7dd; color: #0a3622; }
+    .badge-no  { background: #f8d7da; color: #58151c; }
+    .badge-warn { background: #fff3cd; color: #664d03; }
+    .proba-bar-track { background: #e9ecef; border-radius: .25rem; height: .55rem; overflow: hidden; }
+    .proba-bar-fill { background: #0d6efd; height: 100%; }
+    .proba-row.is-predicted .proba-bar-fill { background: #146c43; }
+    #rag-card { display: none; }
+    #meta-card { display: none; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark mb-3 px-3">
+  <span class="navbar-brand fw-bold">MOSAIC-FL</span>
+  <a href="/" class="text-white-50 small">&larr; Painel Clínico</a>
+</nav>
+
+<div class="container-fluid" style="max-width: 1100px;">
+  <div class="row g-3">
+
+    <!-- Coluna esquerda: formulário -->
+    <div class="col-md-5">
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <strong>Predição pontual</strong>
+          <div class="text-muted small">Chama <code>POST /api/predict</code> diretamente — não persiste nada, não gera export ClinicalPath. Score sob demanda pra qualquer combinação de exames.</div>
+        </div>
+        <div class="card-body">
+          <form id="predict-form">
+            <div class="mb-2">
+              <label class="form-label form-label-sm">Patient ID</label>
+              <input type="text" class="form-control form-control-sm" id="pr-patient-id" value="TEST-001" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label form-label-sm">Token de autorização (opcional em dev)</label>
+              <input type="text" class="form-control form-control-sm" id="pr-token" placeholder="Bearer token — deixe vazio se FL_AUTH_REQUIRED=false">
+            </div>
+            <div class="mb-2">
+              <label class="form-label form-label-sm d-flex justify-content-between align-items-center mb-1">
+                <span>Exames</span>
+                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" onclick="addExamRow()">+ exame</button>
+              </label>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0" id="exam-rows-table">
+                  <thead>
+                    <tr class="small text-muted">
+                      <th style="min-width:110px">Exame</th>
+                      <th style="min-width:135px">Data</th>
+                      <th style="min-width:75px">Valor</th>
+                      <th style="min-width:80px">Unidade</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="exam-rows-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="pr-explain" checked>
+              <label class="form-check-label small" for="pr-explain">
+                Gerar justificativa via RAG (mais lento — chama o LLM)
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm w-100">Prever</button>
+          </form>
+          <div id="predict-error" class="mt-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Coluna direita: resultado -->
+    <div class="col-md-7">
+      <div id="result-placeholder" class="card shadow-sm">
+        <div class="card-body text-muted text-center py-5">Preencha os exames e clique em "Prever".</div>
+      </div>
+
+      <div id="result-card" class="card shadow-sm mb-3" style="display:none">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+              <div class="text-muted small">Classe prevista</div>
+              <span id="pred-label" class="badge pred-label fs-6"></span>
+            </div>
+            <div class="text-end">
+              <div class="text-muted small">Risk score</div>
+              <span id="risk-score" class="risk-badge"></span>
+            </div>
+          </div>
+          <hr>
+          <div id="proba-list"></div>
+        </div>
+      </div>
+
+      <div id="rag-card" class="card shadow-sm mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <strong class="small">Explicação (RAG)</strong>
+          <span id="rag-badges"></span>
+        </div>
+        <div class="card-body small" id="rag-body"></div>
+      </div>
+
+      <div id="meta-card" class="card shadow-sm">
+        <div class="card-header"><strong class="small">Metadados do modelo</strong></div>
+        <div class="card-body small" id="meta-body"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = '';
+const CLASS_LABELS_FALLBACK = ['curado_pronto', 'curado_internado', 'melhora_pronto', 'melhora_internado_breve', 'melhora_internado_grave'];
+
+// Definição canônica das 5 classes de prognóstico — ver
+// src/mosaicfl/core/preprocessor/outcomes.py::_map_outcome().
+const CLASS_DESCRIPTIONS = {
+  curado_pronto:           'Alta médica com cura, sem internação (atendimento ambulatorial ou pronto-socorro).',
+  curado_internado:        'Alta médica com cura, após internação — quadro mais grave, com recuperação completa.',
+  melhora_pronto:          'Alta com melhora clínica, sem internação — quadro leve/moderado.',
+  melhora_internado_breve: 'Alta com melhora clínica, internação de até 10 dias.',
+  melhora_internado_grave: 'Alta com melhora clínica, internação de mais de 10 dias.',
+};
+
+function riskClass(score) {
+  if (score === null || score === undefined) return '';
+  if (score < 0.3) return 'risk-low';
+  if (score < 0.6) return 'risk-medium';
+  return 'risk-high';
+}
+function fmt(v, digits=3) {
+  return (v === null || v === undefined) ? '—' : Number(v).toFixed(digits);
+}
+
+// ── linhas dinâmicas de exame ────────────────────────────────────────────────
+
+let _examRowSeq = 0;
+
+function examRowHtml(seq) {
+  return `
+    <tr data-row="${seq}">
+      <td><input type="text" class="form-control form-control-sm exam-name" placeholder="LEUCOCITOS"></td>
+      <td><input type="date" class="form-control form-control-sm exam-date"></td>
+      <td><input type="number" step="any" class="form-control form-control-sm exam-value"></td>
+      <td><input type="text" class="form-control form-control-sm exam-unit" placeholder="mg/L"></td>
+      <td><button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeExamRow(this)">&times;</button></td>
+    </tr>`;
+}
+
+function addExamRow() {
+  _examRowSeq++;
+  document.getElementById('exam-rows-tbody').insertAdjacentHTML('beforeend', examRowHtml(_examRowSeq));
+}
+
+function removeExamRow(btn) {
+  const tbody = document.getElementById('exam-rows-tbody');
+  btn.closest('tr').remove();
+  if (!tbody.children.length) addExamRow();
+}
+
+addExamRow();
+addExamRow();
+
+// ── submit ────────────────────────────────────────────────────────────────────
+
+document.getElementById('predict-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  const errBox = document.getElementById('predict-error');
+  errBox.innerHTML = '';
+  btn.disabled = true;
+  btn.textContent = 'Prevendo…';
+
+  let exams;
+  try {
+    const rows = [...document.querySelectorAll('#exam-rows-tbody tr')];
+    exams = rows.map(row => {
+      const name  = row.querySelector('.exam-name').value.trim();
+      const date  = row.querySelector('.exam-date').value;
+      const value = parseFloat(row.querySelector('.exam-value').value);
+      if (!name || !date || Number.isNaN(value)) {
+        throw new Error('Cada exame precisa de nome, data e valor preenchidos.');
+      }
+      const unit = row.querySelector('.exam-unit').value.trim();
+      const ex = { exam_name: name, date, value };
+      if (unit) ex.unit = unit;
+      return ex;
+    });
+    if (!exams.length) throw new Error('Adicione ao menos um exame.');
+  } catch (err) {
+    errBox.innerHTML = `<div class="alert alert-danger py-1 small">${err.message}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Prever';
+    return;
+  }
+
+  const patientId = document.getElementById('pr-patient-id').value.trim();
+  const token     = document.getElementById('pr-token').value.trim();
+  const explain   = document.getElementById('pr-explain').checked;
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  try {
+    const r = await fetch(`${API}/api/predict?explain=${explain}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ patient_id: patientId, exams }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail ?? data));
+    renderResult(data);
+  } catch (err) {
+    errBox.innerHTML = `<div class="alert alert-danger py-1 small">${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Prever';
+  }
+});
+
+function renderResult(data) {
+  document.getElementById('result-placeholder').style.display = 'none';
+  document.getElementById('result-card').style.display = '';
+
+  document.getElementById('pred-label').textContent = data.predicted_label;
+  const scoreEl = document.getElementById('risk-score');
+  scoreEl.textContent = fmt(data.risk_score, 4);
+  scoreEl.className = `risk-badge ${riskClass(data.risk_score)}`;
+
+  const labels = Object.keys(data.class_probabilities).length
+    ? Object.keys(data.class_probabilities) : CLASS_LABELS_FALLBACK;
+  document.getElementById('proba-list').innerHTML = labels.map(label => {
+    const p = data.class_probabilities[label] || { value: 0, uncertainty: 0 };
+    const pct = (p.value * 100).toFixed(1);
+    const isPredicted = label === data.predicted_label;
+    const desc = CLASS_DESCRIPTIONS[label];
+    return `
+      <div class="proba-row mb-2 ${isPredicted ? 'is-predicted' : ''}">
+        <div class="d-flex justify-content-between small">
+          <span class="${isPredicted ? 'fw-bold' : 'text-muted'}" title="${desc || ''}">${label}</span>
+          <span>${pct}% <span class="text-muted">(±${fmt(p.uncertainty, 3)})</span></span>
+        </div>
+        <div class="proba-bar-track"><div class="proba-bar-fill" style="width:${pct}%"></div></div>
+        ${desc ? `<div class="text-muted" style="font-size:.72rem">${desc}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  const m = data.model_metadata;
+  document.getElementById('meta-card').style.display = 'block';
+  document.getElementById('meta-body').innerHTML = `
+    <div class="row row-cols-2 g-1">
+      <div class="text-muted">treinado</div><div>${m.trained ? 'sim' : 'não (pesos aleatórios)'}</div>
+      <div class="text-muted">calibrado</div><div>${m.calibrated ? `sim (${m.calibration_method})` : 'não'}</div>
+      <div class="text-muted">amostras MC Dropout</div><div>${m.mc_samples}</div>
+      <div class="text-muted">checkpoint round</div><div>${m.checkpoint_round ?? '—'}</div>
+      <div class="text-muted">checkpoint em</div><div>${m.checkpoint_at ? m.checkpoint_at.slice(0,16).replace('T',' ') : '—'}</div>
+      <div class="text-muted">versão do modelo</div><div>${m.model_version ?? '—'}</div>
+    </div>
+    <div class="text-muted mt-2" style="font-size:.78rem">${m.note}</div>`;
+
+  const ragCard = document.getElementById('rag-card');
+  const rag = data.rag_explanation;
+  if (!rag) {
+    ragCard.style.display = 'none';
+    return;
+  }
+  ragCard.style.display = 'block';
+  if (rag.erro) {
+    document.getElementById('rag-badges').innerHTML = '';
+    document.getElementById('rag-body').innerHTML = `<div class="alert alert-warning py-1 mb-0 small">${rag.erro}</div>`;
+    return;
+  }
+  document.getElementById('rag-badges').innerHTML = `
+    <span class="badge ${rag.confiavel ? 'badge-yes' : 'badge-warn'}">${rag.confiavel ? 'confiável' : 'baixa confiança'}</span>
+    ${rag.alucinacao_detectada ? '<span class="badge badge-no ms-1">alucinação detectada</span>' : ''}`;
+  const fontesHtml = (rag.fontes || []).length
+    ? `<ul class="mb-0 mt-1">${rag.fontes.map(f => `<li>${typeof f === 'string' ? f : JSON.stringify(f)}</li>`).join('')}</ul>`
+    : '<span class="text-muted">nenhuma fonte retornada</span>';
+  document.getElementById('rag-body').innerHTML = `
+    <p class="mb-2">${rag.justificativa || '<span class="text-muted">sem justificativa</span>'}</p>
+    <div class="text-muted small mb-1">Fontes:</div>
+    ${fontesHtml}
+    <div class="text-muted mt-2" style="font-size:.75rem">
+      backend: ${rag.llm_backend ?? '—'} · modelo: ${rag.llm_model_used ?? '—'} ${rag.llm_was_fallback ? '· <span class="text-warning">fallback ativado</span>' : ''}
+    </div>`;
+}
+</script>
+</body>
+</html>

@@ -53,6 +53,7 @@ def _make_strategy(tmp_path):
     strategy._best_macro_auc = None
     strategy._best_round = 0
     strategy._best_state_dict = None
+    strategy._best_confusion_matrix = None
     strategy._rdp_accountant = None
     strategy._dp_epsilon_simple = None
     strategy._dp_last_group_multipliers = None

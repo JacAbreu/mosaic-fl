@@ -8,7 +8,6 @@ aggregation.py — Agregação de state_dicts (FedAvg, FedNova) e ruído DP.
 Algoritmo de agregação selecionado por FED_CFG.use_fednova (config.py).
 """
 import logging
-import math
 from collections import OrderedDict
 from typing import List, Tuple
 
@@ -78,29 +77,36 @@ def apply_dp_noise(
     noise_multiplier: float,
     max_grad_norm: float,
     delta: float = 1e-5,
-) -> float:
+) -> Tuple[float, dict]:
     """Adiciona ruído gaussiano ao estado global agregado (DP-FedAvg, McMahan et al. 2018).
 
     noise_std = σ × S / n_clients
     ε por rodada ≈ √(2 ln(1.25/δ)) / σ   (mecanismo Gaussiano — cota superior)
     Para cotas mais apertadas, usar RDP/moments accountant (ex: Opacus).
 
-    Retorna ε acumulado (composição simples × rodadas).
-    """
-    noise_std = noise_multiplier * max_grad_norm / max(n_clients, 1)
-    with torch.no_grad():
-        for key in global_state:
-            noise = torch.normal(
-                0.0, noise_std, size=global_state[key].shape, device=global_state[key].device
-            )
-            global_state[key] = (global_state[key].float() + noise).to(global_state[key].dtype)
+    Retorna (ε acumulado, multiplicadores_por_grupo) — composição simples × rodadas
+    pro epsilon; o segundo valor é usado pelo chamador (manual_loop.py) pra
+    contabilidade RDP correta e pra persistir qual estratégia foi usada.
 
-    eps_per_round = math.sqrt(2 * math.log(1.25 / delta)) / noise_multiplier
-    eps_accumulated = eps_per_round * round_num
-    logger.info(
-        "dp_noise σ=%.2f S=%.2f noise_std=%.6f n=%d | "
-        "ε_rodada≈%.3f ε_acum≈%.3f δ=%.0e (cota superior — composição simples)",
-        noise_multiplier, max_grad_norm, noise_std, n_clients,
-        eps_per_round, eps_accumulated, delta,
+    Delega pra mosaicfl.core.dp_noise (Strategy pattern, achado 2026-07-28) —
+    estratégia escolhida via FED_CFG.dp_noise_strategy ("uniform", padrão, preserva
+    o comportamento idêntico ao histórico desta função; "layer_group", opcional —
+    ver docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md, seção 14/7.9).
+    "O que tem no Caminho A tem que ter no Caminho B" (decisão da autora) — mas o
+    Caminho A não pode quebrar no processo.
+
+    Achado 2026-07-28 (auditoria Caminho A vs B): antes, esta função descartava o
+    2º valor de retorno (group_multipliers) e sempre fazia o accountant.step() com
+    o multiplicador BASE — com dp_noise_strategy="layer_group", isso subestimava o
+    ε real (a cabeça de classificação recebe menos ruído que o resto do modelo, mas
+    a contabilidade fingia que todo o ruído era o mesmo). Corrigido: agora o valor
+    é retornado (mudança de assinatura, único caller é manual_loop.py) pra quem
+    chama poder contabilizar RDP por grupo, igual o Caminho B já faz.
+    """
+    from mosaicfl.core.dp_noise import apply_dp_noise as _apply_dp_noise
+    from mosaicfl.core.dp_noise import get_dp_noise_strategy
+
+    return _apply_dp_noise(
+        global_state, round_num, n_clients, noise_multiplier, max_grad_norm,
+        strategy=get_dp_noise_strategy(), delta=delta,
     )
-    return eps_accumulated

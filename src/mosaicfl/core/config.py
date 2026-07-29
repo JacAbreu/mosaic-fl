@@ -87,6 +87,24 @@ class ModelConfig:
     num_classes:  int            = len(_CLASS_LABELS)
     class_labels: tuple[str, ...] = _CLASS_LABELS
     dropout:      float          = 0.1
+    # Limiar (dias) entre melhora_internado_breve/melhora_internado_grave em
+    # _map_outcome() — decisão de desenho clínico (commit 6193d45), nunca validada
+    # estatisticamente. Achado 2026-07-06: mediana real de duration_days é 5, não 10
+    # (ver docs/Racional_Classes_Prognostico.md). Default preserva o comportamento
+    # atual; parametrizado para trocar sem editar código, caso vire prioridade.
+    internado_breve_max_days: int = field(
+        default_factory=lambda: int(os.getenv("FL_INTERNADO_BREVE_MAX_DAYS", "10"))
+    )
+    # Dimensão do vetor demográfico (age_norm, sex_binary) somado por late fusion na
+    # cabeça de classificação (model.py::SimplifiedBEHRT). 0 (default) = comportamento
+    # histórico, sem demográficos — idêntico em todo o projeto até 2026-07-28. Achado
+    # 2026-07-28: só existia no ablation study do Caminho A (simulação centralizada,
+    # experiments/training/core/ablation.py); portado pro Caminho B como config GLOBAL
+    # (não por-cliente) porque servidor e clientes precisam construir modelos com o
+    # MESMO demo_dim — dimensões diferentes quebrariam a agregação de pesos (FedAvg/
+    # FedProx/FedNova somam tensores posição a posição). Setar FL_DEMO_DIM=2 nas DUAS
+    # máquinas antes de um treino com late fusion, nunca só uma.
+    demo_dim: int = field(default_factory=lambda: int(os.getenv("FL_DEMO_DIM", "0")))
 
     def __post_init__(self) -> None:
         if len(self.class_labels) != self.num_classes:

@@ -231,7 +231,11 @@ class TrainingResultSummary(BaseModel):
     total_duration_s: Optional[float] = None
     dp_noise_multiplier: Optional[float] = None
     dp_noise_strategy: Optional[str] = None
+    dp_epsilon_simple: Optional[float] = None
+    dp_epsilon_rdp: Optional[float] = None
     is_active_model: Optional[bool] = None
+    checkpoint_round: Optional[int] = None
+    checkpoint_mismatch: Optional[bool] = None
 
 
 class TrainingResultsListResponse(BaseModel):
@@ -251,6 +255,8 @@ class TrainingRoundsResponse(BaseModel):
     training_id: int
     class_labels: list[str]
     best_round: Optional[int] = None
+    checkpoint_round: Optional[int] = None
+    evaluation_json: Optional[dict] = None
     rounds: list[TrainingRoundDetail]
 
 
@@ -264,3 +270,50 @@ class TrainingComparisonResponse(BaseModel):
     class_labels: list[str]
     latest: Optional[TrainingComparisonSide] = None
     best: Optional[TrainingComparisonSide] = None
+
+
+class RagEvaluationEntry(BaseModel):
+    """1 linha de metrics.rag_likert_evaluations. likert_score é a nota HUMANA
+    (None = ainda pendente); llm_judge_score é automática, complementar, nunca
+    substitui a humana (achado 2026-07-29)."""
+    id: int
+    patient_id_hash: str
+    predicted_label: str
+    risk_score: float
+    justificativa: str
+    fontes_json: Optional[list] = None
+    llm_backend: Optional[str] = None
+    llm_model_used: Optional[str] = None
+    llm_was_fallback: bool = False
+    alucinacao_detectada: bool = False
+    confiavel: bool = False
+    likert_score: Optional[int] = None
+    llm_judge_score: Optional[int] = None
+    llm_judge_rationale: Optional[str] = None
+    evaluator: Optional[str] = None
+    checkpoint_round: Optional[int] = None
+    created_at: Optional[str] = None
+
+
+class RagEvaluationListResponse(BaseModel):
+    evaluations: list[RagEvaluationEntry]
+
+
+class RagEvaluationScoreRequest(BaseModel):
+    likert_score: int = Field(ge=1, le=5)
+    evaluator: str
+
+
+class RagEvaluationReportResponse(BaseModel):
+    n_total: int
+    n_hallucination: int
+    n_confiavel: int
+    n_human_scored: int
+    human_pct_ge4: Optional[float] = None
+    human_distribution: dict[int, int] = {}
+    n_judge_scored: int
+    judge_pct_ge4: Optional[float] = None
+    judge_distribution: dict[int, int] = {}
+    n_both_scored: int
+    agreement_exact_pct: Optional[float] = None
+    agreement_ge4_pct: Optional[float] = None
