@@ -858,6 +858,7 @@ class ProductionFedProxStrategy(
                         json.dumps(self._dp_last_group_multipliers)
                         if self._dp_last_group_multipliers is not None else None
                     ),
+                    calibration_method_requested=FED_CFG.calibration_method,
                 )
                 logger.info(
                     "evaluation_metrics_updated",

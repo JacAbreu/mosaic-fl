@@ -25,6 +25,20 @@ FL_CALIBRATION_METHOD ?= auto
 PIPELINE_SEQ_LEN     ?= 128
 PIPELINE_SAMPLE      ?= 3
 
+# DP-FedAvg no Caminho B (Strategy pattern: "uniform" = comportamento histórico,
+# "layer_group" = ruído reduzido só na cabeça de classificação). Achado 2026-07-29:
+# quem aplica o ruído é o ServerApp, e o SuperLink o sobe via subprocess.Popen SEM
+# passar env= (flwr/supercore/superexec/executor/subprocess_executor.py) — o ServerApp
+# herda o ambiente do processo do SuperLink, NÃO do terminal que roda `flwr run`/
+# `make server-app`. Por isso essas variáveis são lidas pelo alvo `superlink`, não
+# `server-app` (mesma classe do achado de 2026-07-07 com FL_LLM_BACKEND).
+FL_DP_NOISE                   ?= 0.0      # sigma do ruído DP-FedAvg (0.0 = desabilitado)
+FL_DP_CLIP                    ?= 1.0      # norma de clipping (S)
+FL_DP_NOISE_STRATEGY          ?= uniform  # "uniform" | "layer_group"
+FL_DP_NOISE_HEAD_SCALE        ?= 1.0      # layer_group: multiplicador na cabeça (classifier/pre_classifier)
+FL_DP_NOISE_EMBEDDING_SCALE   ?= 1.0      # layer_group: multiplicador no embedding
+FL_DP_NOISE_TRANSFORMER_SCALE ?= 1.0      # layer_group: multiplicador no encoder
+
 # Rede federada real (desktop + notebook)
 # FL_SERVER  = IP:porta do desktop (descobrir com: hostname -I)
 # FL_HOSPITAL_ID = hospital deste nó (BPSP no desktop, HSL no notebook)
@@ -76,7 +90,8 @@ FULL_DB_PORT      ?= 5434
         training-iid-contrast training-iid-contrast-cuda \
         training-dp-curve training-dp-curve-cuda training-dp-curve-replicas-cuda \
         training-dp-curve-deterministic-cuda clean \
-        superlink server-app supernode sim test-pipeline behrt-pooled recalibrate \
+        superlink superlink-dp-off superlink-dp-uniform superlink-dp-layer-group \
+        server-app supernode sim test-pipeline behrt-pooled recalibrate \
         bootstrap-ci seed-sensitivity \
         db-up db-down db-wait fl-server fl-client fl-check \
         client-generate-seed client-db-up client-migrate client-load-hsl client-setup client-db-reset \
@@ -375,8 +390,64 @@ test-pipeline:
 # ── Flower SuperLink (produção) ────────────────────────────────────────────────
 
 # Inicia o SuperLink com TLS. Requer FL_TLS_CERT_DIR com ca.crt/server.crt/server.key.
+#
+# TODA variável lida por FED_CFG (src/mosaicfl/core/config.py, via os.getenv) que
+# precisa chegar ao ServerApp vai AQUI, não em server-app — achado 2026-07-29,
+# generalizado a partir do caso do DP: quem executa o ServerApp é o próprio
+# SuperLink (subprocess.Popen sem env=, flwr/supercore/superexec/executor/
+# subprocess_executor.py), então o ServerApp herda o ambiente do processo do
+# SuperLink. `flwr run` (usado por server-app) só SUBMETE o treino a um SuperLink
+# já em execução — variáveis definidas só naquele comando não chegam a lugar
+# nenhum. Confirmado lendo o código-fonte do flwr, não só observado no
+# comportamento (mesma classe do achado de 2026-07-07 com FL_LLM_BACKEND, que na
+# época só moveu a variável para o lugar errado — server-app — sem essa causa
+# raiz ter sido identificada).
+#
+# FL_LLM_BACKEND/FL_LLM_MODEL/FL_LLM_HF_MODEL: usados por ClinicalRAG() ao
+# construir a base de conhecimento pós-convergência
+# (infrastructure/mosaicfl_server/strategy/core.py:_build_rag_knowledge_base).
+# Sem isso, cai silenciosamente em huggingface/distilgpt2 mesmo com Ollama
+# disponível.
+# FL_CALIBRATION_METHOD: "temperature" | "isotonic" | "auto" — lido no ServerApp
+# (infrastructure/mosaicfl_server/runner/superlink.py) e ENVIADO a cada cliente via
+# fit_config (protocolo do Flower, não variável de ambiente do lado do cliente);
+# cada hospital ajusta localmente e devolve o resultado agregado
+# (client.py::_fit_local_calibrator). Não é _run_calibration (calibration_mixin.py)
+# — esse caminho exige test_loader centralizado, indisponível por design de
+# privacidade no Caminho B, nunca roda aqui.
+# FL_DP_NOISE*: ver bloco de declaração dessas variáveis, no topo deste arquivo.
 superlink:
-	FL_TLS_CERT_DIR=$(FL_TLS_CERT_DIR) bash scripts/iniciar_servidor_fl.sh
+	FL_TLS_CERT_DIR=$(FL_TLS_CERT_DIR) \
+	FL_LLM_BACKEND=$(FL_LLM_BACKEND) \
+	FL_LLM_MODEL=$(FL_LLM_MODEL) \
+	FL_LLM_HF_MODEL=$(FL_LLM_HF_MODEL) \
+	FL_CALIBRATION_METHOD=$(FL_CALIBRATION_METHOD) \
+	FL_DP_NOISE=$(FL_DP_NOISE) \
+	FL_DP_CLIP=$(FL_DP_CLIP) \
+	FL_DP_NOISE_STRATEGY=$(FL_DP_NOISE_STRATEGY) \
+	FL_DP_NOISE_HEAD_SCALE=$(FL_DP_NOISE_HEAD_SCALE) \
+	FL_DP_NOISE_EMBEDDING_SCALE=$(FL_DP_NOISE_EMBEDDING_SCALE) \
+	FL_DP_NOISE_TRANSFORMER_SCALE=$(FL_DP_NOISE_TRANSFORMER_SCALE) \
+	bash scripts/iniciar_servidor_fl.sh
+
+# Cenário "baseline" do plano de teste DP (2026-07-28): sem ruído algum —
+# equivale a "make superlink" puro, só nomeado pra deixar explícito no comando
+# qual cenário está subindo (ex.: Treino 1, peso de classe sozinho).
+superlink-dp-off: superlink
+
+# Cenário "uniforme": ruído igual em todo o modelo (comportamento histórico do
+# DP-FedAvg), sigma=0.5 — referência pra comparar com layer_group abaixo.
+#   make superlink-dp-uniform
+superlink-dp-uniform:
+	$(MAKE) superlink FL_DP_NOISE=0.5 FL_DP_CLIP=1.0 FL_DP_NOISE_STRATEGY=uniform
+
+# Cenário "layer_group" (Treino 2 do plano 2026-07-28): metade do ruído só na
+# cabeça de classificação (FL_DP_NOISE_HEAD_SCALE=0.5), resto do modelo com
+# ruído cheio. Ver docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md
+# seção 14 pra fundamentação e limitação da contabilidade RDP nesse modo.
+#   make superlink-dp-layer-group
+superlink-dp-layer-group:
+	$(MAKE) superlink FL_DP_NOISE=0.5 FL_DP_CLIP=1.0 FL_DP_NOISE_STRATEGY=layer_group FL_DP_NOISE_HEAD_SCALE=0.5
 
 # Dispara ServerApp num SuperLink já em execução (requer flwr run e pyproject.toml).
 # root-certificates é lido de ~/.flwr/config.toml (migrado automaticamente pelo
@@ -387,18 +458,14 @@ superlink:
 # 2026-07-05 após causar regressão real — ver docs/Linha_do_Tempo_MOSAIC-FL.md).
 # Se você mover FL_TLS_CERT_DIR de lugar, atualize manualmente o caminho em
 # ~/.flwr/config.toml (seção [superlink.production], chave root-certificates).
-# FL_LLM_BACKEND/FL_LLM_MODEL: usados por ClinicalRAG() ao construir a base de
-# conhecimento pós-convergência (core.py:_build_rag_knowledge_base). Sem isso,
-# cai silenciosamente em huggingface/distilgpt2 mesmo com Ollama disponível.
-# FL_CALIBRATION_METHOD: "temperature" | "isotonic" | "auto" (cada hospital ajusta os
-# dois localmente e fica com o de menor ECE — client.py::_fit_local_calibrator).
-# Não é _run_calibration (calibration_mixin.py) — esse caminho exige test_loader
-# centralizado, indisponível por design de privacidade no Caminho B, nunca roda aqui.
+#
+# NÃO passe FL_LLM_BACKEND/FL_LLM_MODEL/FL_LLM_HF_MODEL/FL_CALIBRATION_METHOD/
+# FL_DP_NOISE* aqui — este alvo só SUBMETE o treino a um SuperLink já em
+# execução, não é o processo que roda o ServerApp. Definir aqui NÃO TEM EFEITO
+# (achado 2026-07-29, ver comentário completo no alvo "superlink" acima). Configure
+# essas variáveis subindo o SuperLink com "make superlink VAR=valor" (ou os
+# alvos prontos superlink-dp-*) antes deste comando.
 server-app:
-	FL_LLM_BACKEND=$(FL_LLM_BACKEND) \
-	FL_LLM_MODEL=$(FL_LLM_MODEL) \
-	FL_LLM_HF_MODEL=$(FL_LLM_HF_MODEL) \
-	FL_CALIBRATION_METHOD=$(FL_CALIBRATION_METHOD) \
 	$(FLWR) run . production
 
 # Sobe o ServerApp em modo LOCAL-ONLY: um único hospital conectado, sem
@@ -408,15 +475,13 @@ server-app:
 # Depois suba SÓ o SuperNode desse hospital (make supernode FL_CLIENT_ID=BPSP
 # FL_DATA_SOURCE=sgbd) — NÃO suba o outro simultaneamente, senão min-clients=1
 # aceita o primeiro que conectar e o treino deixa de ser local-only de verdade.
+# Mesma ressalva do alvo "server-app" acima: FL_LLM_BACKEND/FL_CALIBRATION_METHOD/
+# FL_DP_NOISE* não têm efeito aqui — configure ao subir o SuperLink.
 server-app-local-only:
 	@if [ -z "$(LOCAL_ONLY_HOSPITAL)" ]; then \
 		echo "ERRO: defina LOCAL_ONLY_HOSPITAL=BPSP ou LOCAL_ONLY_HOSPITAL=HSL"; \
 		exit 1; \
 	fi
-	FL_LLM_BACKEND=$(FL_LLM_BACKEND) \
-	FL_LLM_MODEL=$(FL_LLM_MODEL) \
-	FL_LLM_HF_MODEL=$(FL_LLM_HF_MODEL) \
-	FL_CALIBRATION_METHOD=$(FL_CALIBRATION_METHOD) \
 	$(FLWR) run . production --run-config 'min-clients=1 local-only-hospital="$(LOCAL_ONLY_HOSPITAL)"'
 
 # ── Hooks pós-treino (achado 2026-07-29) ──────────────────────────────────────

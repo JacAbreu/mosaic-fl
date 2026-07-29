@@ -105,6 +105,7 @@ class SQLiteCheckpointStore(CheckpointStore):
         dp_noise_group_multipliers_json: Optional[str] = None,
         rag_precision_at_k: Optional[float] = None,
         rag_k: Optional[int] = None,
+        calibration_method_requested: Optional[str] = None,
     ) -> None:
         # fl_trainings do SQLite ainda não tem essas colunas (schema local, sem
         # Alembic — mesma lacuna já existente para as métricas de recurso
@@ -113,10 +114,10 @@ class SQLiteCheckpointStore(CheckpointStore):
         logger.info(
             "training_evaluation_metrics_sqlite_not_persisted id=%d macro_auc=%s macro_f1=%s ece=%s ece_pre=%s "
             "dp_sigma=%s dp_clip=%s dp_eps_simple=%s dp_eps_rdp=%s rag_precision_at_k=%s rag_k=%s "
-            "(ver evaluation_json no checkpoint)",
+            "calibration_method_requested=%s (ver evaluation_json no checkpoint)",
             training_id, macro_auc, macro_f1, ece, ece_pre,
             dp_noise_multiplier, dp_max_grad_norm, dp_epsilon_simple, dp_epsilon_rdp,
-            rag_precision_at_k, rag_k,
+            rag_precision_at_k, rag_k, calibration_method_requested,
         )
 
     def mark_active_model(self, training_id: int) -> None:

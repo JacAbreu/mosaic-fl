@@ -81,6 +81,11 @@ round-timeout-seconds = 300
 # citável na defesa.
 run-classification    = "ajuste"
 
+# "" (default, treino federado normal) ou "BPSP"/"HSL" — treino local isolado
+# nesse hospital, pra baseline comparável ao federado na rede real (migration
+# 030). Use junto de min-clients=1 e suba SÓ o SuperNode desse hospital.
+local-only-hospital   = ""
+
 # "default": exigido pela migração de config legada do flwr >=1.30 (ver
 # scripts/iniciar_servidor_fl.sh / docs) — sem isso, "flwr run . production" falha com
 # "doesn't declare a default federation", mesmo passando o nome explicitamente.

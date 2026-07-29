@@ -68,6 +68,7 @@ class CheckpointStore(ABC):
         dp_noise_group_multipliers_json: Optional[str] = None,
         rag_precision_at_k: Optional[float] = None,
         rag_k: Optional[int] = None,
+        calibration_method_requested: Optional[str] = None,
     ) -> None:
         """Grava em fl_trainings o AUC-ROC/F1/ECE pós-calibração (+ ECE pré-calibração,
         ece_pre) e, quando DP-FedAvg está habilitado, os parâmetros e o ε acumulado
@@ -85,7 +86,15 @@ class CheckpointStore(ABC):
         agregada entre clientes (mosaicfl.core.rag.precision.eval_precision_at_k,
         rodado localmente por hospital, nunca centraliza amostra). NULL quando
         nenhum cliente recebeu rag_patterns_json ainda (primeira rodada de
-        avaliação de cada treino)."""
+        avaliação de cada treino).
+
+        calibration_method_requested (migration 034): valor de FED_CFG.calibration_method
+        visto pelo ServerApp neste treino — não o método que cada cliente escolheu sob
+        "auto" (isso já está em fl_round_history.calibration_per_client_json), mas o
+        que foi PEDIDO. Existe pra distinguir "auto que escolheu temperature" de
+        "temperature forçado direto" sem depender de log de cliente (achado 2026-07-29:
+        FL_CALIBRATION_METHOD só tem efeito quando definida ao subir o SuperLink, não
+        no comando server-app — ver Makefile, alvo "superlink")."""
 
     @abstractmethod
     def save(
