@@ -401,11 +401,37 @@ de `FL_DP_NOISE`/`FL_DP_CLIP`/`FL_DP_NOISE_STRATEGY`/`FL_DP_NOISE_HEAD_SCALE` j�
 tutorial (1.8 em diante) não muda — `make server-app` continua sendo o comando que dispara o
 treino.
 
-**Como confirmar que o cenário certo realmente ativou:** depois da 1ª rodada, as colunas
-`dp_epsilon_simple`, `dp_epsilon_rdp` e `dp_noise_strategy` de `metrics.fl_trainings` não devem
-ficar `NULL` quando `FL_DP_NOISE > 0`. Se ficarem `NULL` com um cenário DP ativo, o SuperLink
-provavelmente foi subido sem passar por um desses alvos (ex.: reaproveitando um terminal antigo
-com `make superlink` puro ainda de pé) — pare o processo e suba de novo com o alvo certo.
+**Como confirmar que o cenário certo realmente ativou — correção 2026-07-29 (achado ao vivo,
+treino 81):** a orientação anterior desta seção (checar `dp_epsilon_simple`/`dp_epsilon_rdp`/
+`dp_noise_strategy` em `metrics.fl_trainings` logo após a 1ª rodada) estava **errada** — não bate
+com o código atual. Essas colunas só são gravadas por
+`ProductionFedProxStrategy.aggregate_fit()` (`infrastructure/mosaicfl_server/strategy/core.py:843`)
+na **última rodada** (`is_last_round`, ou seja, `server_round >= num_rounds` — round 110 no
+cenário padrão), não incrementalmente a cada rodada. Se você parar o treino antes da última
+rodada (como aconteceu ao investigar isso: parado no round 4 pra validar), essas colunas ficam
+`NULL` **mesmo com o DP ativo e aplicando ruído normalmente** — não é evidência de que algo
+foi configurado errado.
+
+A forma confiável de confirmar por rodada é o log dedicado do `ServerApp` (existe justamente
+porque o stdout do `ServerApp` não aparece no terminal do SuperLink nem do `flwr run` — achado
+de 2026-07-05/06, ver comentário em `infrastructure/mosaicfl_server/runner/superlink.py:31-42):
+
+```bash
+tail -f experiments/logs/serverapp_<timestamp>.log | grep dp_noise_applied
+```
+
+Cada rodada com DP ativo grava uma linha assim (confirmado no treino 81, cenário layer_group):
+
+```
+dp_noise_applied round=1 groups={'head': 0.25, 'embedding': 0.5, 'transformer': 0.5} epsilon_simple=19.379
+```
+
+Os multiplicadores por grupo devem bater com `FL_DP_NOISE × FL_DP_NOISE_HEAD_SCALE` (cabeça) e
+`FL_DP_NOISE × FL_DP_NOISE_EMBEDDING_SCALE`/`FL_DP_NOISE_TRANSFORMER_SCALE` (resto). Se essa
+linha não aparecer em nenhuma rodada, aí sim o SuperLink provavelmente subiu sem passar por um
+dos alvos `superlink-dp-*` (ex.: terminal antigo com `make superlink` puro ainda de pé) — pare o
+processo e suba de novo com o alvo certo. As colunas de `metrics.fl_trainings` continuam úteis
+como resumo final, só não sirvam pra checagem precoce.
 
 ---
 

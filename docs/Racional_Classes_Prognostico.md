@@ -53,14 +53,24 @@ atendimentos não-internados, e distinguir gravidade (curado vs. melhora) e temp
 recuperação (breve vs. grave) quando há internação.
 
 **Ponto em aberto, sem justificativa registrada em lugar nenhum do repositório:** o
-limiar de 10 dias entre `melhora_internado_breve`/`melhora_internado_grave` está
-**fixo no código** (`return 3 if duration_days <= 10 else 4`,
-`src/mosaicfl/core/preprocessor/outcomes.py:34`) — não há evidência de que tenha sido
-derivado de uma análise estatística da distribuição real de `duration_days` (ex.:
-mediana, percentil, ponto de corte ótimo). É um valor de bom senso clínico, não
-validado empiricamente no próprio projeto. **Isso é uma oportunidade concreta pra sua
-exploração atual** — ver se 10 dias é de fato um corte que separa bem os dados, ou se
-outro valor discriminaria melhor.
+limiar de 10 dias entre `melhora_internado_breve`/`melhora_internado_grave` não há
+evidência de que tenha sido derivado de uma análise estatística da distribuição real
+de `duration_days` (ex.: mediana, percentil, ponto de corte ótimo). É um valor de bom
+senso clínico, não validado empiricamente no próprio projeto. **Isso é uma oportunidade
+concreta pra sua exploração atual** — ver se 10 dias é de fato um corte que separa bem
+os dados, ou se outro valor discriminaria melhor.
+
+**Atualização 2026-07-28**: o limiar foi parametrizado (`ModelConfig.internado_breve_max_days`,
+env `FL_INTERNADO_BREVE_MAX_DAYS`, default `10` — preserva o comportamento histórico) pra
+ficar barato de trocar quando/se a decisão de mudar for tomada, sem editar código
+(`src/mosaicfl/core/config.py`, `src/mosaicfl/core/preprocessor/outcomes.py::_map_outcome`).
+**Importante**: parametrizar não é uma correção do colapso de classes raras
+(`curado_internado`/`melhora_pronto`, ver `project_colapso_classes_raras_confirmado`
+na memória), que são definidas por `outcome_class`/`attendance_type`, não por
+`duration_days`. Mudar este limiar só rebalanceia `melhora_internado_breve`×
+`melhora_internado_grave`, um eixo diferente.
+Mudar o valor default ainda exige re-treinar do zero pra qualquer comparação valer,
+já que altera o rótulo-verdade de todo paciente internado.
 
 ## Achado empírico posterior (não usado para desenhar as classes, só descoberto ao treinar)
 

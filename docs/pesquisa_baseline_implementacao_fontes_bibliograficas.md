@@ -708,6 +708,22 @@ A aproximação reduz o ε em ~31% frente à soma ingênua — uma direção rea
 
 ---
 
+## 15. Achado — Descompasso Treino×Inferência no Embedding Temporal (`dia_relativo`) (2026-07-28)
+
+**Contexto**: ao construir a tela `/predict` (exposição de `POST /api/predict` pra demonstração/defesa), surgiu a pergunta de por que o campo `date` de cada exame é obrigatório na entrada. A resposta simples ("ordena a sequência") levou a uma verificação mais profunda do caminho de inferência que revelou um descompasso real entre o que o modelo aprendeu a usar no treino e o que recebe em produção.
+
+**O que o treino usa**: `SequencePipeline` (`src/mosaicfl/core/preprocessor/sequence_pipeline.py`) calcula `dia_relativo = exam_date − attended_at` (dias desde a admissão hospitalar, coluna `clinical.attendances.attended_at`) para cada exame, ordena a sequência por `dia_relativo ASC` e alimenta esse valor como um embedding próprio — `DiaRelativoEmbedding` (`src/mosaicfl/core/model.py:35-53`), somado ao embedding de token (`model.py:226-227`, `if dia_relativo is not None: emb = emb + self.dia_embedding(...)`). Ou seja: o modelo foi treinado pra distinguir "dois exames feitos com 1 dia de intervalo" de "dois exames feitos com 10 dias de intervalo" — não só a ordem entre eles, mas o espaçamento real.
+
+**O que a inferência de produção faz**: `records_to_tokens()` (`infrastructure/mosaicfl_api/inference_engine/tokenization.py:89`) ordena os exames recebidos por `date` (`sorted(records, key=lambda r: r.date)`) — a ORDEM fica correta. Mas `InferenceEngine.predict_proba()` (`infrastructure/mosaicfl_api/inference_engine/engine.py:218`) chama `self.model(x, mask=mask)` **sem** o argumento `dia_relativo`. Como o parâmetro é opcional (`Optional[torch.Tensor] = None`, `model.py:198`) e a soma do embedding é condicional à sua presença, o modelo simplesmente pula essa parcela — não há erro, não há aviso, a predição sai normalmente, só que sem a informação de espaçamento temporal que o treino usou.
+
+**Escopo real, mais amplo do que pareceu à primeira vista**: uma busca por `dia_relativo` em todo `infrastructure/mosaicfl_api/` não retornou nenhuma ocorrência. Isso significa que a limitação não é exclusiva da tela de demonstração (`/predict`) — **`POST /api/exams/ingest`** (o endpoint real usado pela integração ClinicalPath, via `_run_ingest()` em `infrastructure/mosaicfl_api/routers/prediction.py:125`) chama exatamente o mesmo `engine.predict_proba()` e sofre da mesma lacuna. Afeta toda predição servida pela API hoje, não só o endpoint ad-hoc.
+
+**Por que não é um ajuste trivial**: os schemas de entrada da API (`ExamInput`, `IngestRequest`, `PredictRequest` em `infrastructure/mosaicfl_api/schemas.py`) não têm nenhum campo equivalente a "data de admissão"/`attended_at` — só existe `date` por exame. Diferente do pipeline de treino, que lê `attended_at` de `clinical.attendances` (uma tabela populada pelo ETL hospitalar), a API recebe exames de forma ad-hoc, sem necessariamente ter um registro de atendimento associado. Corrigir isso exige uma decisão de design, não uma linha de código: (a) aproximar `dia_relativo` pela data do primeiro exame do lote recebido (razoável, mas pode divergir da admissão real se o lote não cobrir o início do episódio), ou (b) adicionar um campo explícito de data de admissão aos schemas de entrada e exigir que quem chama a API o forneça.
+
+**Estado**: registrado como limitação conhecida, não corrigido agora — pressão de cronograma (ver decisão de fase de ajuste/treinamentos reais) não comporta essa mudança de schema + revalidação nesta janela. Fica como candidato concreto pro "se sobrar tempo depois de 15/08" ou pra seção de limitações/trabalhos futuros do texto final.
+
+---
+
 ## 6. Regulatório
 
 ### 6.1 ANVISA — RDC 657/2022
