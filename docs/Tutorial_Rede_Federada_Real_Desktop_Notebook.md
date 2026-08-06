@@ -125,14 +125,21 @@ agora falha ao subir, em vez de deixar os clientes com vocabulários incompatív
 
 ### 1.5 Gerar certificados TLS com o IP real do desktop
 
+**O diretório fica fora do repositório** (`tcc/certs`, um nível acima de `mosaic-fl/`) —
+é o caminho que o resto deste tutorial (passo 1.8 em diante) já assume:
+
 ```bash
 hostname -I   # anote o IP mostrado
-bash scripts/gerar_certs_tls.sh certs <SEU_IP>
-export FL_TLS_CERT_DIR="$(pwd)/certs"
+bash scripts/gerar_certs_tls.sh /home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/certs <SEU_IP>
+export FL_TLS_CERT_DIR=/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/certs
 ```
 
 > O IP precisa ser passado na geração para entrar como `IP:` no certificado (SAN) —
 > sem isso, a validação TLS falha ao conectar via IP real (só funcionaria via `localhost`).
+
+> Se os certificados já existirem em `tcc/certs` (de uma execução anterior) e ainda
+> estiverem dentro da validade (365 dias), **não precisa gerar de novo** — só exportar
+> `FL_TLS_CERT_DIR` acima.
 
 ### 1.6 Liberar a porta no firewall (Fleet API)
 
@@ -244,7 +251,7 @@ make client-load-hsl
 **Só o `ca.crt`** — nunca `ca.key`/`server.key`, que ficam só no desktop:
 
 ```bash
-scp usuario@IP_DESKTOP:~/mosaic-fl/certs/ca.crt certs/ca.crt
+scp usuario@IP_DESKTOP:/home/jacabreu/studies/usp/mba-bigdata-art-int/tcc/certs/ca.crt certs/ca.crt
 export FL_TLS_CERT_DIR="$(pwd)/certs"
 ```
 
@@ -432,6 +439,35 @@ linha não aparecer em nenhuma rodada, aí sim o SuperLink provavelmente subiu s
 dos alvos `superlink-dp-*` (ex.: terminal antigo com `make superlink` puro ainda de pé) — pare o
 processo e suba de novo com o alvo certo. As colunas de `metrics.fl_trainings` continuam úteis
 como resumo final, só não sirvam pra checagem precoce.
+
+### 3.5 Early stop real (`FL_EARLY_STOP`) — parar de verdade na convergência
+
+**Achado 2026-08-01, avaliando o treino 83 (DP uniforme):** convergência foi detectada na
+rodada 36 (pico: F1 macro=0,224, accuracy=64,4%), mas o treino seguiu até a rodada 110
+configurada — o `Server.fit()` do flwr roda um loop fixo (`for current_round in range(1,
+num_rounds + 1)`), sem nenhum mecanismo de saída antecipada (confirmado lendo o fonte
+instalado, flwr 1.32.1). Entre a 36 e a 110 o modelo **colapsou** (F1 macro=0,025,
+accuracy=6,8%) enquanto `dp_epsilon_simple` cresceu de ~10 pra 1065 sem ganho nenhum de
+qualidade nesse intervalo — rodar além do ponto de convergência sob DP pode ser ativamente
+destrutivo, não só desperdício de tempo.
+
+Por padrão (`FL_EARLY_STOP=false`, comportamento preservado) o Caminho B continua rodando
+sempre até `num-rounds`, igual sempre foi — necessário pra não invalidar comparações com
+treinos já citados/rodados antes desta correção (ex.: o próprio treino 83). Pra ligar o
+early stop real num treino novo:
+
+```bash
+FL_DB_URL="postgresql://mosaicfl:senhaForte@localhost:5433/mosaicfl" \
+  make superlink-dp-layer-group FL_EARLY_STOP=true
+```
+
+Quando ligado, o treino para uma rodada depois da convergência ser detectada (não na própria
+rodada — `calibrate=True`/`extract_rag_patterns=True` precisam ser enviados aos clientes
+**antes** da rodada rodar, mas a convergência só é confirmada **depois**, com os resultados
+da rodada que acabou de rodar). Log a acompanhar:
+```bash
+grep -E "early_stop_scheduled|early_stop_triggered" experiments/logs/serverapp_<timestamp>.log
+```
 
 ---
 

@@ -9,6 +9,16 @@ FL_CLIENT_ID         ?= hospital_dev
 FL_DATA_SOURCE       ?= simulated
 FL_DB_URL            ?= postgresql://mosaicfl:senhaForte@localhost:5432/mosaicfl
 
+# Piso de volume local pra um analito virar candidato de descoberta de
+# vocabulário (DataSource.find_vocab_candidates, lido pelo SuperNode —
+# achado 2026-08-06: com o default de produção (100), dado real do BPSP tem
+# 145 candidatos mas ZERO com referência institucional real — os que têm
+# (72) ficam abaixo desse piso; o de maior volume com ref real tem 94
+# registros. Default aqui preserva 100 (comportamento histórico); baixe só
+# pra validar o caminho de crescimento de verdade num treino específico:
+#   make supernode FL_CLIENT_ID=BPSP FL_DATA_SOURCE=sgbd FL_VOCAB_MIN_RECORDS=90
+FL_VOCAB_MIN_RECORDS ?= 100
+
 # RAG/LLM e calibração — defaults que evitam fallback silencioso (huggingface/distilgpt2
 # em vez de ollama/gemma3:4b) quando ninguém exporta essas variáveis explicitamente —
 # achado real de 2026-07-07, ver docs/Linha_do_Tempo_MOSAIC-FL.md. `?=` respeita
@@ -38,6 +48,16 @@ FL_DP_NOISE_STRATEGY          ?= uniform  # "uniform" | "layer_group"
 FL_DP_NOISE_HEAD_SCALE        ?= 1.0      # layer_group: multiplicador na cabeça (classifier/pre_classifier)
 FL_DP_NOISE_EMBEDDING_SCALE   ?= 1.0      # layer_group: multiplicador no embedding
 FL_DP_NOISE_TRANSFORMER_SCALE ?= 1.0      # layer_group: multiplicador no encoder
+
+# Early stop real no Caminho B (achado 2026-08-01, avaliando o treino 83 — DP
+# uniforme colapsou entre a rodada 36, pico, e a 110, configurada, enquanto
+# dp_epsilon_simple cresceu sem nenhum ganho de qualidade nesse intervalo).
+# Mesma classe de achado das variáveis DP/calibração/RAG acima: quem lê é o
+# ServerApp, que herda o ambiente do SuperLink — por isso vai no alvo
+# `superlink`, não em `server-app`. Default "false": preserva o comportamento
+# histórico (sempre roda até FL_NUM_ROUNDS) para não invalidar comparações com
+# treinos já citados.
+FL_EARLY_STOP ?= false
 
 # Rede federada real (desktop + notebook)
 # FL_SERVER  = IP:porta do desktop (descobrir com: hostname -I)
@@ -352,6 +372,46 @@ db-down:
 db-down-v:
 	docker compose -f docker-compose.db.yml down -v
 
+# Alvo genérico pra subir uma instância de Postgres ADICIONAL, nomeada e numa
+# porta própria — pra bancos que não podem compartilhar container/volume com o
+# "padrão" (mosaicfl-db, alvo db-up) nem entre si. Até 2026-08-02, cada cenário
+# assim (mosaicfl-db-bpsp do tutorial de rede real, mosaic_brute_data do
+# full-db-up) tinha seu próprio bloco "docker run" copiado à mão — sem alvo
+# genérico, era fácil esquecer um parâmetro (nome errado, porta em conflito) ou
+# só nunca ter um make pra isso. FL_DB_INSTANCE_CONTAINER/FL_DB_INSTANCE_PORT
+# não têm default de propósito — falha cedo e explícito em vez de subir em cima
+# de um container/porta já em uso sem querer.
+#   make db-instance-up FL_DB_INSTANCE_CONTAINER=mosaicfl-db-server FL_DB_INSTANCE_PORT=5434
+#   make db-instance-up FL_DB_INSTANCE_CONTAINER=mosaicfl-db-bpsp FL_DB_INSTANCE_PORT=5433
+FL_DB_INSTANCE_CONTAINER ?=
+FL_DB_INSTANCE_PORT      ?=
+FL_DB_INSTANCE_NAME      ?= mosaicfl
+db-instance-up:
+	@if [ -z "$(FL_DB_INSTANCE_CONTAINER)" ] || [ -z "$(FL_DB_INSTANCE_PORT)" ]; then \
+		echo "ERRO: defina FL_DB_INSTANCE_CONTAINER=nome FL_DB_INSTANCE_PORT=porta"; \
+		exit 1; \
+	fi
+	docker run -d \
+		--name $(FL_DB_INSTANCE_CONTAINER) \
+		-e POSTGRES_DB=$(FL_DB_INSTANCE_NAME) -e POSTGRES_USER=mosaicfl \
+		-e POSTGRES_PASSWORD=$(FL_DB_PASSWORD) \
+		-p $(FL_DB_INSTANCE_PORT):5432 \
+		-v $(FL_DB_INSTANCE_CONTAINER)_data:/home/postgres/pgdata/data \
+		timescale/timescaledb-ha:pg16
+	@echo "Aguardando '$(FL_DB_INSTANCE_CONTAINER)' ficar pronto..."
+	@until docker exec $(FL_DB_INSTANCE_CONTAINER) pg_isready -U mosaicfl -d $(FL_DB_INSTANCE_NAME) >/dev/null 2>&1; do sleep 1; done
+	@echo "Banco '$(FL_DB_INSTANCE_CONTAINER)' pronto na porta $(FL_DB_INSTANCE_PORT), banco '$(FL_DB_INSTANCE_NAME)'."
+
+## Para/remove uma instância criada com db-instance-up (dados preservados no
+## volume Docker — some junto só se o volume for removido manualmente).
+db-instance-down:
+	@if [ -z "$(FL_DB_INSTANCE_CONTAINER)" ]; then \
+		echo "ERRO: defina FL_DB_INSTANCE_CONTAINER=nome"; \
+		exit 1; \
+	fi
+	docker stop $(FL_DB_INSTANCE_CONTAINER)
+	docker rm $(FL_DB_INSTANCE_CONTAINER)
+
 # ── Rede federada real (desktop + notebook) ───────────────────────────────────
 
 ## Desktop: sobe o banco e inicia o servidor FL.
@@ -428,6 +488,7 @@ superlink:
 	FL_DP_NOISE_HEAD_SCALE=$(FL_DP_NOISE_HEAD_SCALE) \
 	FL_DP_NOISE_EMBEDDING_SCALE=$(FL_DP_NOISE_EMBEDDING_SCALE) \
 	FL_DP_NOISE_TRANSFORMER_SCALE=$(FL_DP_NOISE_TRANSFORMER_SCALE) \
+	FL_EARLY_STOP=$(FL_EARLY_STOP) \
 	bash scripts/iniciar_servidor_fl.sh
 
 # Cenário "baseline" do plano de teste DP (2026-07-28): sem ruído algum —
@@ -465,8 +526,17 @@ superlink-dp-layer-group:
 # (achado 2026-07-29, ver comentário completo no alvo "superlink" acima). Configure
 # essas variáveis subindo o SuperLink com "make superlink VAR=valor" (ou os
 # alvos prontos superlink-dp-*) antes deste comando.
+#
+# FL_RUN_CLASSIFICATION (achado 2026-08-02): diferente das variáveis acima,
+# "run-classification" É lido aqui — é o próprio "flwr run" (não o ServerApp
+# via SuperLink) quem resolve --run-config, então esse valor SIM tem efeito
+# neste alvo, ao contrário de LLM/DP/calibração. Default "ajuste" (mesma
+# semântica do FL_RUN_CLASSIFICATION do Caminho A, ver alvo training-full;
+# antes desta correção só dava pra mudar editando pyproject.toml na mão).
+# Pra marcar como resultado formal:
+#   make server-app FL_RUN_CLASSIFICATION=treinamento_real
 server-app:
-	$(FLWR) run . production
+	$(FLWR) run . production --run-config 'run-classification="$(FL_RUN_CLASSIFICATION)"'
 
 # Sobe o ServerApp em modo LOCAL-ONLY: um único hospital conectado, sem
 # federação de verdade — baseline "local" comparável ao federado na mesma
@@ -514,6 +584,7 @@ supernode:
 	FL_CLIENT_ID=$(FL_CLIENT_ID) \
 	FL_DATA_SOURCE=$(FL_DATA_SOURCE) \
 	FL_SUPERLINK_ADDRESS=$(FL_SUPERLINK_ADDRESS) \
+	FL_VOCAB_MIN_RECORDS=$(FL_VOCAB_MIN_RECORDS) \
 	bash scripts/iniciar_cliente_fl.sh
 
 # Simulação local com run_simulation (sem SuperLink, sem rede, sem TLS).

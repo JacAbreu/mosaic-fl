@@ -194,6 +194,24 @@ class FedConfig:
     class_weight_clamp: float = field(
         default_factory=lambda: float(os.getenv("FL_CLASS_WEIGHT_CLAMP", "15.0"))
     )
+    # Early stop real no Caminho B (achado 2026-08-01, avaliando o treino 83 — DP
+    # uniforme colapsou entre a rodada 36 (pico, F1 macro=0,224) e a 110 (F1
+    # macro=0,025), enquanto dp_epsilon_simple cresceu de ~10 pra 1065 sem nenhum
+    # ganho de qualidade nesse intervalo). O Caminho A (manual_loop.py:316-319)
+    # sempre teve saída antecipada real na convergência — é a própria intenção
+    # documentada em num_rounds acima ("teto máximo; early stopping pode parar
+    # antes"). O Caminho B nunca teve o equivalente: usa o loop fixo de
+    # flwr.server.server.Server.fit() (`for current_round in range(1, num_rounds
+    # + 1)`, sem break/should_stop — confirmado lendo o fonte instalado do flwr
+    # 1.32.1), então "converged" era só informativo (ver
+    # ProductionFedProxStrategy.should_stop). Corrigido com um Server customizado
+    # (infrastructure/mosaicfl_server/runner/early_stop_server.py) que o SuperLink
+    # só usa quando esta flag está ligada. Default False: preserva o comportamento
+    # histórico (roda sempre até num_rounds) para não invalidar comparações com
+    # treinos já citados — ativar explicitamente com FL_EARLY_STOP=true.
+    early_stop: bool = field(
+        default_factory=lambda: os.getenv("FL_EARLY_STOP", "false").strip().lower() == "true"
+    )
 
 
 @dataclass

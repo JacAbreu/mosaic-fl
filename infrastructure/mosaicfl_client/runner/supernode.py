@@ -2,6 +2,7 @@
 
 Entry point para: flower-supernode --superlink <addr> ... (executa flwr-clientapp internamente)
 """
+import functools
 import json
 import logging
 import os
@@ -101,7 +102,20 @@ def _client_fn(context: Context) -> fl.client.Client:
         return FedProxClient(
             client_id=client_id_int,
             loader_factory=_loader_factory,
-            vocab_discovery_fn=source.find_vocab_candidates,
+            # min_records: piso de volume local pra um analito virar candidato de
+            # descoberta (DataSource.find_vocab_candidates, default=100 hardcoded
+            # na assinatura, nunca sobrescrito por nenhum chamador até 2026-08-06).
+            # Achado ao investigar dado real do BPSP: com min_records=100, 145
+            # candidatos aparecem mas NENHUM tem referência institucional real
+            # (select_insertable rejeita todos) — os que têm referência real ficam
+            # abaixo do piso (o de maior volume, PROTEINA_S_ATIVIDADE, tem 94
+            # registros). FL_VOCAB_MIN_RECORDS permite baixar o piso sem mudar o
+            # default de produção (preserva 100 se a env var não for setada) —
+            # mesmo padrão Strategy/flag do resto do projeto.
+            vocab_discovery_fn=functools.partial(
+                source.find_vocab_candidates,
+                min_records=int(os.getenv("FL_VOCAB_MIN_RECORDS", "100")),
+            ),
         ).to_client()
 
     if cache_key not in _loader_cache:
