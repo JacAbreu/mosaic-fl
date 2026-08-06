@@ -11,6 +11,7 @@ from .. import audit
 from .. import state
 from ..inference_engine import InferenceEngine
 from ..schemas import (
+    ClassBestRound,
     ClassWeightOverridesUpdate,
     FLStatus,
     OrchestrationConfigResponse,
@@ -18,6 +19,7 @@ from ..schemas import (
     RagEvaluationListResponse,
     RagEvaluationReportResponse,
     RagEvaluationScoreRequest,
+    RepeatedStateGroup,
     TrainingComparisonResponse,
     TrainingComparisonSide,
     TrainingResultSummary,
@@ -421,7 +423,8 @@ async def set_class_weight_overrides(
 # fl_trainings.best_round; ver project_bug_checkpoint_nao_era_melhor_rodada.
 _TRAINING_SUMMARY_COLUMNS = (
     "t.id, t.algorithm, t.run_classification, t.partition_mode, t.status, t.started_at, t.completed_at, "
-    "t.n_rounds_done, t.best_round, t.best_accuracy, t.converged, t.macro_f1, t.macro_auc, t.ece, t.ece_pre, "
+    "t.n_rounds_done, t.best_round, t.best_accuracy, t.converged, t.convergence_round, "
+    "t.macro_f1, t.macro_auc, t.ece, t.ece_pre, "
     "t.total_duration_s, t.dp_noise_multiplier, t.dp_noise_strategy, t.dp_epsilon_simple, t.dp_epsilon_rdp, "
     "t.is_active_model, c.round AS checkpoint_round"
 )
@@ -441,7 +444,8 @@ def _row_to_training_summary(r) -> TrainingResultSummary:
         started_at=r.started_at.isoformat() if r.started_at else None,
         completed_at=r.completed_at.isoformat() if r.completed_at else None,
         n_rounds_done=r.n_rounds_done, best_round=r.best_round, best_accuracy=r.best_accuracy,
-        converged=r.converged, macro_f1=r.macro_f1, macro_auc=r.macro_auc, ece=r.ece,
+        converged=r.converged, convergence_round=r.convergence_round,
+        macro_f1=r.macro_f1, macro_auc=r.macro_auc, ece=r.ece,
         ece_pre=r.ece_pre, total_duration_s=r.total_duration_s,
         dp_noise_multiplier=r.dp_noise_multiplier, dp_noise_strategy=r.dp_noise_strategy,
         dp_epsilon_simple=r.dp_epsilon_simple, dp_epsilon_rdp=r.dp_epsilon_rdp,
@@ -477,14 +481,16 @@ async def get_training_rounds(training_id: int, fingerprint: str = Depends(_get_
     estabilidade/diluição, mesma análise feita manualmente pra decidir se um
     ajuste de peso de classe funcionou de verdade (ver seção 13/14 do doc de
     pesquisa)."""
+    from collections import defaultdict
+
     from sqlalchemy import text as _text
 
     from mosaicfl.core.config import MODEL_CFG
 
     try:
         with state._db._engine.connect() as conn:
-            best_round_row = conn.execute(_text(
-                "SELECT best_round FROM metrics.fl_trainings WHERE id = :id"
+            training_row = conn.execute(_text(
+                "SELECT best_round, convergence_round FROM metrics.fl_trainings WHERE id = :id"
             ), {"id": training_id}).mappings().first()
             checkpoint_row = conn.execute(_text(
                 "SELECT round, evaluation_json FROM metrics.fl_checkpoints WHERE training_id = :id"
@@ -500,6 +506,8 @@ async def get_training_rounds(training_id: int, fingerprint: str = Depends(_get_
     if not rows:
         raise HTTPException(status_code=404, detail=f"training_id={training_id!r} sem histórico de rodadas")
 
+    class_labels = list(MODEL_CFG.class_labels)
+
     rounds = [
         TrainingRoundDetail(
             round=r.round, accuracy=r.accuracy, f1_macro=r.f1_macro,
@@ -507,13 +515,65 @@ async def get_training_rounds(training_id: int, fingerprint: str = Depends(_get_
         )
         for r in rows
     ]
+
+    # "Estados atratores" (achado 2026-08-01, treino 85) — rodadas com per_class_f1
+    # IDÊNTICO (até 6 casas decimais) indicam o modelo caindo repetidamente na
+    # mesma solução degenerada (prever uma classe fixa), não convergência genuína.
+    # Ver RepeatedStateGroup (schemas.py) e seção 16 do doc de pesquisa.
+    sig_to_rounds: dict = defaultdict(list)
+    for r in rows:
+        if r.per_class_f1 is None:
+            continue
+        sig_to_rounds[tuple(round(x, 6) for x in r.per_class_f1)].append(r.round)
+    repeated_states = [
+        RepeatedStateGroup(
+            per_class_f1=list(sig),
+            rounds=sorted(round_list),
+            dominant_class=(
+                class_labels[nonzero[0]]
+                if len(nonzero := [i for i, v in enumerate(sig) if v > 1e-9]) == 1
+                else None
+            ),
+        )
+        for sig, round_list in sig_to_rounds.items()
+        if len(round_list) >= 2
+    ]
+    repeated_states.sort(key=lambda g: -len(g.rounds))
+
+    # Melhor rodada POR CLASSE (achado 2026-08-02, pedido explícito da autora) —
+    # independente do critério de seleção do checkpoint (f1_macro/accuracy
+    # agregados) e independente de ter convergido ou não. Uma classe rara pode
+    # ter seu pico numa rodada em que o agregado geral não era o melhor (outras
+    # classes estavam piores naquele momento) — informação que best_round
+    # sozinho esconde. Ver ClassBestRound (schemas.py).
+    class_best_rounds = []
+    for i, label in enumerate(class_labels):
+        best = None  # (f1, round)
+        for r in rounds:
+            if r.per_class_f1 is None or i >= len(r.per_class_f1):
+                continue
+            f1 = r.per_class_f1[i]
+            if best is None or f1 > best[0]:
+                best = (f1, r.round)
+        if best is not None:
+            class_best_rounds.append(ClassBestRound(class_name=label, round=best[1], f1=best[0]))
+
+    best_round = training_row["best_round"] if training_row else None
+    convergence_round = training_row["convergence_round"] if training_row else None
+    rounds_by_number = {r.round: r for r in rounds}
+
     return TrainingRoundsResponse(
         training_id=training_id,
-        class_labels=list(MODEL_CFG.class_labels),
-        best_round=best_round_row["best_round"] if best_round_row else None,
+        class_labels=class_labels,
+        best_round=best_round,
+        best_round_detail=rounds_by_number.get(best_round),
+        convergence_round=convergence_round,
+        convergence_round_detail=rounds_by_number.get(convergence_round),
         checkpoint_round=checkpoint_row["round"] if checkpoint_row else None,
         evaluation_json=checkpoint_row["evaluation_json"] if checkpoint_row else None,
         rounds=rounds,
+        repeated_states=repeated_states,
+        class_best_rounds=class_best_rounds,
     )
 
 

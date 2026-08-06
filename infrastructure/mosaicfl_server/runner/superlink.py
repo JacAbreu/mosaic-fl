@@ -11,7 +11,7 @@ from typing import Dict, Optional
 import flwr as fl
 import torch
 from flwr.common import Context
-from flwr.server import ServerApp, ServerAppComponents, ServerConfig
+from flwr.server import ServerApp, ServerAppComponents, ServerConfig, SimpleClientManager
 
 from mosaicfl.core.config import FED_CFG, MODEL_CFG, RUNTIME_CFG
 from mosaicfl.core.federated import weighted_average_evaluate_metrics, weighted_average_loss
@@ -24,6 +24,7 @@ from infrastructure.shared.checkpoint_store import get_checkpoint_store
 from scripts.build_standard_vocab import build_standard_vocab
 
 from .config import LOG_DIR, _health
+from .early_stop_server import EarlyStoppingServer
 from .health import write_health_status
 
 logger = logging.getLogger(__name__)
@@ -227,22 +228,27 @@ def _make_server_components(context: Context) -> ServerAppComponents:
             "round": rnd,
         },
         # extract_rag_patterns: pede ao cliente pra extrair perfis prototípicos (RAG) só
-        # na última rodada configurada — caro pra repetir a cada round (forward com atenção
-        # sobre o val_loader inteiro, uma vez por classe). Se a convergência disparar antes
-        # da última rodada, os padrões não são coletados nessa run — limitação conhecida,
-        # aceitável dado que a maioria dos runs reais roda até o limite de rodadas mesmo
-        # (ver docs/Linha_do_Tempo_MOSAIC-FL.md, treinamentos convergem em média aos 40-46
-        # rounds do Caminho A, bem acima do budget típico de testes do Caminho B).
+        # na última rodada de verdade — caro pra repetir a cada round (forward com atenção
+        # sobre o val_loader inteiro, uma vez por classe).
         # calibrate/calibration_method: pede ao cliente pra ajustar um calibrador local
         # (temperature ou isotonic, conforme FED_CFG.calibration_method) só na última
-        # rodada configurada — mesmo timing/limitação de extract_rag_patterns acima.
-        # Substitui a calibração server-side (calibration_mixin.py), que exigiria um
-        # test_loader centralizado nunca disponível no Caminho B por design de privacidade
-        # (ver docs/Linha_do_Tempo_MOSAIC-FL.md, seção sobre F1 federado, 2026-07-07).
+        # rodada de verdade — mesmo timing de extract_rag_patterns acima. Substitui a
+        # calibração server-side (calibration_mixin.py), que exigiria um test_loader
+        # centralizado nunca disponível no Caminho B por design de privacidade (ver
+        # docs/Linha_do_Tempo_MOSAIC-FL.md, seção sobre F1 federado, 2026-07-07).
+        #
+        # "última rodada de verdade" == strategy.is_final_round(rnd) — com
+        # FED_CFG.early_stop=False (default), é só `rnd >= num_rounds`, igual sempre foi.
+        # Com FL_EARLY_STOP=true, pode disparar antes, no round agendado por
+        # aggregate_evaluate() quando a convergência é detectada (achado 2026-08-01,
+        # ver early_stop_server.py e strategy/core.py::is_final_round). A closure
+        # referencia `strategy` mesmo definida antes da atribuição abaixo — só é
+        # chamada depois, quando `strategy` já existe (late binding, mesmo padrão já
+        # usado por vocab_json/_inject_current_vocab, comentário acima).
         on_evaluate_config_fn=lambda rnd: {
             "round": rnd,
-            "extract_rag_patterns": rnd >= num_rounds,
-            "calibrate": rnd >= num_rounds,
+            "extract_rag_patterns": strategy.is_final_round(rnd),
+            "calibrate": strategy.is_final_round(rnd),
             "calibration_method": FED_CFG.calibration_method,
         },
     )
@@ -259,8 +265,22 @@ def _make_server_components(context: Context) -> ServerAppComponents:
             "recovered_from_round": previous_state.last_round,
         },
     )
+    # Server customizado só quando FL_EARLY_STOP=true (achado 2026-08-01, ver
+    # early_stop_server.py) — None (default do ServerAppComponents) preserva
+    # exatamente o Server padrão do flwr, loop fixo até num_rounds, comportamento
+    # histórico intacto quando a flag está desligada.
+    server = None
+    if FED_CFG.early_stop:
+        server = EarlyStoppingServer(client_manager=SimpleClientManager(), strategy=strategy)
+        logger.info("early_stop_enabled — servidor customizado ativo (FL_EARLY_STOP=true)")
+
+    # flwr/server/server.py::init_defaults() ignora `strategy` (com WARN) quando
+    # `server` já foi passado — o Server customizado já carrega essa mesma
+    # `strategy` internamente (linha acima), então passar os dois é só ruído no
+    # log, sem efeito real (confirmado lendo o fonte). Evita o WARN redundante.
     return ServerAppComponents(
-        strategy=strategy,
+        server=server,
+        strategy=None if server is not None else strategy,
         config=ServerConfig(num_rounds=num_rounds),
     )
 

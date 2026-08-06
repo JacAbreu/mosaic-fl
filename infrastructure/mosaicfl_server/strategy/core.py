@@ -67,6 +67,8 @@ class ProductionFedProxStrategy(
     _last_round_resources_json = None  # fallback para __new__ em testes
     _ece_pre            = None  # fallback para __new__ em testes
     _ece                = None  # fallback para __new__ em testes
+    _early_stop_target_round = None  # fallback para __new__ em testes
+    _convergence_round = None  # fallback para __new__ em testes
 
     def __init__(
         self,
@@ -99,6 +101,20 @@ class ProductionFedProxStrategy(
         )
         self.round_counter = 0
         self.should_stop = False
+        # Round em que o loop deve realmente parar (achado 2026-08-01, ver
+        # infrastructure/mosaicfl_server/runner/early_stop_server.py) — None enquanto
+        # a convergência não é detectada, ou quando FED_CFG.early_stop está desligado
+        # (comportamento histórico preservado). Setado uma única vez, na primeira
+        # rodada em que self.tracker.converged_round aparece, para
+        # server_round + 1 — uma rodada extra além da convergência, necessária porque
+        # calibrate=True/extract_rag_patterns=True (on_evaluate_config_fn, superlink.py)
+        # só podem ser enviados ANTES do round rodar, mas a convergência só é
+        # detectada DEPOIS (dentro de aggregate_evaluate, usando as métricas que
+        # acabaram de chegar) — ver is_final_round() abaixo.
+        self._early_stop_target_round: Optional[int] = None
+        # Rodada real em que a convergência foi detectada pela 1ª vez — ver
+        # bloco "if converged" em aggregate_evaluate() e migration 035.
+        self._convergence_round: Optional[int] = None
 
         self._state_store = state_store
         self._checkpoint_store = checkpoint_store
@@ -460,6 +476,23 @@ class ProductionFedProxStrategy(
             )
             return aggregated_parameters
 
+    def is_final_round(self, server_round: int) -> bool:
+        """True quando `server_round` é a última rodada de verdade — usado tanto
+        para decidir finalize/complete_training (aggregate_evaluate) quanto para
+        pedir calibrate=True/extract_rag_patterns=True aos clientes
+        (on_evaluate_config_fn, superlink.py). Duas condições, OR:
+        1. Bateu o teto configurado (self._num_rounds) — comportamento histórico,
+           único caminho possível quando FED_CFG.early_stop=False (default).
+        2. Early stop real está ligado e a rodada bateu o alvo agendado em
+           _early_stop_target_round (aggregate_evaluate, no bloco `if converged`) —
+           achado 2026-08-01, ver early_stop_server.py.
+        """
+        if self._num_rounds is not None and server_round >= self._num_rounds:
+            return True
+        if FED_CFG.early_stop and self._early_stop_target_round is not None:
+            return server_round >= self._early_stop_target_round
+        return False
+
     def aggregate_fit(self, server_round, results, failures):
         """Agrega pesos e salva checkpoint. Cancela watchdog do round."""
         self._cancel_round_watchdog()
@@ -767,26 +800,81 @@ class ProductionFedProxStrategy(
             # quantas rodadas realmente acontecem; mantido só pra não quebrar quem já
             # depende do estado (ver test_aggregate_evaluate_sets_should_stop_on_convergence).
             self.should_stop = True
+            # Rodada REAL (server_round) em que a convergência foi detectada pela
+            # primeira vez — persistido em fl_trainings.convergence_round (migration
+            # 035) pra exibição em /fl-training-results. Não confundir com
+            # self.tracker.converged_round, logado abaixo só pra debug: é um índice
+            # interno da janela deslizante (len(history)), não o round real — foi
+            # exatamente essa confusão que quebrou a 1ª versão do early stop
+            # (achado 2026-08-01, ver bloco abaixo).
+            if self._convergence_round is None:
+                self._convergence_round = server_round
             logger.info(
                 "convergence_detected",
-                extra={"round": server_round, "convergence_round": self.tracker.converged_round},
+                extra={
+                    "round": server_round,
+                    "convergence_round": self._convergence_round,
+                    "tracker_internal_index": self.tracker.converged_round,
+                },
             )
+            # Early stop real (FL_EARLY_STOP=true, achado 2026-08-01 — ver
+            # infrastructure/mosaicfl_server/runner/early_stop_server.py e
+            # is_final_round() abaixo). Agendado só na rodada em que a convergência é
+            # detectada PELA PRIMEIRA VEZ — garantido por _early_stop_target_round is
+            # None (nas rodadas seguintes converged continua True, tracker não
+            # reseta, mas o bloco não reentra porque o alvo já foi setado). +1 porque
+            # calibrate=True/extract_rag_patterns (on_evaluate_config_fn,
+            # superlink.py) precisam ser enviados ANTES do round rodar — a rodada de
+            # convergência já rodou sem calibrar, então a PRÓXIMA é que vira a última
+            # de verdade. min() com _num_rounds evita agendar um alvo além do teto
+            # configurado. Sem efeito quando FED_CFG.early_stop=False (default) —
+            # _early_stop_target_round nunca sai de None, is_final_round() se comporta
+            # exatamente como antes (só rnd >= num_rounds).
+            #
+            # BUG REAL, achado 2026-08-01 avaliando o treino 84 ao vivo: a primeira
+            # versão comparava `self.tracker.converged_round == server_round` — mas
+            # ConvergenceTracker.converged_round NÃO é o número da rodada, é
+            # `len(self.history)` (convergence.py:47), que só cresce a partir do
+            # round min_rounds+1 (aggregate_evaluate só chama tracker.check() quando
+            # server_round > FED_CFG.min_rounds). Com min_rounds=20, na rodada 38
+            # (onde a convergência foi detectada de verdade) tracker.converged_round
+            # valia 18, não 38 — a comparação nunca batia, o alvo nunca era agendado,
+            # e o treino 84 rodou até a rodada 47+ sem parar mesmo já convergido
+            # havia 9 rodadas. Os testes unitários (test_early_stop_real.py) não
+            # pegaram isso porque setavam tracker.converged_round manualmente IGUAL a
+            # server_round no mock — mascarando exatamente essa discrepância. Corrigido
+            # removendo a comparação: `_early_stop_target_round is None` já garante
+            # sozinho que isso só roda uma vez (é tudo que era necessário).
+            if (
+                FED_CFG.early_stop
+                and self._early_stop_target_round is None
+            ):
+                self._early_stop_target_round = min(server_round + 1, self._num_rounds)
+                logger.info(
+                    "early_stop_scheduled",
+                    extra={
+                        "convergence_round": server_round,
+                        "target_round": self._early_stop_target_round,
+                    },
+                )
             # _run_calibration() (calibration_mixin.py) é o caminho antigo, centralizado
             # (exige test_loader, indisponível por design de privacidade no Caminho B —
             # sempre no-op aqui). O caminho federado real (client.py::_fit_local_calibrator,
             # ver initialize_parameters/_discover_and_curate_vocab da mesma sessão) só
             # dispara quando o servidor pede calibrate=True — isso só acontece na última
-            # rodada configurada (rnd >= num_rounds via on_evaluate_config_fn em
-            # superlink.py), que SEMPRE vai acontecer de verdade dado o loop fixo do
-            # Flower acima. Por isso não finalizamos aqui: fazer isso na rodada de
-            # convergência (quase sempre bem antes de num_rounds) descartaria o
-            # ece/ece_pre real, calculado só depois, na rodada final que o loop vai
-            # rodar de qualquer jeito. Achado 2026-07-27, treino 74: convergência
-            # detectada na rodada 88 mas o loop seguiu até 110 (onde a calibração real
-            # rodou) — o finalize antigo, disparado na 88, nunca viu esses números.
+            # rodada de verdade (is_final_round() via on_evaluate_config_fn em
+            # superlink.py): com FED_CFG.early_stop=False (default), é o teto
+            # `num_rounds`, que SEMPRE roda de verdade dado o loop fixo do
+            # Flower/Server.fit(); com FL_EARLY_STOP=true, pode ser antes (round-alvo
+            # agendado acima). Por isso não finalizamos aqui: fazer isso na rodada de
+            # convergência (quase sempre antes da última rodada de verdade) descartaria o
+            # ece/ece_pre real, calculado só depois. Achado 2026-07-27, treino 74: convergência
+            # detectada na rodada 88 mas o loop (sem early stop, na época) seguiu até 110
+            # (onde a calibração real rodou) — o finalize antigo, disparado na 88, nunca viu
+            # esses números.
             self._run_calibration(server_round)
 
-        is_last_round = self._num_rounds is not None and server_round >= self._num_rounds
+        is_last_round = self.is_final_round(server_round)
         if (
             is_last_round
             and not self._training_completed
@@ -811,6 +899,7 @@ class ProductionFedProxStrategy(
                 gpu_avg_power_w=gpu_avg_power_w,
                 gpu_peak_power_w=gpu_peak_power_w,
                 gpu_energy_wh=gpu_energy_wh,
+                convergence_round=self._convergence_round,
             )
             logger.info(
                 "training_completed",
@@ -818,6 +907,7 @@ class ProductionFedProxStrategy(
                     "training_id": self._training_id,
                     "n_rounds_done": server_round,
                     "best_round": self._best_round,
+                    "convergence_round": self._convergence_round,
                     "best_accuracy": self._best_accuracy,
                     "converged": converged,
                     "total_duration_s": total_duration_s,

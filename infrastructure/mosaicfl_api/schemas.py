@@ -224,6 +224,7 @@ class TrainingResultSummary(BaseModel):
     best_round: Optional[int] = None
     best_accuracy: Optional[float] = None
     converged: Optional[bool] = None
+    convergence_round: Optional[int] = None
     macro_f1: Optional[float] = None
     macro_auc: Optional[float] = None
     ece: Optional[float] = None
@@ -251,13 +252,44 @@ class TrainingRoundDetail(BaseModel):
     per_client_f1: Optional[list[dict]] = None
 
 
+class ClassBestRound(BaseModel):
+    """Rodada em que UMA classe específica atingiu seu maior F1 ao longo de todo
+    o treino — independente do critério de seleção do checkpoint (f1_macro/
+    accuracy) e independente de convergência. Pode divergir bastante do
+    best_round "oficial": uma classe rara pode ter seu pico numa rodada em que
+    o macro_f1 geral não era o melhor (outras classes estavam piores naquele
+    momento) — achado 2026-08-02, pedido pra entender por classe, não só
+    agregado."""
+    class_name: str
+    round: int
+    f1: float
+
+
+class RepeatedStateGroup(BaseModel):
+    """Grupo de rodadas com per_class_f1 IDÊNTICO (mesma tupla, até 6 casas
+    decimais) — "estado atrator". Achado 2026-08-01 (treino 85, DP uniforme):
+    sob ruído DP severo o modelo não degrada de forma monotônica, ele cai
+    repetidamente nos mesmos poços degenerados (essencialmente prevendo uma
+    única classe fixa, ignorando a entrada) — daí o F1 por classe sair bit-a-
+    bit igual toda vez que o modelo cai no mesmo poço de novo. Não é
+    convergência genuína (ver seção 16 do doc de pesquisa)."""
+    per_class_f1: list[float]
+    rounds: list[int]
+    dominant_class: Optional[str] = None  # única classe com F1 > 0, se só uma sobreviver nesse estado
+
+
 class TrainingRoundsResponse(BaseModel):
     training_id: int
     class_labels: list[str]
     best_round: Optional[int] = None
+    best_round_detail: Optional[TrainingRoundDetail] = None
+    convergence_round: Optional[int] = None
+    convergence_round_detail: Optional[TrainingRoundDetail] = None
     checkpoint_round: Optional[int] = None
     evaluation_json: Optional[dict] = None
     rounds: list[TrainingRoundDetail]
+    repeated_states: list[RepeatedStateGroup] = []
+    class_best_rounds: list[ClassBestRound] = []
 
 
 class TrainingComparisonSide(BaseModel):

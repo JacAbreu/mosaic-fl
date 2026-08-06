@@ -47,10 +47,19 @@ class CheckpointStore(ABC):
         gpu_avg_power_w: Optional[float] = None,
         gpu_peak_power_w: Optional[float] = None,
         gpu_energy_wh: Optional[float] = None,
+        convergence_round: Optional[int] = None,
     ) -> None:
         """Atualiza fl_trainings com resultado final ao término do loop FL.
 
-        gpu_*: None quando não há GPU NVIDIA disponível (treino CPU-only) — não é erro."""
+        gpu_*: None quando não há GPU NVIDIA disponível (treino CPU-only) — não é erro.
+
+        convergence_round (migration 035): rodada real (server_round) em que a
+        convergência foi detectada pela primeira vez, ou None se nunca convergiu.
+        NÃO é o mesmo que ConvergenceTracker.converged_round (índice interno da
+        janela deslizante — ver docstring da migration 035). Útil pra comparar
+        contra best_round em /fl-training-results: quando divergem bastante,
+        "convergência" (métrica estável) não coincidiu com "melhor qualidade"
+        (achado real no treino 85, DP-uniforme: best_round=4, convergence_round=74)."""
 
     @abstractmethod
     def update_evaluation_metrics(

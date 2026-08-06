@@ -72,6 +72,7 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         gpu_avg_power_w: Optional[float] = None,
         gpu_peak_power_w: Optional[float] = None,
         gpu_energy_wh: Optional[float] = None,
+        convergence_round: Optional[int] = None,
     ) -> None:
         import sqlalchemy as sa
         with self._engine.begin() as conn:
@@ -82,27 +83,29 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "best_accuracy=:best_accuracy, converged=:converged, "
                     "total_duration_s=:total_duration_s, peak_ram_mb=:peak_ram_mb, "
                     "avg_cpu_pct=:avg_cpu_pct, gpu_avg_power_w=:gpu_avg_power_w, "
-                    "gpu_peak_power_w=:gpu_peak_power_w, gpu_energy_wh=:gpu_energy_wh "
+                    "gpu_peak_power_w=:gpu_peak_power_w, gpu_energy_wh=:gpu_energy_wh, "
+                    "convergence_round=:convergence_round "
                     "WHERE id=:training_id"
                 ),
                 {
-                    "training_id":      training_id,
-                    "n_rounds_done":    n_rounds_done,
-                    "best_round":       best_round,
-                    "best_accuracy":    best_accuracy,
-                    "converged":        converged,
-                    "total_duration_s": total_duration_s,
-                    "peak_ram_mb":      peak_ram_mb,
-                    "avg_cpu_pct":      avg_cpu_pct,
-                    "gpu_avg_power_w":  gpu_avg_power_w,
-                    "gpu_peak_power_w": gpu_peak_power_w,
-                    "gpu_energy_wh":    gpu_energy_wh,
+                    "training_id":       training_id,
+                    "n_rounds_done":     n_rounds_done,
+                    "best_round":        best_round,
+                    "best_accuracy":     best_accuracy,
+                    "converged":         converged,
+                    "total_duration_s":  total_duration_s,
+                    "peak_ram_mb":       peak_ram_mb,
+                    "avg_cpu_pct":       avg_cpu_pct,
+                    "gpu_avg_power_w":   gpu_avg_power_w,
+                    "gpu_peak_power_w":  gpu_peak_power_w,
+                    "gpu_energy_wh":     gpu_energy_wh,
+                    "convergence_round": convergence_round,
                 },
             )
         logger.info(
             "training_completed_postgres id=%d best_round=%d best_accuracy=%.4f converged=%s "
-            "duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%%",
-            training_id, best_round, best_accuracy, converged,
+            "convergence_round=%s duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%%",
+            training_id, best_round, best_accuracy, converged, convergence_round,
             total_duration_s, peak_ram_mb, avg_cpu_pct,
         )
 

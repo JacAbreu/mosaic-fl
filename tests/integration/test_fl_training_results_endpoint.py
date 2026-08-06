@@ -18,7 +18,7 @@ def _training_row(**kwargs):
     defaults = dict(
         id=1, algorithm="FedProx", run_classification="ajuste", partition_mode="natural",
         status="completed", started_at=None, completed_at=None, n_rounds_done=110,
-        best_round=95, best_accuracy=0.75, converged=True, macro_f1=0.42, macro_auc=0.83,
+        best_round=95, best_accuracy=0.75, converged=True, convergence_round=88, macro_f1=0.42, macro_auc=0.83,
         ece=0.11, ece_pre=0.08, total_duration_s=15621.6, dp_noise_multiplier=None,
         dp_noise_strategy=None, dp_epsilon_simple=None, dp_epsilon_rdp=None,
         is_active_model=False, checkpoint_round=95,
@@ -121,13 +121,14 @@ class TestGetTrainingRounds:
         )
         state._db._engine = _mock_engine_connect(
             fetchall_result=[round_row],
-            first_results=[{"best_round": 95}],
+            first_results=[{"best_round": 95, "convergence_round": 88}],
         )
 
         r = client_with_engine.get("/api/admin/fl-training-results/77/rounds", headers={"X-API-Key": "k"})
         assert r.status_code == 200
         data = r.json()
         assert data["best_round"] == 95
+        assert data["convergence_round"] == 88
         assert data["rounds"][0]["per_class_f1"][1] == pytest.approx(0.17)
         assert data["rounds"][0]["per_client_f1"][0]["client_id"] == 1
 
@@ -143,7 +144,7 @@ class TestGetTrainingRounds:
             result = MagicMock()
             sql = str(stmt)
             if "fl_trainings" in sql:
-                result.mappings.return_value.first.return_value = {"best_round": 95}
+                result.mappings.return_value.first.return_value = {"best_round": 95, "convergence_round": 88}
             elif "fl_checkpoints" in sql:
                 result.mappings.return_value.first.return_value = {
                     "round": 95, "evaluation_json": {"best_round": 95, "best_f1_macro": 0.42},
@@ -164,6 +165,79 @@ class TestGetTrainingRounds:
         data = r.json()
         assert data["checkpoint_round"] == 95
         assert data["evaluation_json"]["best_f1_macro"] == pytest.approx(0.42)
+
+    def test_detects_repeated_per_class_f1_as_attractor_states(self, client_with_engine):
+        """Achado 2026-08-01 (treino 85, DP uniforme): rodadas com per_class_f1
+        IDÊNTICO indicam o modelo caindo repetidamente na mesma solução
+        degenerada (só uma classe sobrevive), não convergência genuína — ver
+        RepeatedStateGroup (schemas.py) e seção 16 do doc de pesquisa."""
+        from infrastructure.mosaicfl_api import state
+        rows = [
+            SimpleNamespace(round=1, accuracy=0.07, f1_macro=0.03,
+                             per_class_f1=[0.0, 0.0, 0.0, 0.0, 0.127081], per_client_f1_json=None),
+            SimpleNamespace(round=4, accuracy=0.52, f1_macro=0.22,
+                             per_class_f1=[0.722, 0.015, 0.027, 0.065, 0.270], per_client_f1_json=None),
+            SimpleNamespace(round=60, accuracy=0.24, f1_macro=0.08,
+                             per_class_f1=[0.0, 0.0, 0.0, 0.388281, 0.0], per_client_f1_json=None),
+            SimpleNamespace(round=74, accuracy=0.07, f1_macro=0.03,
+                             per_class_f1=[0.0, 0.0, 0.0, 0.0, 0.127081], per_client_f1_json=None),
+            SimpleNamespace(round=75, accuracy=0.24, f1_macro=0.08,
+                             per_class_f1=[0.0, 0.0, 0.0, 0.388281, 0.0], per_client_f1_json=None),
+        ]
+        state._db._engine = _mock_engine_connect(
+            fetchall_result=rows,
+            first_results=[{"best_round": 4, "convergence_round": 74}],
+        )
+
+        r = client_with_engine.get("/api/admin/fl-training-results/85/rounds", headers={"X-API-Key": "k"})
+        assert r.status_code == 200
+        data = r.json()
+
+        states = {tuple(s["rounds"]): s for s in data["repeated_states"]}
+        assert (1, 74) in states
+        assert states[(1, 74)]["dominant_class"] == "melhora_internado_grave"
+        assert (60, 75) in states
+        assert states[(60, 75)]["dominant_class"] == "melhora_internado_breve"
+        # Round 4 (único, não-degenerado — várias classes com F1 > 0) não deve
+        # aparecer como estado repetido.
+        assert all(4 not in s["rounds"] for s in data["repeated_states"])
+
+    def test_class_best_rounds_independent_of_overall_best_round(self, client_with_engine):
+        """Achado 2026-08-02 — pedido explícito da autora: quer ver em qual
+        rodada CADA classe teve seu melhor F1, mesmo que essa rodada não seja
+        o best_round oficial (que usa f1_macro/accuracy agregado) nem a rodada
+        de convergência. Classe 0 pico na 10, classe 3 pico na 20 — nenhuma das
+        duas é o best_round=4 nem o convergence_round=30 deste cenário."""
+        from infrastructure.mosaicfl_api import state
+        rows = [
+            SimpleNamespace(round=4, accuracy=0.50, f1_macro=0.30,
+                             per_class_f1=[0.5, 0.1, 0.1, 0.3, 0.2], per_client_f1_json=None),
+            SimpleNamespace(round=10, accuracy=0.55, f1_macro=0.28,
+                             per_class_f1=[0.9, 0.0, 0.0, 0.1, 0.1], per_client_f1_json=None),
+            SimpleNamespace(round=20, accuracy=0.40, f1_macro=0.25,
+                             per_class_f1=[0.2, 0.0, 0.0, 0.8, 0.0], per_client_f1_json=None),
+            SimpleNamespace(round=30, accuracy=0.45, f1_macro=0.20,
+                             per_class_f1=[0.3, 0.0, 0.0, 0.2, 0.1], per_client_f1_json=None),
+        ]
+        state._db._engine = _mock_engine_connect(
+            fetchall_result=rows,
+            first_results=[{"best_round": 4, "convergence_round": 30}],
+        )
+
+        r = client_with_engine.get("/api/admin/fl-training-results/90/rounds", headers={"X-API-Key": "k"})
+        assert r.status_code == 200
+        data = r.json()
+
+        by_class = {c["class_name"]: c for c in data["class_best_rounds"]}
+        assert by_class["curado_pronto"]["round"] == 10
+        assert by_class["curado_pronto"]["f1"] == pytest.approx(0.9)
+        assert by_class["melhora_internado_breve"]["round"] == 20
+        assert by_class["melhora_internado_breve"]["f1"] == pytest.approx(0.8)
+
+        assert data["best_round_detail"]["round"] == 4
+        assert data["best_round_detail"]["f1_macro"] == pytest.approx(0.30)
+        assert data["convergence_round_detail"]["round"] == 30
+        assert data["convergence_round_detail"]["f1_macro"] == pytest.approx(0.20)
 
     def test_unknown_training_id_returns_404(self, client_with_engine):
         from infrastructure.mosaicfl_api import state

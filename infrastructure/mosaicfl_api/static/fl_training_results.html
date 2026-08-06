@@ -19,6 +19,8 @@
     .cmp-col { min-width: 220px; }
     .cmp-delta-up { color: #0a3622; font-weight: 600; }
     .cmp-delta-down { color: #58151c; font-weight: 600; }
+    .badge-warn { background: #fff3cd; color: #664d03; }
+    .interp-note { font-size: .78rem; }
   </style>
 </head>
 <body>
@@ -53,12 +55,12 @@
         <thead class="table-light">
           <tr>
             <th></th><th>ID</th><th>Tipo</th><th>Algoritmo</th><th>Status</th>
-            <th>Rounds</th><th>Melhor round</th><th>Checkpoint</th><th>Accuracy</th><th>Macro F1</th>
+            <th>Rounds</th><th>Melhor round</th><th title="Rodada real em que a convergência foi detectada pela 1ª vez — pode divergir bastante do melhor round sob DP (achado 2026-08-01, treino 85)">Convergência (round)</th><th>Checkpoint</th><th>Accuracy</th><th>Macro F1</th>
             <th>Macro AUC</th><th>ECE (pré→pós)</th><th>Convergiu</th><th>Duração</th><th>DP</th>
           </tr>
         </thead>
         <tbody id="tr-tbody">
-          <tr><td colspan="15" class="text-muted small text-center py-3">Carregando…</td></tr>
+          <tr><td colspan="16" class="text-muted small text-center py-3">Carregando…</td></tr>
         </tbody>
       </table>
     </div>
@@ -80,6 +82,43 @@ function fmtDuration(s) {
 }
 function fmtDate(iso) {
   return iso ? iso.slice(0, 16).replace('T', ' ') : '—';
+}
+
+// Limiares de interpretação de epsilon (privacidade diferencial), documentados em
+// docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md, seção 14 ("O que
+// o epsilon significa") — convenção comum na literatura de ML privado, não é um
+// valor específico do MOSAIC-FL: ε até ~10 costuma ser tratado como oferecendo
+// alguma proteção significativa; ε nas centenas/milhares é, na prática,
+// equivalente a nenhuma proteção (e^ε tão grande que a garantia formal não
+// restringe nada de útil sobre o que um adversário pode inferir).
+function epsilonInterpretation(eps) {
+  if (eps === null || eps === undefined) return null;
+  if (eps <= 10) {
+    return { label: 'proteção significativa', cls: 'badge-yes',
+      title: `ε≈${eps.toFixed(1)} ≤ 10 — faixa em que a literatura de ML privado costuma considerar alguma proteção formal real contra reidentificação/inferência de participação.` };
+  }
+  if (eps <= 100) {
+    return { label: 'proteção fraca', cls: 'badge-warn',
+      title: `ε≈${eps.toFixed(1)} está entre 10 e 100 — acima da faixa "significativa", mas ainda não tão grande a ponto de e^ε tornar a garantia formal vazia. Zona intermediária, avaliar caso a caso.` };
+  }
+  return { label: 'sem proteção prática', cls: 'badge-no',
+    title: `ε≈${eps.toFixed(1)} > 100 — e^ε é tão grande que a desigualdade de DP continua matematicamente válida, mas não restringe nada de útil sobre o que um adversário pode inferir. Equivalente, na prática, a nenhuma proteção formal (ver seção 14 do doc de pesquisa).` };
+}
+
+// Divergência entre best_round (melhor qualidade) e convergence_round (rodada em
+// que a métrica de convergência estabilizou) — achado 2026-08-01 (treino 85, DP
+// uniforme): as duas podem divergir bastante sob DP, porque ConvergenceTracker
+// mede só ESTABILIDADE (delta pequeno entre rodadas), não qualidade — o modelo
+// pode "convergir" preso num estado degenerado (ver seção 16 do doc de pesquisa,
+// estados atratores). Limiar de 10 rounds é arbitrário, só pra sinalizar
+// visualmente uma divergência grande o bastante pra merecer desconfiança.
+function convergenceGapInterpretation(bestRound, convRound) {
+  if (bestRound == null || convRound == null) return null;
+  const gap = convRound - bestRound;
+  if (Math.abs(gap) <= 10) {
+    return { gap, text: `Convergência (round ${convRound}) próxima do melhor round (${bestRound}) — consistente com estabilização numa solução de boa qualidade, não só um platô.` };
+  }
+  return { gap, text: `Convergência (round ${convRound}) ocorreu ${Math.abs(gap)} rodadas ${gap > 0 ? 'depois' : 'antes'} do melhor round (${bestRound}) — divergência grande. Pode indicar que o modelo "estabilizou" preso num estado degenerado (ver seção 16, estados atratores) em vez de convergir numa boa solução; o melhor round continua sendo o que fica salvo/ativo (checkpoint_criterion), não a rodada de convergência.` };
 }
 
 async function loadAll() {
@@ -107,6 +146,17 @@ async function loadComparison() {
       if (side.per_class_f1) {
         pcfRows = labels.map((name, i) => `<tr><td class="text-muted">${name}</td><td class="pcf1-cell">${fmt(side.per_class_f1[i])}</td></tr>`).join('');
       }
+      const convGap = convergenceGapInterpretation(t.best_round, t.convergence_round);
+      let dpRow = '';
+      if (t.dp_noise_multiplier) {
+        const epsForInterp = t.dp_epsilon_rdp != null ? t.dp_epsilon_rdp : t.dp_epsilon_simple;
+        const interp = epsilonInterpretation(epsForInterp);
+        const epsTxt = [
+          t.dp_epsilon_simple != null ? `ε≈${fmt(t.dp_epsilon_simple, 1)}` : null,
+          t.dp_epsilon_rdp != null ? `RDP ${fmt(t.dp_epsilon_rdp, 1)}` : null,
+        ].filter(Boolean).join(' · ');
+        dpRow = `<tr><td class="text-muted">DP (ε)</td><td>${epsTxt || '—'} ${interp ? `<span class="badge ${interp.cls}" title="${interp.title}">${interp.label}</span>` : ''}</td></tr>`;
+      }
       return `
         <div class="cmp-col">
           <div class="small text-muted">${title}</div>
@@ -115,9 +165,12 @@ async function loadComparison() {
           <table class="table table-sm mt-2 mb-0">
             <tr><td class="text-muted">accuracy</td><td>${fmt(t.best_accuracy)}</td></tr>
             <tr><td class="text-muted">macro_f1</td><td>${fmt(t.macro_f1)}</td></tr>
-            <tr><td class="text-muted">converged</td><td>${t.converged ? 'sim' : 'não'}</td></tr>
+            <tr><td class="text-muted">melhor round</td><td>${t.best_round ?? '—'}</td></tr>
+            <tr><td class="text-muted">converged</td><td>${t.converged ? 'sim' : 'não'} ${t.convergence_round != null ? `<span class="text-muted">(round ${t.convergence_round})</span>` : ''}</td></tr>
+            ${dpRow}
             ${pcfRows}
           </table>
+          ${convGap ? `<div class="interp-note text-muted mt-1">${convGap.text}</div>` : ''}
         </div>`;
     };
 
@@ -135,15 +188,16 @@ async function loadComparison() {
 
 async function loadTrainingsList() {
   const tbody = document.getElementById('tr-tbody');
-  tbody.innerHTML = '<tr><td colspan="15" class="text-muted small text-center py-3">Carregando…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="16" class="text-muted small text-center py-3">Carregando…</td></tr>';
   try {
     const r = await fetch(`${API}/api/admin/fl-training-results`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
     if (!data.trainings.length) {
-      tbody.innerHTML = '<tr><td colspan="15" class="text-muted small text-center py-3">Nenhum treinamento encontrado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="16" class="text-muted small text-center py-3">Nenhum treinamento encontrado.</td></tr>';
       return;
     }
+    data.trainings.forEach(t => { _trainingsById[t.id] = t; });
     tbody.innerHTML = data.trainings.map(t => {
       const typeBadge = t.run_classification === 'treinamento_real' ? 'badge-real' : 'badge-ajuste';
       const convBadge = t.converged ? 'badge-yes' : 'badge-no';
@@ -152,11 +206,25 @@ async function loadTrainingsList() {
         dp = `σ=${t.dp_noise_multiplier} (${t.dp_noise_strategy || 'uniform'})`;
         if (t.dp_epsilon_simple != null) dp += ` · ε≈${fmt(t.dp_epsilon_simple, 1)}`;
         if (t.dp_epsilon_rdp != null) dp += ` (RDP ${fmt(t.dp_epsilon_rdp, 1)})`;
+        // Interpretação qualitativa sobre o ε mais realista disponível (RDP,
+        // quando existe — é a contabilidade mais precisa; ε "simples" é cota
+        // superior mais conservadora). Ver epsilonInterpretation() e seção 14.
+        const epsForInterp = t.dp_epsilon_rdp != null ? t.dp_epsilon_rdp : t.dp_epsilon_simple;
+        const interp = epsilonInterpretation(epsForInterp);
+        if (interp) dp += ` <span class="badge ${interp.cls}" title="${interp.title}">${interp.label}</span>`;
       }
       const ckptCell = t.checkpoint_round == null ? '—' :
         (t.checkpoint_mismatch
           ? `<span class="badge badge-no" title="checkpoint salvo (round ${t.checkpoint_round}) diverge do melhor round (${t.best_round})">round ${t.checkpoint_round} ⚠</span>`
           : `<span class="badge badge-yes">round ${t.checkpoint_round}</span>`);
+      // Divergência grande entre best_round e convergence_round: "convergência"
+      // (métrica estável) não coincidiu com "melhor qualidade" — achado real no
+      // treino 85 sob DP (best_round=4, convergence_round=74).
+      const convGap = convergenceGapInterpretation(t.best_round, t.convergence_round);
+      const convRoundCell = t.convergence_round == null ? '—' :
+        (convGap && Math.abs(convGap.gap) > 10
+          ? `<span class="badge badge-no" title="${convGap.text}">round ${t.convergence_round} (Δ${convGap.gap > 0 ? '+' : ''}${convGap.gap}) ⚠</span>`
+          : `round ${t.convergence_round}${convGap ? ` <span class="text-muted" title="${convGap.text}">(Δ${convGap.gap > 0 ? '+' : ''}${convGap.gap})</span>` : ''}`);
       return `
         <tr class="tr-row" style="cursor:pointer" onclick="toggleRound(${t.id})">
           <td>▸</td>
@@ -166,6 +234,7 @@ async function loadTrainingsList() {
           <td>${t.status || '—'}</td>
           <td>${t.n_rounds_done ?? '—'}</td>
           <td>${t.best_round ?? '—'}</td>
+          <td>${convRoundCell}</td>
           <td>${ckptCell}</td>
           <td>${fmt(t.best_accuracy)}</td>
           <td>${fmt(t.macro_f1)}</td>
@@ -176,15 +245,16 @@ async function loadTrainingsList() {
           <td class="text-muted">${dp}</td>
         </tr>
         <tr class="round-detail" id="detail-${t.id}">
-          <td colspan="15" class="bg-light"><div id="detail-body-${t.id}" class="p-2 text-muted small">Carregando ao expandir…</div></td>
+          <td colspan="16" class="bg-light"><div id="detail-body-${t.id}" class="p-2 text-muted small">Carregando ao expandir…</div></td>
         </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="15" class="text-danger small text-center py-3">Erro: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="16" class="text-danger small text-center py-3">Erro: ${e.message}</td></tr>`;
   }
 }
 
 const _loadedDetails = new Set();
+const _trainingsById = {};
 
 async function toggleRound(trainingId) {
   const row = document.getElementById(`detail-${trainingId}`);
@@ -199,16 +269,29 @@ async function toggleRound(trainingId) {
     const data = await r.json();
     const labels = data.class_labels || CLASS_LABELS_FALLBACK;
 
+    // Rodada de cada estado atrator, pra marcar as linhas correspondentes na tabela.
+    const attractorByRound = {};
+    (data.repeated_states || []).forEach((g, gi) => {
+      g.rounds.forEach(r => { attractorByRound[r] = gi; });
+    });
+
     const header = `<tr><th>Round</th><th>Acc</th><th>F1 macro</th>${labels.map(l => `<th title="${l}">${l.slice(0,10)}</th>`).join('')}<th>Por hospital (round destacado)</th></tr>`;
     const rows = data.rounds.map(rd => {
       const isBest = rd.round === data.best_round;
+      const isConvergence = rd.round === data.convergence_round;
+      const attractorIdx = attractorByRound[rd.round];
       const pcf = rd.per_class_f1 || [];
       const pcfCells = labels.map((_, i) => `<td class="pcf1-cell">${fmt(pcf[i], 2)}</td>`).join('');
       let clientCell = '—';
       if (rd.per_client_f1 && rd.per_client_f1.length) {
         clientCell = rd.per_client_f1.map(c => `cliente ${c.client_id}: [${(c.per_class_f1 || []).map(v => fmt(v,2)).join(', ')}]`).join('<br>');
       }
-      return `<tr class="${isBest ? 'table-warning' : ''}"><td>${rd.round}${isBest ? ' ★' : ''}</td><td>${fmt(rd.accuracy,3)}</td><td>${fmt(rd.f1_macro,3)}</td>${pcfCells}<td class="small">${clientCell}</td></tr>`;
+      let roundLabel = `${rd.round}`;
+      if (isBest) roundLabel += ' ★';
+      if (isConvergence) roundLabel += ' <span title="rodada em que a convergência foi detectada">🏁</span>';
+      if (attractorIdx !== undefined) roundLabel += ` <span class="badge badge-no" title="estado atrator #${attractorIdx + 1} — per_class_f1 idêntico a outras rodadas, indica o modelo preso numa solução degenerada, não convergência genuína">⟳</span>`;
+      const rowClass = isBest ? 'table-warning' : (attractorIdx !== undefined ? 'table-danger' : '');
+      return `<tr class="${rowClass}"><td>${roundLabel}</td><td>${fmt(rd.accuracy,3)}</td><td>${fmt(rd.f1_macro,3)}</td>${pcfCells}<td class="small">${clientCell}</td></tr>`;
     }).join('');
 
     let evalBlock = '';
@@ -219,7 +302,82 @@ async function toggleRound(trainingId) {
       </details>`;
     }
 
-    body.innerHTML = `${evalBlock}<div style="max-height:400px; overflow-y:auto;"><table class="table table-sm mb-0">${header}${rows}</table></div>`;
+    let interpBlock = '';
+    {
+      const trow = _trainingsById[trainingId] || {};
+      const convGap = convergenceGapInterpretation(data.best_round, data.convergence_round);
+      const epsForInterp = trow.dp_epsilon_rdp != null ? trow.dp_epsilon_rdp : trow.dp_epsilon_simple;
+      const epsInterp = epsilonInterpretation(epsForInterp);
+      const lines = [];
+      if (convGap) {
+        lines.push(`<li><strong>Convergência × melhor round:</strong> ${convGap.text}</li>`);
+      }
+      if (trow.dp_noise_multiplier) {
+        const epsTxt = [
+          trow.dp_epsilon_simple != null ? `ε simples≈${fmt(trow.dp_epsilon_simple, 1)}` : null,
+          trow.dp_epsilon_rdp != null ? `ε RDP≈${fmt(trow.dp_epsilon_rdp, 1)}` : null,
+        ].filter(Boolean).join(', ');
+        lines.push(`<li><strong>Privacidade (DP):</strong> ${epsTxt}${epsInterp ? ` — <span class="badge ${epsInterp.cls}">${epsInterp.label}</span>. ${epsInterp.title}` : ''}</li>`);
+      }
+      if (lines.length) {
+        interpBlock = `<div class="alert alert-light border small py-2 px-3 mb-2"><ul class="mb-0">${lines.join('')}</ul></div>`;
+      }
+    }
+
+    // Detalhamento completo de uma rodada específica (accuracy/f1_macro/per_class_f1)
+    // — mesmo nível de detalhe pro best_round e pro convergence_round, lado a lado,
+    // em vez de só o número da rodada (achado 2026-08-02, pedido explícito).
+    const renderRoundCard = (title, roundNum, detail, badgeCls) => {
+      if (roundNum == null) return `<div class="cmp-col"><div class="small text-muted">${title}</div><div class="text-muted">— (nunca aconteceu)</div></div>`;
+      const pcf = (detail && detail.per_class_f1) || [];
+      const pcfRows = labels.map((name, i) => `<tr><td class="text-muted">${name}</td><td class="pcf1-cell">${fmt(pcf[i])}</td></tr>`).join('');
+      return `
+        <div class="cmp-col">
+          <div class="small text-muted">${title}</div>
+          <div class="fw-bold">round ${roundNum} <span class="badge ${badgeCls}">critério</span></div>
+          <table class="table table-sm mt-1 mb-0">
+            <tr><td class="text-muted">accuracy</td><td>${fmt(detail ? detail.accuracy : null)}</td></tr>
+            <tr><td class="text-muted">f1_macro</td><td>${fmt(detail ? detail.f1_macro : null)}</td></tr>
+            ${pcfRows}
+          </table>
+        </div>`;
+    };
+    const roundCardsBlock = `<div class="d-flex gap-4 flex-wrap mb-2">
+      ${renderRoundCard('Melhor round (checkpoint_criterion — o que fica salvo/ativo)', data.best_round, data.best_round_detail, 'badge-yes')}
+      ${renderRoundCard('Rodada de convergência (ConvergenceTracker — só estabilidade)', data.convergence_round, data.convergence_round_detail, 'badge-warn')}
+    </div>`;
+
+    // Melhor rodada POR CLASSE — independente do critério agregado e de
+    // convergência (achado 2026-08-02). Marca quando o pico da classe NÃO
+    // coincide com best_round nem com convergence_round — informação que os
+    // dois números agregados escondem sozinhos.
+    let classBestBlock = '';
+    if (data.class_best_rounds && data.class_best_rounds.length) {
+      const classRows = data.class_best_rounds.map(c => {
+        const differs = c.round !== data.best_round && c.round !== data.convergence_round;
+        return `<tr><td>${c.class_name}</td><td>${c.round}${differs ? ' <span class="badge badge-warn" title="não coincide com o melhor round agregado nem com a rodada de convergência — esta classe teve seu pico em outro momento do treino">≠ agregado</span>' : ''}</td><td class="pcf1-cell">${fmt(c.f1)}</td></tr>`;
+      }).join('');
+      classBestBlock = `<div class="mb-2">
+        <div class="small text-muted mb-1">Melhor rodada POR CLASSE (independente de convergência ou do critério agregado — cada classe pode ter tido seu pico em outro momento)</div>
+        <table class="table table-sm mb-0"><tr><th>Classe</th><th>Rodada do pico</th><th>F1</th></tr>${classRows}</table>
+      </div>`;
+    }
+
+    let attractorBlock = '';
+    if (data.repeated_states && data.repeated_states.length) {
+      const items = data.repeated_states.map((g, gi) => {
+        const dom = g.dominant_class ? `só <strong>${g.dominant_class}</strong> sobrevive` : 'múltiplas classes com F1 residual';
+        return `<li>Estado #${gi + 1} (${g.rounds.length} rodadas: ${g.rounds.join(', ')}) — ${dom}, F1=[${g.per_class_f1.map(v => fmt(v,3)).join(', ')}]</li>`;
+      }).join('');
+      attractorBlock = `<div class="alert alert-warning small py-2 px-3 mb-2">
+        <strong>⟳ ${data.repeated_states.length} estado(s) atrator(es) detectado(s)</strong> — rodadas marcadas com per_class_f1
+        idêntico entre si, indicando o modelo caindo repetidamente na mesma solução degenerada (essencialmente prevendo uma
+        classe fixa), não convergência genuína (achado 2026-08-01, ver seção 16 do doc de pesquisa).
+        <ul class="mb-0 mt-1">${items}</ul>
+      </div>`;
+    }
+
+    body.innerHTML = `${roundCardsBlock}${classBestBlock}${interpBlock}${attractorBlock}${evalBlock}<div style="max-height:400px; overflow-y:auto;"><table class="table table-sm mb-0">${header}${rows}</table></div>`;
   } catch (e) {
     body.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
   }

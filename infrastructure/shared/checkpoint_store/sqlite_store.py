@@ -73,6 +73,7 @@ class SQLiteCheckpointStore(CheckpointStore):
         gpu_avg_power_w: Optional[float] = None,
         gpu_peak_power_w: Optional[float] = None,
         gpu_energy_wh: Optional[float] = None,
+        convergence_round: Optional[int] = None,
     ) -> None:
         completed_at = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self._db_path) as conn:
@@ -85,9 +86,11 @@ class SQLiteCheckpointStore(CheckpointStore):
         logger.info(
             "training_completed_sqlite id=%d best_round=%d best_accuracy=%.4f converged=%s "
             "duration=%.1fs peak_ram=%.0fMB avg_cpu=%.1f%% gpu_avg_power=%sW gpu_energy=%sWh "
-            "(campos de recurso/GPU não persistidos no schema local — ver evaluation_json)",
+            "(campos de recurso/GPU/convergence_round=%s não persistidos no schema local — "
+            "ver evaluation_json)",
             training_id, best_round, best_accuracy, converged,
             total_duration_s, peak_ram_mb, avg_cpu_pct, gpu_avg_power_w, gpu_energy_wh,
+            convergence_round,
         )
 
     def update_evaluation_metrics(
