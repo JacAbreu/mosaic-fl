@@ -824,6 +824,29 @@ api: db-up
 	    --host $(FL_API_HOST) \
 	    --port $(FL_API_PORT)
 
+## Inicia a API de inferência apontando pro banco do SERVIDOR da simulação real
+## de treinamento (mosaicfl-db-server-real, porta 5437 — ver
+## docs/Tutorial_Treinamento_Real_Bancos_Separados.md). NÃO usa `db-up`: aquele
+## alvo sobe o banco padrão (mosaicfl-db, porta 5432), que não tem relação com
+## a estrutura de 3 bancos separados. O container real precisa já ter sido
+## criado uma vez (make db-instance-up FL_DB_INSTANCE_CONTAINER=mosaicfl-db-server-real
+## FL_DB_INSTANCE_PORT=5437); este alvo só garante que ele esteja de pé
+## (docker start é idempotente) antes de subir a API.
+##   make api-simulacao-real
+##   make api-simulacao-real FL_API_PORT=9000
+FL_DB_URL_SIMULACAO_REAL ?= postgresql://mosaicfl:senhaForte@localhost:5437/mosaicfl
+api-simulacao-real:
+	@docker start mosaicfl-db-server-real >/dev/null
+	@until docker exec mosaicfl-db-server-real pg_isready -U mosaicfl -d mosaicfl -q 2>/dev/null; do printf "."; sleep 2; done
+	FL_LLM_BACKEND=$(FL_LLM_BACKEND) \
+	FL_LLM_MODEL=$(FL_LLM_MODEL) \
+	FL_LLM_HF_MODEL=$(FL_LLM_HF_MODEL) \
+	FL_DB_URL=$(FL_DB_URL_SIMULACAO_REAL) \
+	$(PYTHON) -m infrastructure.mosaicfl_api \
+	    --host $(FL_API_HOST) \
+	    --port $(FL_API_PORT)
+
+
 ## Exporta o melhor checkpoint do banco (PostgreSQL/SQLite) para checkpoints/best_model.pt
 ##
 ## QUANDO USAR: a API carrega o modelo diretamente do banco via CheckpointStore na maioria
