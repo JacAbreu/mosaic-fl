@@ -30,3 +30,40 @@ loop20    828K
 loop21  210.8M 
 loop22  219.9M 
 loop23  257.7M 
+
+
+-------------------------------------------------------------------------------------------------------------------------------
+
+ lscpu | grep "Model name" 
+  free -h | grep Mem
+  lsblk -d -o NAME,SIZE,MODEL
+Model name:                              11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+Mem:            15Gi       9.9Gi       2.7Gi       1.5Gi       4.6Gi       5.5Gi
+NAME      SIZE MODEL
+loop0       4K 
+loop1      74M 
+loop2    66.8M 
+loop3      74M 
+loop4    11.8M 
+loop5    16.4M 
+loop6    16.5M 
+loop7   252.4M 
+loop8    66.8M 
+loop9   531.4M 
+loop10  531.5M 
+loop11  614.5M 
+loop12  606.1M 
+loop13   91.7M 
+loop14  257.7M 
+loop15    1.2G 
+loop16    395M 
+loop17    402M 
+loop18   99.3M 
+loop20   50.1M 
+loop21   15.7M 
+loop22    828K 
+loop23    828K 
+loop24   98.8M 
+loop25    1.1G 
+loop26   50.1M 
+nvme0n1 476.9G IM2P33F3A NVMe ADATA 512GB
