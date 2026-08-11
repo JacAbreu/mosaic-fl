@@ -423,7 +423,7 @@ async def set_class_weight_overrides(
 # fl_trainings.best_round; ver project_bug_checkpoint_nao_era_melhor_rodada.
 _TRAINING_SUMMARY_COLUMNS = (
     "t.id, t.algorithm, t.run_classification, t.partition_mode, t.status, t.started_at, t.completed_at, "
-    "t.n_rounds_done, t.best_round, t.best_accuracy, t.converged, t.convergence_round, "
+    "t.n_rounds_done, t.best_round, t.best_accuracy, t.converged, t.convergence_round, t.early_stop_enabled, "
     "t.macro_f1, t.macro_auc, t.ece, t.ece_pre, "
     "t.total_duration_s, t.dp_noise_multiplier, t.dp_noise_strategy, t.dp_epsilon_simple, t.dp_epsilon_rdp, "
     "t.is_active_model, c.round AS checkpoint_round"
@@ -445,6 +445,7 @@ def _row_to_training_summary(r) -> TrainingResultSummary:
         completed_at=r.completed_at.isoformat() if r.completed_at else None,
         n_rounds_done=r.n_rounds_done, best_round=r.best_round, best_accuracy=r.best_accuracy,
         converged=r.converged, convergence_round=r.convergence_round,
+        early_stop_enabled=r.early_stop_enabled,
         macro_f1=r.macro_f1, macro_auc=r.macro_auc, ece=r.ece,
         ece_pre=r.ece_pre, total_duration_s=r.total_duration_s,
         dp_noise_multiplier=r.dp_noise_multiplier, dp_noise_strategy=r.dp_noise_strategy,
@@ -561,6 +562,15 @@ async def get_training_rounds(training_id: int, fingerprint: str = Depends(_get_
     best_round = training_row["best_round"] if training_row else None
     convergence_round = training_row["convergence_round"] if training_row else None
     rounds_by_number = {r.round: r for r in rounds}
+    # Última rodada de fato registrada em fl_round_history — não necessariamente
+    # igual a n_rounds_done de fl_trainings (early stop agenda uma rodada de
+    # confirmação; a fonte de verdade pra "onde os pesos pararam de fato" é o
+    # histórico rodada-a-rodada, não o contador agregado). Pedido explícito da
+    # autora (2026-08-09): comparar classe a classe entre melhor rodada, rodada
+    # de convergência e ÚLTIMA rodada — training_id=11 (sem DP, sem early stop)
+    # mostrou 2 classes com F1=0 justamente na última rodada, sinal que nem
+    # best_round nem convergence_round sozinhos revelam.
+    last_round = rows[-1].round if rows else None
 
     return TrainingRoundsResponse(
         training_id=training_id,
@@ -569,6 +579,8 @@ async def get_training_rounds(training_id: int, fingerprint: str = Depends(_get_
         best_round_detail=rounds_by_number.get(best_round),
         convergence_round=convergence_round,
         convergence_round_detail=rounds_by_number.get(convergence_round),
+        last_round=last_round,
+        last_round_detail=rounds_by_number.get(last_round),
         checkpoint_round=checkpoint_row["round"] if checkpoint_row else None,
         evaluation_json=checkpoint_row["evaluation_json"] if checkpoint_row else None,
         rounds=rounds,

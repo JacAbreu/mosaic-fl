@@ -17,6 +17,7 @@ class CheckpointStore(ABC):
         partition_mode: str = "natural",
         run_classification: str = "ajuste",
         local_only_hospital: Optional[str] = None,
+        early_stop_enabled: bool = False,
     ) -> int:
         """Registra um novo treinamento antes do loop FL. Retorna training_id.
 
@@ -31,7 +32,12 @@ class CheckpointStore(ABC):
         local_only_hospital: None (treino federado normal) ou "BPSP"/"HSL"
         (Caminho B rodado com um único hospital conectado, min-clients=1 —
         baseline local pra comparar contra o federado na mesma rede real,
-        migration 030)."""
+        migration 030).
+
+        early_stop_enabled: valor de FED_CFG.early_stop no momento do registro
+        (achado 2026-08-08, migration 036) — sem isso, n_rounds_done < n_rounds_max
+        é ambíguo (parou por convergência real ou por outro motivo? já se
+        confundiu nesta mesma fase, training_id 3/4)."""
 
     @abstractmethod
     def complete_training(

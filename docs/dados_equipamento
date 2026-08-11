@@ -1,0 +1,32 @@
+lscpu | grep "Model name" 
+  free -h | grep Mem
+  lsblk -d -o NAME,SIZE,MODEL
+  (ou, mais simples: neofetch ou inxi -Fxz se tiver instalado, dá tudo de uma vez.)
+
+
+  Model name:                              13th Gen Intel(R) Core(TM) i9-13900K
+Mem:            31Gi        18Gi       1.3Gi       2.9Gi        14Gi        12Gi
+NAME      SIZE MODEL
+loop0       4K 
+loop1    73.9M 
+loop2      74M 
+loop3   252.4M 
+loop4    66.8M 
+loop5    11.8M 
+loop6    16.5M 
+loop7    11.1M 
+loop8   531.4M 
+loop9   531.5M 
+loop10  606.1M 
+loop11  614.5M 
+loop12   91.7M 
+loop13    395M 
+loop14    402M 
+loop15   15.7M 
+loop17   50.1M 
+loop18    828K 
+loop19   50.1M 
+loop20    828K 
+loop21  210.8M 
+loop22  219.9M 
+loop23  257.7M 

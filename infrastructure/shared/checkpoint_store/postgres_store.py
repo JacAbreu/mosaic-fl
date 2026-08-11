@@ -28,6 +28,7 @@ class PostgreSQLCheckpointStore(CheckpointStore):
         partition_mode: str = "natural",
         run_classification: str = "ajuste",
         local_only_hospital: Optional[str] = None,
+        early_stop_enabled: bool = False,
     ) -> int:
         import sqlalchemy as sa
         with self._engine.begin() as conn:
@@ -35,9 +36,9 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                 sa.text(
                     "INSERT INTO metrics.fl_trainings "
                     "(algorithm, log_file, n_rounds_max, checkpoint_criterion, partition_mode, "
-                    "run_classification, local_only_hospital) "
+                    "run_classification, local_only_hospital, early_stop_enabled) "
                     "VALUES (:algorithm, :log_file, :n_rounds_max, :checkpoint_criterion, :partition_mode, "
-                    ":run_classification, :local_only_hospital) "
+                    ":run_classification, :local_only_hospital, :early_stop_enabled) "
                     "RETURNING id"
                 ),
                 {
@@ -48,14 +49,15 @@ class PostgreSQLCheckpointStore(CheckpointStore):
                     "partition_mode":       partition_mode,
                     "run_classification":   run_classification,
                     "local_only_hospital":  local_only_hospital,
+                    "early_stop_enabled":   early_stop_enabled,
                 },
             ).fetchone()
         training_id = row[0]
         logger.info(
             "training_registered_postgres id=%d algorithm=%s criterion=%s partition_mode=%s "
-            "run_classification=%s local_only_hospital=%s",
+            "run_classification=%s local_only_hospital=%s early_stop_enabled=%s",
             training_id, algorithm, checkpoint_criterion, partition_mode, run_classification,
-            local_only_hospital,
+            local_only_hospital, early_stop_enabled,
         )
         return training_id
 

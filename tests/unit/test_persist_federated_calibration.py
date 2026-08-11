@@ -3,6 +3,7 @@ Testes para ProductionFedProxStrategy._persist_federated_calibration() — a eta
 recebe o resultado já agregado (aggregate_calibration em federated.py) e persiste no
 checkpoint via CheckpointStore, para a InferenceEngine carregar depois.
 """
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -35,6 +36,46 @@ def _make_strategy():
     strategy._dp_epsilon_simple = None
     strategy._rdp_accountant = None
     return strategy
+
+
+class TestPersistFederatedCalibrationUsesBestRoundPerClassF1:
+    """Regressão do bug achado 2026-08-08 (training_id=6/8, real): a chamada
+    salvava state_dict/accuracy da MELHOR rodada mas per_class_f1 vinha de
+    aggregated_metrics — a rodada ATUAL (onde calibração roda, normalmente a
+    última/de early stop), reintroduzindo o mesmo bug de checkpoint corrigido
+    em 2026-07-28, só que pra este campo específico."""
+
+    def test_evaluation_json_usa_best_per_class_f1_nao_o_da_rodada_atual(self):
+        strategy = _make_strategy()
+        strategy._best_per_class_f1 = [0.9, 0.8, 0.7, 0.6, 0.5]  # rodada 7, a melhor
+        # aggregated_metrics simula a rodada ATUAL (ex.: 47, colapsada) — bem
+        # diferente da melhor. Se o bug reaparecer, é isto que vai ser salvo.
+        rodada_atual_diferente = [0.0, 0.0, 0.0, 0.0, 0.1]
+        strategy._persist_federated_calibration(
+            server_round=47,
+            calibration_method="temperature",
+            aggregated_metrics={
+                "temperature": 1.0,
+                "per_class_f1_json": json.dumps(rodada_atual_diferente),
+            },
+        )
+        kwargs = strategy._checkpoint_store.save.call_args.kwargs
+        assert kwargs["evaluation_json"]["best_per_class_f1"] == [0.9, 0.8, 0.7, 0.6, 0.5]
+        assert kwargs["evaluation_json"]["best_per_class_f1"] != rodada_atual_diferente
+
+    def test_fallback_quando_best_per_class_f1_nunca_foi_setado(self):
+        """Cenário legado/recovery: se _best_per_class_f1 nunca foi capturado nesta
+        run (None), cai de volta em aggregated_metrics — não trava a calibração."""
+        strategy = _make_strategy()
+        strategy._best_per_class_f1 = None
+        fallback = [0.4, 0.3, 0.2, 0.1, 0.0]
+        strategy._persist_federated_calibration(
+            server_round=47,
+            calibration_method="temperature",
+            aggregated_metrics={"temperature": 1.0, "per_class_f1_json": json.dumps(fallback)},
+        )
+        kwargs = strategy._checkpoint_store.save.call_args.kwargs
+        assert kwargs["evaluation_json"]["best_per_class_f1"] == fallback
 
 
 class TestPersistFederatedCalibrationTemperature:

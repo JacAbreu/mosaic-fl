@@ -40,10 +40,11 @@ class SQLiteCheckpointStore(CheckpointStore):
         partition_mode: str = "natural",
         run_classification: str = "ajuste",
         local_only_hospital: Optional[str] = None,
+        early_stop_enabled: bool = False,
     ) -> int:
         # fl_trainings do SQLite não tem coluna partition_mode/run_classification/
-        # local_only_hospital (mesma lacuna já existente para checkpoint_criterion/
-        # métricas de recurso nesta classe).
+        # local_only_hospital/early_stop_enabled (mesma lacuna já existente para
+        # checkpoint_criterion/métricas de recurso nesta classe).
         started_at = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(self._db_path) as conn:
             cur = conn.execute(
@@ -54,9 +55,9 @@ class SQLiteCheckpointStore(CheckpointStore):
             training_id = cur.lastrowid
         logger.info(
             "training_registered_sqlite id=%d algorithm=%s criterion=%s partition_mode=%s "
-            "run_classification=%s local_only_hospital=%s (não persistido)",
+            "run_classification=%s local_only_hospital=%s early_stop_enabled=%s (não persistido)",
             training_id, algorithm, checkpoint_criterion, partition_mode, run_classification,
-            local_only_hospital,
+            local_only_hospital, early_stop_enabled,
         )
         return training_id
 

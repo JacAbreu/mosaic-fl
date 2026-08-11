@@ -18,7 +18,8 @@ def _training_row(**kwargs):
     defaults = dict(
         id=1, algorithm="FedProx", run_classification="ajuste", partition_mode="natural",
         status="completed", started_at=None, completed_at=None, n_rounds_done=110,
-        best_round=95, best_accuracy=0.75, converged=True, convergence_round=88, macro_f1=0.42, macro_auc=0.83,
+        best_round=95, best_accuracy=0.75, converged=True, convergence_round=88, early_stop_enabled=False,
+        macro_f1=0.42, macro_auc=0.83,
         ece=0.11, ece_pre=0.08, total_duration_s=15621.6, dp_noise_multiplier=None,
         dp_noise_strategy=None, dp_epsilon_simple=None, dp_epsilon_rdp=None,
         is_active_model=False, checkpoint_round=95,
@@ -238,6 +239,36 @@ class TestGetTrainingRounds:
         assert data["best_round_detail"]["f1_macro"] == pytest.approx(0.30)
         assert data["convergence_round_detail"]["round"] == 30
         assert data["convergence_round_detail"]["f1_macro"] == pytest.approx(0.20)
+
+    def test_last_round_is_final_row_of_round_history_not_n_rounds_done(self, client_with_engine):
+        """Pedido explícito da autora (2026-08-09): comparar F1 por classe entre
+        melhor rodada, rodada de convergência e ÚLTIMA rodada — training_id=11
+        (sem DP, sem early stop) mostrou 2 classes colapsando (F1=0) justamente
+        na última rodada, sinal que best_round/convergence_round sozinhos não
+        revelam. last_round vem da última linha real de fl_round_history, não
+        de n_rounds_done (que fica em fl_trainings, não é consultado aqui)."""
+        from infrastructure.mosaicfl_api import state
+        rows = [
+            SimpleNamespace(round=4, accuracy=0.50, f1_macro=0.30,
+                             per_class_f1=[0.5, 0.1, 0.1, 0.3, 0.2], per_client_f1_json=None),
+            SimpleNamespace(round=30, accuracy=0.45, f1_macro=0.20,
+                             per_class_f1=[0.3, 0.0, 0.0, 0.2, 0.1], per_client_f1_json=None),
+            SimpleNamespace(round=75, accuracy=0.75, f1_macro=0.39,
+                             per_class_f1=[0.81, 0.0, 0.0, 0.70, 0.45], per_client_f1_json=None),
+        ]
+        state._db._engine = _mock_engine_connect(
+            fetchall_result=rows,
+            first_results=[{"best_round": 4, "convergence_round": 30}],
+        )
+
+        r = client_with_engine.get("/api/admin/fl-training-results/91/rounds", headers={"X-API-Key": "k"})
+        assert r.status_code == 200
+        data = r.json()
+
+        assert data["last_round"] == 75
+        assert data["last_round_detail"]["f1_macro"] == pytest.approx(0.39)
+        assert data["last_round_detail"]["per_class_f1"][1] == pytest.approx(0.0)
+        assert data["last_round_detail"]["per_class_f1"][2] == pytest.approx(0.0)
 
     def test_unknown_training_id_returns_404(self, client_with_engine):
         from infrastructure.mosaicfl_api import state

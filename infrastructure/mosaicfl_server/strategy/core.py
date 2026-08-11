@@ -62,6 +62,7 @@ class ProductionFedProxStrategy(
     _best_accuracy      = 0.0   # fallback para __new__ em testes
     _best_f1_macro      = 0.0   # fallback para __new__ em testes
     _best_macro_auc     = None  # fallback para __new__ em testes
+    _best_per_class_f1  = None  # fallback para __new__ em testes
     _best_criterion_value = 0.0  # fallback para __new__ em testes
     _training_completed = False  # fallback para __new__ em testes
     _last_round_resources_json = None  # fallback para __new__ em testes
@@ -163,6 +164,14 @@ class ProductionFedProxStrategy(
         self._best_accuracy = 0.0
         self._best_f1_macro: float = 0.0
         self._best_macro_auc: Optional[float] = None
+        # per_class_f1 DA MELHOR RODADA — achado 2026-08-08 (training_id=6/8):
+        # _best_state_dict/_best_accuracy/etc. já seguiam esse padrão desde a
+        # correção do bug do checkpoint (2026-07-28), mas per_class_f1 tinha ficado
+        # de fora — _persist_federated_calibration() lia aggregated_metrics (rodada
+        # ATUAL, normalmente a última) em vez desta cópia, reintroduzindo o mesmo
+        # bug só pra este campo. evaluation_json.best_per_class_f1 de treinos
+        # anteriores a esta correção pode estar errado (ver linha do tempo).
+        self._best_per_class_f1: Optional[list] = None
         # ece/ece_pre federados — calculados uma única vez, na mesma rodada em que
         # calibrate=True é enviado aos clientes (ver client.py::evaluate). Nunca
         # centraliza uma amostra: cada cliente manda só contagens agregadas por bin
@@ -740,6 +749,7 @@ class ProductionFedProxStrategy(
             self._best_f1_macro = f1_macro
             self._best_macro_auc = macro_auc
             self._best_round = server_round
+            self._best_per_class_f1 = per_class_f1
             # Cópia em memória — usada por _persist_federated_calibration() na
             # última rodada, pra não sobrescrever o checkpoint da melhor rodada com
             # os pesos da última (ver comentário em __init__).
@@ -1071,8 +1081,21 @@ class ProductionFedProxStrategy(
 
             best_state_dict = self._best_state_dict or self.global_model.state_dict()
             best_round = self._best_round or server_round
-            best_per_class_f1_json = aggregated_metrics.get("per_class_f1_json")
-            best_per_class_f1 = json.loads(best_per_class_f1_json) if best_per_class_f1_json else None
+            # BUG corrigido 2026-08-08 (achado no training_id=6/8): isto lia
+            # aggregated_metrics.get("per_class_f1_json") — métricas da rodada ATUAL
+            # (onde a calibração roda, normalmente a última configurada/de early
+            # stop), não da melhor rodada. state_dict/accuracy já vinham certos
+            # (self._best_*); per_class_f1 tinha ficado de fora dessa mesma correção
+            # quando ela foi feita em 2026-07-28. self._best_per_class_f1 é a cópia
+            # certa, capturada no mesmo instante em que self._best_state_dict é.
+            best_per_class_f1 = self._best_per_class_f1
+            if best_per_class_f1 is None:
+                # Fallback só pra treinos muito antigos que reiniciaram no meio
+                # (recovery) sem passar pelo bloco de melhora nesta run — não deveria
+                # acontecer em treino normal, mas não trava a calibração por causa
+                # disso.
+                best_per_class_f1_json = aggregated_metrics.get("per_class_f1_json")
+                best_per_class_f1 = json.loads(best_per_class_f1_json) if best_per_class_f1_json else None
             self._checkpoint_store.save(
                 round_num=best_round,
                 state_dict=best_state_dict,

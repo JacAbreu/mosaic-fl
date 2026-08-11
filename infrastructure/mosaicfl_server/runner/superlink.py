@@ -182,6 +182,7 @@ def _make_server_components(context: Context) -> ServerAppComponents:
         partition_mode="natural",
         run_classification=run_classification,
         local_only_hospital=local_only_hospital,
+        early_stop_enabled=FED_CFG.early_stop,
     )
     logger.info(
         "training_registered",
@@ -191,6 +192,7 @@ def _make_server_components(context: Context) -> ServerAppComponents:
             "n_rounds_max": num_rounds,
             "run_classification": run_classification,
             "local_only_hospital": local_only_hospital,
+            "early_stop_enabled": FED_CFG.early_stop,
             "run_id": context.run_id,
         },
     )

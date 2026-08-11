@@ -48,19 +48,26 @@
         <strong>Treinamentos federados</strong>
         <div class="text-muted small">Clique numa linha pra ver o histórico rodada-a-rodada (per_class_f1 e per_client_f1).</div>
       </div>
-      <button class="btn btn-sm btn-outline-secondary" onclick="loadAll()">↺</button>
+      <div class="d-flex align-items-center gap-2">
+        <select id="tr-status-filter" class="form-select form-select-sm" style="width:auto" onchange="renderTrainingsList()" title="Filtra a tabela abaixo — não refaz a consulta ao servidor">
+          <option value="all" selected>Todos os status</option>
+          <option value="completed">Só completed</option>
+        </select>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadAll()">↺</button>
+      </div>
     </div>
     <div class="card-body p-0">
       <table class="table table-sm table-hover mb-0 tr-table">
         <thead class="table-light">
           <tr>
             <th></th><th>ID</th><th>Tipo</th><th>Algoritmo</th><th>Status</th>
+            <th title="FED_CFG.early_stop no momento em que este treino foi registrado (migration 036) — se ligado, a última rodada tende a ficar perto da rodada de convergência">Early stop</th>
             <th>Rounds</th><th>Melhor round</th><th title="Rodada real em que a convergência foi detectada pela 1ª vez — pode divergir bastante do melhor round sob DP (achado 2026-08-01, treino 85)">Convergência (round)</th><th>Checkpoint</th><th>Accuracy</th><th>Macro F1</th>
             <th>Macro AUC</th><th>ECE (pré→pós)</th><th>Convergiu</th><th>Duração</th><th>DP</th>
           </tr>
         </thead>
         <tbody id="tr-tbody">
-          <tr><td colspan="16" class="text-muted small text-center py-3">Carregando…</td></tr>
+          <tr><td colspan="17" class="text-muted small text-center py-3">Carregando…</td></tr>
         </tbody>
       </table>
     </div>
@@ -186,19 +193,40 @@ async function loadComparison() {
   }
 }
 
+let _allTrainings = [];
+
 async function loadTrainingsList() {
   const tbody = document.getElementById('tr-tbody');
-  tbody.innerHTML = '<tr><td colspan="16" class="text-muted small text-center py-3">Carregando…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="17" class="text-muted small text-center py-3">Carregando…</td></tr>';
   try {
     const r = await fetch(`${API}/api/admin/fl-training-results`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
-    if (!data.trainings.length) {
-      tbody.innerHTML = '<tr><td colspan="16" class="text-muted small text-center py-3">Nenhum treinamento encontrado.</td></tr>';
-      return;
-    }
-    data.trainings.forEach(t => { _trainingsById[t.id] = t; });
-    tbody.innerHTML = data.trainings.map(t => {
+    _allTrainings = data.trainings || [];
+    _allTrainings.forEach(t => { _trainingsById[t.id] = t; });
+    renderTrainingsList();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="17" class="text-danger small text-center py-3">Erro: ${e.message}</td></tr>`;
+  }
+}
+
+// Filtra a lista já carregada (client-side, sem nova consulta) e renderiza —
+// pedido da autora 2026-08-08: distinguir "todos os status" de "só completed"
+// sem precisar abrir cada linha, especialmente depois de treinos ficarem
+// status='invalid' (bug do evaluation_json.best_per_class_f1, ver linha do
+// tempo) misturados com 'completed'/'interrupted' na mesma tabela.
+function renderTrainingsList() {
+  const tbody = document.getElementById('tr-tbody');
+  const filter = document.getElementById('tr-status-filter').value;
+  const trainings = filter === 'completed'
+    ? _allTrainings.filter(t => t.status === 'completed')
+    : _allTrainings;
+
+  if (!trainings.length) {
+    tbody.innerHTML = '<tr><td colspan="17" class="text-muted small text-center py-3">Nenhum treinamento encontrado.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = trainings.map(t => {
       const typeBadge = t.run_classification === 'treinamento_real' ? 'badge-real' : 'badge-ajuste';
       const convBadge = t.converged ? 'badge-yes' : 'badge-no';
       let dp = 'desligado';
@@ -225,6 +253,15 @@ async function loadTrainingsList() {
         (convGap && Math.abs(convGap.gap) > 10
           ? `<span class="badge badge-no" title="${convGap.text}">round ${t.convergence_round} (Δ${convGap.gap > 0 ? '+' : ''}${convGap.gap}) ⚠</span>`
           : `round ${t.convergence_round}${convGap ? ` <span class="text-muted" title="${convGap.text}">(Δ${convGap.gap > 0 ? '+' : ''}${convGap.gap})</span>` : ''}`);
+      // FL_EARLY_STOP ligado + última rodada perto da convergência é o
+      // resultado esperado (parou por convergência real); ligado mas MUITO
+      // depois da convergência sugere que o early stop configurado não
+      // disparou como esperado — vale desconfiar.
+      const esBadge = t.early_stop_enabled
+        ? (t.convergence_round != null && t.n_rounds_done != null && Math.abs(t.n_rounds_done - t.convergence_round) <= 3
+            ? `<span class="badge badge-yes" title="ligado — última rodada (${t.n_rounds_done}) perto da convergência (${t.convergence_round}), como esperado">sim</span>`
+            : `<span class="badge badge-warn" title="ligado, mas a última rodada (${t.n_rounds_done ?? '—'}) está longe da rodada de convergência (${t.convergence_round ?? '—'}) — conferir se disparou como esperado">sim ⚠</span>`)
+        : '<span class="text-muted">não</span>';
       return `
         <tr class="tr-row" style="cursor:pointer" onclick="toggleRound(${t.id})">
           <td>▸</td>
@@ -232,6 +269,7 @@ async function loadTrainingsList() {
           <td><span class="badge ${typeBadge}">${t.run_classification || '—'}</span></td>
           <td>${t.algorithm || '—'}</td>
           <td>${t.status || '—'}</td>
+          <td>${esBadge}</td>
           <td>${t.n_rounds_done ?? '—'}</td>
           <td>${t.best_round ?? '—'}</td>
           <td>${convRoundCell}</td>
@@ -245,12 +283,9 @@ async function loadTrainingsList() {
           <td class="text-muted">${dp}</td>
         </tr>
         <tr class="round-detail" id="detail-${t.id}">
-          <td colspan="16" class="bg-light"><div id="detail-body-${t.id}" class="p-2 text-muted small">Carregando ao expandir…</div></td>
+          <td colspan="17" class="bg-light"><div id="detail-body-${t.id}" class="p-2 text-muted small">Carregando ao expandir…</div></td>
         </tr>`;
     }).join('');
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="16" class="text-danger small text-center py-3">Erro: ${e.message}</td></tr>`;
-  }
 }
 
 const _loadedDetails = new Set();
@@ -345,7 +380,52 @@ async function toggleRound(trainingId) {
     const roundCardsBlock = `<div class="d-flex gap-4 flex-wrap mb-2">
       ${renderRoundCard('Melhor round (checkpoint_criterion — o que fica salvo/ativo)', data.best_round, data.best_round_detail, 'badge-yes')}
       ${renderRoundCard('Rodada de convergência (ConvergenceTracker — só estabilidade)', data.convergence_round, data.convergence_round_detail, 'badge-warn')}
+      ${renderRoundCard('Última rodada (onde o treino de fato parou)', data.last_round, data.last_round_detail, data.last_round === data.best_round ? 'badge-yes' : 'badge-no')}
     </div>`;
+
+    // Comparação classe a classe entre as 3 rodadas — pedido explícito da autora
+    // (2026-08-09): usar isso como indicador de onde parar. Marca colapso
+    // (F1 caiu perto de 0 numa rodada em que não estava perto de 0 antes) —
+    // sinal direto de que continuar treinando além desse ponto tem custo real
+    // pra aquela classe, mesmo que a métrica agregada (accuracy/f1_macro) não
+    // mostre isso sozinha.
+    let classCollapseBlock = '';
+    {
+      const stages = [
+        { key: 'best', label: 'Melhor', round: data.best_round, detail: data.best_round_detail },
+        { key: 'conv', label: 'Convergência', round: data.convergence_round, detail: data.convergence_round_detail },
+        { key: 'last', label: 'Última', round: data.last_round, detail: data.last_round_detail },
+      ].filter(s => s.round != null);
+
+      if (stages.length >= 2) {
+        const COLLAPSE_EPS = 0.01; // F1 abaixo disso conta como "colapsada" nesta rodada
+        const rowsHtml = labels.map((name, i) => {
+          const vals = stages.map(s => (s.detail && s.detail.per_class_f1 ? s.detail.per_class_f1[i] : null));
+          const wasAliveBefore = vals.slice(0, -1).some(v => v != null && v > COLLAPSE_EPS);
+          const lastVal = vals[vals.length - 1];
+          const collapsedAtEnd = wasAliveBefore && lastVal != null && lastVal <= COLLAPSE_EPS;
+          const cells = stages.map((s, si) => {
+            const v = vals[si];
+            const isCollapsedHere = v != null && v <= COLLAPSE_EPS && stages.slice(0, si).some((_, sj) => vals[sj] != null && vals[sj] > COLLAPSE_EPS);
+            return `<td class="pcf1-cell${isCollapsedHere ? ' table-danger' : ''}" title="round ${s.round}">${fmt(v)}</td>`;
+          }).join('');
+          return `<tr>
+            <td class="text-muted">${name}${collapsedAtEnd ? ' <span class=\"badge badge-no\" title=\"F1 estava acima do limiar em rodada anterior e colapsou nesta\">colapsou →</span>' : ''}</td>
+            ${cells}
+          </tr>`;
+        }).join('');
+        classCollapseBlock = `<div class="mb-2">
+          <div class="small text-muted mb-1">
+            Comparação classe a classe — ${stages.map(s => `${s.label} (round ${s.round})`).join(' × ')}.
+            Vermelho = classe com F1 ≤ ${COLLAPSE_EPS} nesta rodada, tendo estado acima disso em uma rodada anterior da comparação — indicador direto de custo de continuar treinando além desse ponto para essa classe.
+          </div>
+          <table class="table table-sm mb-0">
+            <tr><th>Classe</th>${stages.map(s => `<th>${s.label}</th>`).join('')}</tr>
+            ${rowsHtml}
+          </table>
+        </div>`;
+      }
+    }
 
     // Melhor rodada POR CLASSE — independente do critério agregado e de
     // convergência (achado 2026-08-02). Marca quando o pico da classe NÃO
@@ -377,7 +457,7 @@ async function toggleRound(trainingId) {
       </div>`;
     }
 
-    body.innerHTML = `${roundCardsBlock}${classBestBlock}${interpBlock}${attractorBlock}${evalBlock}<div style="max-height:400px; overflow-y:auto;"><table class="table table-sm mb-0">${header}${rows}</table></div>`;
+    body.innerHTML = `${roundCardsBlock}${classCollapseBlock}${classBestBlock}${interpBlock}${attractorBlock}${evalBlock}<div style="max-height:400px; overflow-y:auto;"><table class="table table-sm mb-0">${header}${rows}</table></div>`;
   } catch (e) {
     body.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
   }

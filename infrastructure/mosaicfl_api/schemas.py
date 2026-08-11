@@ -225,6 +225,7 @@ class TrainingResultSummary(BaseModel):
     best_accuracy: Optional[float] = None
     converged: Optional[bool] = None
     convergence_round: Optional[int] = None
+    early_stop_enabled: Optional[bool] = None
     macro_f1: Optional[float] = None
     macro_auc: Optional[float] = None
     ece: Optional[float] = None
@@ -285,6 +286,8 @@ class TrainingRoundsResponse(BaseModel):
     best_round_detail: Optional[TrainingRoundDetail] = None
     convergence_round: Optional[int] = None
     convergence_round_detail: Optional[TrainingRoundDetail] = None
+    last_round: Optional[int] = None
+    last_round_detail: Optional[TrainingRoundDetail] = None
     checkpoint_round: Optional[int] = None
     evaluation_json: Optional[dict] = None
     rounds: list[TrainingRoundDetail]
