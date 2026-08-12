@@ -174,8 +174,15 @@ def _make_server_components(context: Context) -> ServerAppComponents:
             local_only_hospital, min_clients,
         )
 
+    # Reflete FED_CFG.aggregation_strategy no registro — antes sempre "FedProx",
+    # mesmo nas rodadas em que a agregação era, de fato, FedAvg puro (o próprio
+    # FedProx do Flower não normaliza por τ) ou, agora, FedNova (achado
+    # 2026-08-11, Seção~sec:fedprox-fednova-gap do rascunho do TCC). O termo
+    # proximal do FedProx continua ativo no cliente nos dois casos — só a
+    # agregação no servidor muda.
+    _algorithm_label = "FedNova" if FED_CFG.aggregation_strategy == "fednova" else "FedProx"
     training_id = checkpoint_store.register_training(
-        algorithm="FedProx",
+        algorithm=_algorithm_label,
         log_file="",
         n_rounds_max=num_rounds,
         checkpoint_criterion=FED_CFG.checkpoint_criterion,

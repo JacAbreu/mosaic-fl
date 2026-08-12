@@ -136,7 +136,18 @@ class FedConfig:
     top_k:                 int        = 3
     max_new_tokens:        int   = 64
     pooled_epochs:         int   = 120  # épocas do BEHRT centralizado — equivalente ao budget de rodadas do FL (num_rounds)
-    use_fednova:           bool  = True  # Exp 9: substitui FedAvg por normalização por passos efetivos τ_i (Wang et al. 2020)
+    use_fednova:           bool  = True  # Exp 9: substitui FedAvg por normalização por passos efetivos τ_i (Wang et al. 2020) — só Caminho A lê esta flag (manual_loop.py)
+    # Estratégia de agregação no servidor do CAMINHO B (Strategy pattern — achado
+    # 2026-08-11: ProductionFedProxStrategy herdava direto de flwr.server.strategy.
+    # FedProx, que por documentação da própria lib não sobrescreve agregação —
+    # equivalente a FedAvg puro, média ponderada por amostra. Os 12 treinos formais
+    # até aqui rodaram assim, nunca com a normalização por τ que o FedNova provê,
+    # apesar do Caminho A já usar desde o Exp 12. Ver docs/rascunho_tcc/
+    # Rascunho_TCC_MOSAIC-FL.tex, Seção~sec:fedprox-fednova-gap.
+    # "fedavg" (padrão — preserva o comportamento histórico do Caminho B, os 12
+    #   treinos formais já reportados continuam reproduzíveis) | "fednova"
+    #   (normaliza por τ, ver mosaicfl.core.federated::aggregate_fednova).
+    aggregation_strategy: str = field(default_factory=lambda: os.getenv("FL_AGGREGATION_STRATEGY", "fedavg"))
     # Critério de seleção do melhor checkpoint por rodada.
     # Valores válidos: "f1_macro" (padrão, Bloco 2+), "accuracy" (Bloco 1 — legado).
     # Futuro: migra para fl_config no banco com audit trail (justificativa + efeitos esperados).

@@ -126,9 +126,11 @@ class ProductionFedProxStrategy(
         self._last_round_metrics: Dict = {}
 
         # Acumula por rodada para save_round_history() no fim do treino (mesmo padrão
-        # de manual_loop.py, Caminho A). tau_eff/round_duration_s não são calculados
-        # aqui — FedProx não usa tau_eff (só FedNova) e não há medição de duração
-        # por rodada implementada no Caminho B ainda.
+        # de manual_loop.py, Caminho A). round_duration_s não é medido por rodada
+        # aqui ainda. tau_eff passou a ser calculado quando FED_CFG.aggregation_
+        # strategy="fednova" (achado 2026-08-11, ver _aggregate_fednova), mas ainda
+        # só vai pro log — persistência em fl_round_history.tau_eff fica pendente
+        # (coluna já existe, nunca escrita pelo Caminho B).
         self._history_rounds: List[int] = []
         self._history_accuracies: List[float] = []
         self._history_losses: List[float] = []
@@ -418,6 +420,62 @@ class ProductionFedProxStrategy(
             "confusion_matrix_stats": confusion_stats,
         }
 
+    def _aggregate_fednova(self, global_ndarrays, results, server_round: int):
+        """Agregação FedNova (Wang et al. 2020) — substitui a agregação FedAvg já
+        computada por super().aggregate_fit() quando FED_CFG.aggregation_strategy=
+        "fednova" (Strategy pattern: "fedavg" continua o padrão e reproduz os 12
+        treinos formais já reportados; achado 2026-08-11, Seção~sec:fedprox-
+        fednova-gap do rascunho do TCC — até aqui o Caminho B nunca teve essa
+        opção).
+
+        τ por cliente já é calculado e devolvido em fit() por
+        mosaicfl.core.client::FedProxClient (código compartilhado com o Caminho
+        A) — só nunca era consumido aqui. Retorna `None` (nunca propaga exceção)
+        se algo falhar, sinalizando ao chamador para manter o resultado FedAvg já
+        calculado como fallback seguro — mesmo padrão de
+        `_apply_dp_noise_to_aggregated` abaixo.
+        """
+        from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
+
+        from mosaicfl.core.federated import aggregate_fednova
+
+        try:
+            client_ndarrays, num_examples, tau_values = [], [], []
+            for _, fit_res in results:
+                client_ndarrays.append(parameters_to_ndarrays(fit_res.parameters))
+                num_examples.append(fit_res.num_examples)
+                metrics = fit_res.metrics or {}
+                tau = metrics.get("tau")
+                if tau is None:
+                    logger.warning(
+                        "fednova_tau_ausente round=%d client_id=%s — usando τ=1 "
+                        "(equivalente a FedAvg só para este cliente nesta rodada)",
+                        server_round, metrics.get("client_id"),
+                    )
+                    tau = 1
+                tau_values.append(int(tau))
+
+            new_ndarrays = aggregate_fednova(
+                global_ndarrays, client_ndarrays, num_examples, tau_values,
+            )
+            tau_eff = (
+                sum(n * t for n, t in zip(num_examples, tau_values)) / sum(num_examples)
+                if sum(num_examples) > 0 else None
+            )
+            self._fednova_tau_eff = tau_eff  # só pro log por enquanto — persistência em fl_round_history.tau_eff é trabalho futuro
+            logger.info(
+                "fednova_aggregated round=%d n_clients=%d tau_values=%s tau_eff=%s",
+                server_round, len(results), tau_values, tau_eff,
+            )
+            return ndarrays_to_parameters(new_ndarrays)
+        except Exception as e:
+            logger.error(
+                "fednova_aggregate_error round=%d error=%s — rodada usa a "
+                "agregação FedAvg já computada por super().aggregate_fit() (fallback)",
+                server_round, e,
+            )
+            return None
+
     def _apply_dp_noise_to_aggregated(self, aggregated_parameters, server_round: int, n_clients: int):
         """DP-FedAvg (McMahan et al. 2018) — portado do Caminho A pro Caminho B
         (achado 2026-07-28: "o que tem no Caminho A tem que ter no Caminho B",
@@ -505,6 +563,20 @@ class ProductionFedProxStrategy(
     def aggregate_fit(self, server_round, results, failures):
         """Agrega pesos e salva checkpoint. Cancela watchdog do round."""
         self._cancel_round_watchdog()
+
+        # Pesos globais ANTES desta rodada — precisa capturar aqui, antes de
+        # super().aggregate_fit() (que não muta self.global_model, só o valor de
+        # retorno, mas por clareza e segurança contra mudança futura capturamos
+        # cedo). É o w_t da fórmula do FedNova (achado 2026-08-11, ver
+        # _aggregate_fednova abaixo e Seção~sec:fedprox-fednova-gap do rascunho
+        # do TCC). Só computado quando fednova está ativo — custo zero no caminho
+        # padrão (fedavg).
+        pre_round_ndarrays = None
+        if FED_CFG.aggregation_strategy == "fednova":
+            pre_round_ndarrays = [
+                v.detach().cpu().numpy() for v in self.global_model.state_dict().values()
+            ]
+
         aggregated_parameters, aggregated_metrics = super().aggregate_fit(
             server_round, results, failures
         )
@@ -535,6 +607,15 @@ class ProductionFedProxStrategy(
                 )
             else:
                 self._last_round_resources_json = None
+
+        if aggregated_parameters is not None and FED_CFG.aggregation_strategy == "fednova":
+            fednova_parameters = self._aggregate_fednova(
+                pre_round_ndarrays, results, server_round,
+            )
+            if fednova_parameters is not None:
+                aggregated_parameters = fednova_parameters
+            # else: mantém o resultado já computado por super().aggregate_fit()
+            # (FedAvg) como fallback seguro — erro já logado em _aggregate_fednova.
 
         if aggregated_parameters is not None and FED_CFG.dp_noise_multiplier > 0:
             aggregated_parameters = self._apply_dp_noise_to_aggregated(

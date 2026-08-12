@@ -49,6 +49,14 @@ FL_DP_NOISE_HEAD_SCALE        ?= 1.0      # layer_group: multiplicador na cabeç
 FL_DP_NOISE_EMBEDDING_SCALE   ?= 1.0      # layer_group: multiplicador no embedding
 FL_DP_NOISE_TRANSFORMER_SCALE ?= 1.0      # layer_group: multiplicador no encoder
 
+# Estratégia de agregação no servidor, Caminho B (achado 2026-08-11 — ver
+# Seção~sec:fedprox-fednova-gap do rascunho do TCC): "fedavg" (padrão histórico,
+# ProductionFedProxStrategy herda direto de flwr.server.strategy.FedProx) |
+# "fednova" (normaliza por passos efetivos τ, Wang et al. 2020 — mesma classe
+# das variáveis DP acima: lido pelo ServerApp, que herda o ambiente do
+# SuperLink, por isso vai no alvo `superlink`, não em `server-app`).
+FL_AGGREGATION_STRATEGY       ?= fedavg   # "fedavg" | "fednova"
+
 # Early stop real no Caminho B (achado 2026-08-01, avaliando o treino 83 — DP
 # uniforme colapsou entre a rodada 36, pico, e a 110, configurada, enquanto
 # dp_epsilon_simple cresceu sem nenhum ganho de qualidade nesse intervalo).
@@ -488,8 +496,17 @@ superlink:
 	FL_DP_NOISE_HEAD_SCALE=$(FL_DP_NOISE_HEAD_SCALE) \
 	FL_DP_NOISE_EMBEDDING_SCALE=$(FL_DP_NOISE_EMBEDDING_SCALE) \
 	FL_DP_NOISE_TRANSFORMER_SCALE=$(FL_DP_NOISE_TRANSFORMER_SCALE) \
+	FL_AGGREGATION_STRATEGY=$(FL_AGGREGATION_STRATEGY) \
 	FL_EARLY_STOP=$(FL_EARLY_STOP) \
 	bash scripts/iniciar_servidor_fl.sh
+
+# FedNova real no Caminho B (achado 2026-08-11, correção da Seção~sec:fedprox-
+# fednova-gap) — equivale a "make superlink FL_AGGREGATION_STRATEGY=fednova",
+# só nomeado pra deixar explícito no comando. Combina com os alvos de DP
+# normalmente (ex.: FL_DP_NOISE=0.5 make superlink-fednova).
+#   make superlink-fednova
+superlink-fednova:
+	$(MAKE) superlink FL_AGGREGATION_STRATEGY=fednova
 
 # Cenário "baseline" do plano de teste DP (2026-07-28): sem ruído algum —
 # equivale a "make superlink" puro, só nomeado pra deixar explícito no comando

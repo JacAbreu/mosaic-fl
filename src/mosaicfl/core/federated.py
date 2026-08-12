@@ -11,6 +11,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import flwr as fl
+import numpy as np
 import torch
 from collections import OrderedDict
 
@@ -324,3 +325,72 @@ def get_evaluate_fn(test_loader: "torch.utils.data.DataLoader[Any]") -> Callable
         return avg_loss, {"accuracy": accuracy, "rodada": server_round}
 
     return evaluate
+
+
+def aggregate_fednova(
+    global_ndarrays: List[np.ndarray],
+    client_ndarrays: List[List[np.ndarray]],
+    num_examples: List[int],
+    tau_values: List[int],
+) -> List[np.ndarray]:
+    """Agregação FedNova (Wang et al. 2020) sobre `NDArrays` do protocolo Flower —
+    usada pelo CAMINHO B (ProductionFedProxStrategy.aggregate_fit, achado
+    2026-08-11: até aqui o Caminho B só agregava por FedAvg/FedProx puro, nunca
+    por FedNova, apesar do Caminho A já usar desde o Exp 12 — Seção~sec:fedprox-
+    fednova-gap do rascunho do TCC).
+
+    Normaliza a contribuição de cada cliente pelo número de passos efetivos de
+    otimização (τ) que ele de fato realizou naquela rodada, antes de agregar —
+    corrige o viés de agregação quando clientes têm volumes de dado muito
+    diferentes (aqui, BPSP com ≈5,5× mais dado que o HSL: sem essa normalização,
+    o gradiente do BPSP domina a atualização global a cada rodada).
+
+    Fórmula (idêntica à do Caminho A, `experiments/training/core/fl_core/
+    aggregation.py::aggregate_fednova` — reimplementada aqui sobre `NDArrays`
+    posicionais em vez de `state_dict` nomeado porque esta camada nunca tem
+    acesso a um `torch.nn.Module` do cliente, só ao protocolo Flower):
+
+        τ_eff = Σ p_i · τ_i
+        w_{t+1} = w_t + τ_eff · Σ p_i · (w_i − w_t) / τ_i
+
+    onde p_i = n_i / Σn (peso por número de amostras). A ordem posicional dos
+    arrays em `global_ndarrays`/cada item de `client_ndarrays` precisa ser a
+    mesma (garantida pelo protocolo Flower — todo cliente treina a mesma
+    arquitetura, na mesma ordem de parâmetros).
+
+    Levanta `ValueError` se o peso total for zero ou se as listas de entrada
+    tiverem tamanhos inconsistentes — nunca falha silenciosamente.
+    """
+    if not client_ndarrays:
+        raise ValueError("Nenhum cliente para agregar (FedNova).")
+    if not (len(client_ndarrays) == len(num_examples) == len(tau_values)):
+        raise ValueError(
+            "client_ndarrays, num_examples e tau_values precisam ter o mesmo "
+            f"tamanho (FedNova) — recebido {len(client_ndarrays)}, "
+            f"{len(num_examples)}, {len(tau_values)}."
+        )
+
+    total = sum(num_examples)
+    if total == 0:
+        raise ValueError("Peso total de agregação é zero (FedNova).")
+
+    # τ=0 não deveria acontecer na prática (cliente sem passo algum naquela
+    # rodada), mas se acontecer, tratar como τ=1 (não divide por zero) — e usar
+    # o MESMO valor "seguro" tanto no cálculo de τ_eff quanto no termo por
+    # cliente abaixo. Sem essa consistência, um único cliente degenerado com
+    # τ=0 zeraria τ_eff inteiro e apagaria o progresso da rodada de TODOS os
+    # clientes, não só o dele — pior que simplesmente ignorar aquele cliente.
+    tau_values_safe = [max(tau, 1) for tau in tau_values]
+    tau_eff = sum(n * tau for n, tau in zip(num_examples, tau_values_safe)) / total
+
+    new_ndarrays: List[np.ndarray] = []
+    for layer_idx, w_t in enumerate(global_ndarrays):
+        w_t64 = w_t.astype(np.float64)
+        normalized_delta = np.zeros_like(w_t64)
+        for arrays, n, tau_safe in zip(client_ndarrays, num_examples, tau_values_safe):
+            p_i = n / total
+            normalized_delta += p_i * (arrays[layer_idx].astype(np.float64) - w_t64) / tau_safe
+        new_layer = w_t64 + tau_eff * normalized_delta
+        new_ndarrays.append(new_layer.astype(w_t.dtype))
+
+    return new_ndarrays
