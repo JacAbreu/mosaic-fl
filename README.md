@@ -3,12 +3,43 @@
 **Módulo de Predição Federada para Possibilidades de Diagnóstico e Evoluções Clínicas**, *o modelo estima probabilidades de evoluções de quadros clínicos de acordo com as informações clínicas disponibilizadas, estratificando o risco*
 
 Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
-- **Aprendizado Federado (FedNova)** para dados hospitalares fragmentados com heterogeneidade non-IID severa
+- **Aprendizado Federado (FedProx + FedNova)** para dados hospitalares fragmentados com heterogeneidade non-IID severa — FedNova validado no Caminho A (simulação); achado 2026-08-11, ainda não portado para o Caminho B (rede real), que hoje agrega por FedProx puro (equivalente a FedAvg) — ver nota abaixo
 - **BEHRT simplificado** para sequências clínicas temporais (tokens analito×classificação)
 - **RAG (Ollama/gemma3:4b + fallback HuggingFace)** para justificativa diagnóstica interpretável
-- **Differential Privacy (DP-FedAvg + contabilidade RDP via `opacus`)** para garantia formal de privacidade nos pesos — curva Acc×ε medida (Treinamento Real 3): custo de privacidade **severo** em todos os níveis de ruído testados
+- **Differential Privacy (DP-FedAvg + contabilidade RDP via `opacus`)** implementado e avaliado a fundo (22 treinos formais, 3 níveis de ruído, 2 estratégias de ruído) — custo de privacidade **severo** em todos os cenários testados; a garantia de privacidade do projeto **não depende de DP-FedAvg**, se apoia na arquitetura do FL em si (dado bruto nunca sai do hospital) — decisão registrada com evidência em `docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md`, seção 18
 
-**Status atual (2026-07-08):** resultados parciais, trabalho em andamento — pipeline validado ponta a ponta, ainda em fase ativa de ajuste (calibração federada e teste de convergência em 50 rounds em curso). Não há, neste momento, um número definitivo de acurácia a citar como resultado final do TCC; os números de cada rodada de treinamento ficam registrados em [`docs/Sumario_Treinamento_Parte3.md`](docs/Sumario_Treinamento_Parte3.md), atualizado conforme os experimentos avançam.
+**Status atual (2026-08-12):** Treinamento Real concluído no Caminho B (rede federada real — SuperLink/TLS entre duas máquinas, 3 bancos Postgres totalmente separados, sem nenhum compartilhamento de dado). Matriz formal de 12 configurações (privacidade × parada antecipada × peso de classe) executada até a conclusão — números completos, por `training_id`, em [`docs/Resultados_Treinamento_Real_Bancos_Separados.md`](docs/Resultados_Treinamento_Real_Bancos_Separados.md). **Esses 12 resultados são parciais**: agregaram por FedProx puro, não pelo FedNova originalmente adotado (achado 2026-08-11, ver seção "Como funciona o Federated Learning" abaixo) — correção e reexecução em andamento, prazo 2026-08-14. A validação *leave-one-out* (hospital isolado vs. federado) foi concluída — resultado inesperado, ver seção "TL;DR — Resumo executivo" logo abaixo. O rascunho do TCC com a seção de Resultados escrita está em `docs/rascunho_tcc/`. Números da fase de ajuste, anteriores a esta etapa, seguem em [`docs/Sumario_Treinamento_Parte3.md`](docs/Sumario_Treinamento_Parte3.md) — não citar como resultado final.
+
+---
+
+## TL;DR — Resumo executivo para atualização com a orientadora
+
+*(Seção adicionada em 2026-08-12 para facilitar comunicação de progresso — resume o que foi feito e descoberto até aqui. Detalhamento completo, com números e evidências, em cada link citado.)*
+
+### O que o projeto é
+
+MOSAIC-FL combina Aprendizado Federado (dois hospitais reais, BPSP e HSL, cada um com seu próprio banco de dados) com RAG para prever trajetórias clínicas de pacientes a partir de exames laboratoriais, sem que dado bruto de paciente saia de nenhum hospital. Extensão do ClinicalPath (Linhares et al., 2023).
+
+### O que foi implementado e validado
+
+- **Duas fases de execução**: Caminho A (simulação em processo único, usada para ajuste de hiperparâmetro) e Caminho B (rede federada real — `SuperLink`/`ServerApp`/`SuperNode`, TLS, duas máquinas físicas, três bancos Postgres totalmente isolados).
+- **Arquitetura**: BEHRT simplificado (Transformer para sequências clínicas) + FedProx (termo proximal) + RAG (Ollama/gemma3:4b, com justificativa textual da predição) + Differential Privacy (DP-FedAvg com contabilidade RDP).
+- **Treinamento Real (Caminho B)**: matriz formal de 12 configurações (3 cenários de privacidade × parada antecipada × peso de classe), todas executadas até a conclusão.
+
+### Principais achados
+
+1. **Colapso estrutural de classes raras.** Duas das cinco classes de prognóstico (`curado_internado`, `melhora_pronto`) ficam em F1=0 em praticamente todas as execuções formais — explicado por um *label skew* extremo e quase invertido entre os dois hospitais (uma classe que é 67% dos casos num hospital é 1,5% no outro, e vice-versa). Peso de classe manual não resolveu sozinho.
+2. **Custo de privacidade formal (DP) é severo.** Avaliado a fundo (22 treinos, 3 níveis de ruído, 2 estratégias) — nenhuma configuração testada atinge um orçamento de privacidade (ε) formalmente útil sem degradar demais a qualidade do modelo. Decisão tomada com essa evidência: a garantia de privacidade do projeto se apoia na **arquitetura** do FL (dado nunca sai do hospital), não em DP.
+3. **"Estados atratores" sob DP.** Sob ruído de privacidade diferencial, o modelo às vezes converge para um mesmo conjunto pequeno de resultados degenerados, que se repetem *entre treinos totalmente independentes* — um padrão que merece investigação futura mais aprofundada.
+4. **Quatro incidentes de engenharia reais**, encontrados e corrigidos só ao operar a rede federada real (nunca visíveis numa simulação de processo único) — incluindo um que teria invalidado silenciosamente um resultado já dado como concluído, se não tivesse sido auditado antes.
+5. **Achado crítico (2026-08-11): o Caminho B nunca usou o algoritmo de agregação FedNova.** Todos os 12 treinos formais agregaram por FedProx puro (equivalente a FedAvg) — uma lacuna de implementação nunca fechada desde uma simplificação da primeira validação de conectividade (não uma decisão deliberada). Confirmado no código-fonte da própria biblioteca Flower. **Correção em andamento, prazo sexta-feira (2026-08-14)**: portar o FedNova, reexecutar os 12 treinos, comparar os dois resultados.
+6. **Leave-one-out corrigido no Caminho B: o modelo isolado (silo) supera o federado nos dois hospitais.** BPSP +2,75 p.p. de F1 macro, HSL +19,89 p.p. — este último bem acima do que ruído de execução única explicaria. **Isso contradiz o teste equivalente feito antes na fase de ajuste** (que sugeria o oposto); a causa da contradição foi encontrada e confirmada diretamente no código: aquele teste anterior avaliava o hospital isolado contra um conjunto de teste que continuava incluindo o outro hospital — o mesmo tipo de erro de avaliação que motivou este experimento. O novo teste, no Caminho B, não pode cometer esse erro por desenho (nenhum cliente vê dado de outro hospital). É plausível — hipótese ainda não confirmada — que esse resultado esteja ligado ao achado 5 (a diluição de sinal que o FedNova deveria corrigir).
+
+### Pendências ativas, em ordem de prioridade
+
+1. Portar FedNova ao Caminho B, reexecutar os 12 treinos formais, comparar com o resultado atual (FedProx) — prazo 2026-08-14.
+2. Peso de classe auto-agregado, estilo Astraea (condicionado a tempo disponível).
+3. Avaliação humana (escala Likert) da qualidade da justificativa textual do RAG — ferramenta pronta, execução registrada como trabalho futuro por restrição de prazo.
 
 > **Nota sobre a seção [Experimentos](#experimentos) abaixo:** a tabela "Exp 1–19" vem da **fase de
 > ajuste** — código ainda em correção de bugs, esquema de labels e critério de checkpoint mudando no
@@ -42,8 +73,13 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 | Certificação ANVISA / LGPD completa | Fora do escopo de pesquisa; documentado como requisito futuro |
 
 > **Differential Privacy nos pesos não está nesta lista** — foi implementado (DP-FedAvg + contabilidade
-> RDP via `opacus`) e já tem resultado experimental concluído (curva Acc×ε, [`docs/Sumario_Treinamento_Parte3.md`](docs/Sumario_Treinamento_Parte3.md)):
-> custo de privacidade **severo** em todos os níveis de ruído testados. É um achado científico válido
+> RDP via `opacus`) e avaliado a fundo, na fase de ajuste (curva Acc×ε,
+> [`docs/Sumario_Treinamento_Parte3.md`](docs/Sumario_Treinamento_Parte3.md)) e depois formalmente no
+> Treinamento Real (Caminho B, 22 treinos, [`docs/Resultados_Treinamento_Real_Bancos_Separados.md`](docs/Resultados_Treinamento_Real_Bancos_Separados.md)):
+> custo de privacidade **severo** em todos os cenários testados. A decisão final do projeto foi **não
+> depender de DP-FedAvg para a garantia de privacidade** — que se apoia na arquitetura do FL em si (dado
+> bruto nunca sai do hospital) — registrada com evidência em
+> `docs/pesquisa_baseline_implementacao_fontes_bibliograficas.md`, seção 18. É um achado científico válido
 > (negativo, reportado sem suavização), não um item pendente — deve ser avaliado como parte da
 > corretude funcional do projeto, não excluído do julgamento.
 
@@ -81,6 +117,7 @@ Especificamente, os seguintes itens estão fora do escopo de avaliação atual:
 > **Avaliação do projeto:** [`AVALIACAO_PROJETO.md`](AVALIACAO_PROJETO.md) — avaliações acadêmica e de produção clínica com histórico de evolução.
 > **Documentação de etapas anteriores:** [`docs/documentacao_etapas_legadas.md`](docs/documentacao_etapas_legadas.md) — análises e planejamentos de sessões anteriores.
 > **Sumário de treinamentos:** [`docs/Sumario_Treinamento.md`](docs/Sumario_Treinamento.md) — registro completo de cada execução real (dados, pesos, hiperparâmetros, resultados, diagnóstico).
+> **Treinamento Real — 3 bancos separados (Caminho B):** [`docs/Resultados_Treinamento_Real_Bancos_Separados.md`](docs/Resultados_Treinamento_Real_Bancos_Separados.md) — matriz formal de 12 configurações (privacidade × parada antecipada × peso de classe), achados transversais e reprodutibilidade por `training_id`; passo a passo de setup em [`docs/Tutorial_Treinamento_Real_Bancos_Separados.md`](docs/Tutorial_Treinamento_Real_Bancos_Separados.md).
 
 ---
 
@@ -146,10 +183,19 @@ O deployment de produção usa o **Flower SuperLink** (disponível a partir da v
 1. **Servidor inicia** — envia o modelo global (pesos iniciais ou do último checkpoint) para cada hospital
 2. **Hospital treina localmente** com seus próprios prontuários (dados nunca saem)
 3. **Hospital devolve apenas os pesos** — nunca os dados brutos; update clipado para DP (quando ativado)
-4. **Servidor agrega** via **FedNova** (normaliza por passos efetivos τ para compensar heterogeneidade de dados) e envia novo modelo global
+4. **Servidor agrega** via **FedProx** (herdada sem alteração da classe `FedProx` do próprio Flower — por documentação da biblioteca, equivalente a **FedAvg** na agregação: média ponderada por amostra, sem normalização por passos efetivos) e envia novo modelo global
 5. **Repete por N rodadas** até convergência (Δacurácia < threshold por `patience` rodadas)
 
-**Por que FedNova em vez de FedAvg/FedProx:** com 1.251 batches/rodada no BPSP vs. 226 no HSL (ratio 5,5×), FedAvg enviesava o modelo para o hospital maior. FedNova normaliza cada update pelo número efetivo de passos τᵢ, eliminando esse viés. Ganho observado: +8,08 p.p. sobre FedAvg (Exp 8 → Exp 9).
+**Por que FedNova em vez de FedAvg/FedProx:** com 1.251 batches/rodada no BPSP vs. 226 no HSL (ratio 5,5×), FedAvg enviesava o modelo para o hospital maior. FedNova normaliza cada update pelo número efetivo de passos τᵢ, eliminando esse viés. Ganho observado: +8,08 p.p. sobre FedAvg (Exp 8 → Exp 9) — **medido e adotado no Caminho A** (simulação, `experiments/`).
+
+> **Achado 2026-08-11 — FedNova não está portado para este caminho (SuperLink/produção):** `ProductionFedProxStrategy`
+> (`infrastructure/mosaicfl_server/strategy/core.py`) herda diretamente `flwr.server.strategy.FedProx`, que não
+> sobrescreve a agregação — confirmado no código-fonte do Flower. O cliente já calcula e envia τ a cada rodada
+> (código compartilhado com o Caminho A), mas o servidor de produção nunca o consome: os 12 treinos formais do
+> Caminho B (`docs/Resultados_Treinamento_Real_Bancos_Separados.md`) agregaram por FedProx/FedAvg puro, não por
+> FedNova. Não foi uma decisão deliberada — rastreado a uma simplificação da primeira validação de conectividade
+> (2026-07-04/05) nunca revisitada. Correção em andamento (portar FedNova como opção de estratégia + reexecutar os
+> 12 treinos), prazo 2026-08-14 — enquanto isso, os resultados formais do Caminho B são parciais.
 
 ### Recovery de Sessão
 
@@ -973,6 +1019,20 @@ como referência comentada, após a primeira migração).
 | Arquitetura Flower | Legada (sockets diretos) | Produção (`ServerApp`/`ClientApp` via SuperLink) |
 | TLS | Obrigatório no código; passos originais não mencionavam | Obrigatório e documentado desde o início |
 | Uso recomendado | Testes rápidos, depuração | Mais próximo do "mundo real" — recomendado para os Treinamentos Reais |
+
+### Reprodutibilidade — comando `make` por treinamento
+
+Cada treinamento formal do Caminho B (fase "3 bancos separados", `training_id` 10
+em diante) tem o comando `make` exato que o iniciou, o estado do peso de classe
+no momento da execução e o resultado, documentados em
+[`docs/Resultados_Treinamento_Real_Bancos_Separados.md`](docs/Resultados_Treinamento_Real_Bancos_Separados.md)
+(seção "Leave-one-out no Caminho B" cobre o experimento em andamento). A mesma
+tabela está no Apêndice C do rascunho do TCC
+(`docs/rascunho_tcc/Rascunho_TCC_MOSAIC-FL.tex`, "Comandos executados por
+treinamento — reprodutibilidade"), junto com o padrão de comandos usado na
+fase de ajuste (Caminho A) — essa segunda parte é reconstrução do *padrão* de
+uso, não uma tabela `training_id`-a-`training_id`, porque a fase de ajuste
+antecede o registro por execução em detalhe.
 
 ---
 

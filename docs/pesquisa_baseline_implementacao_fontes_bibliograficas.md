@@ -724,6 +724,294 @@ A aproximação reduz o ε em ~31% frente à soma ingênua — uma direção rea
 
 ---
 
+## 16. Achado Empírico — Colapso Cíclico em "Estados Atratores" sob DP-FedAvg (2026-08-01)
+
+Achado ao avaliar o `training_id=85` (Caminho B, DP-FedAvg uniforme, σ=0,5, primeiro treino real com early stop de verdade funcionando — ver correção documentada em `docs/Linha_do_Tempo_MOSAIC-FL.md`). Conecta diretamente com a seção 13 (label skew extremo BPSP×HSL) e com o colapso estrutural de classes raras já registrado no projeto — mas revela um mecanismo mais específico do que "o modelo degrada com o tempo": sob ruído DP contínuo, o modelo não degrada de forma monotônica, ele cai repetidamente num pequeno número de soluções degeneradas fixas, sai, e volta a cair — inclusive nas MESMAS soluções mais de uma vez.
+
+**Contexto:** com o early stop real funcionando (`FL_EARLY_STOP=true`), o `training_id=85` parou de verdade na rodada 75 (não foi até o teto de 110), permitindo inspecionar a trajetória inteira `per_class_f1` por rodada pela primeira vez sem o ruído de dezenas de rodadas adicionais sem sentido. Comparando o `per_class_f1` das 75 rodadas bit-a-bit (arredondado a 6 casas decimais), 42 estados distintos aparecem, mas 3 deles se repetem — sempre com valores EXATAMENTE idênticos entre as ocorrências, não só parecidos — em 31 das 75 rodadas (41%):
+
+| Estado | Frequência | Única classe com F1 > 0 | F1 |
+|---|---|---|---|
+| A | 14 rodadas (1, 28, 35, 38, 43, 61, 62, 65, 68, 69, 71-74) | `melhora_internado_grave` | 0,127 |
+| B | 9 rodadas (33, 37, 39, 47, 49, 51, 60, 67, 75) | `melhora_internado_breve` | 0,388 |
+| C | 8 rodadas (25, 41, 42, 44, 45, 46, 54, 66) | `curado_pronto` | 0,728 |
+
+Cada estado é, na prática, o modelo global prevendo uma única classe fixa pra quase toda a entrada, ignorando o sinal real — daí o F1 por classe sair bit-a-bit igual toda vez que o modelo cai no mesmo poço de novo (é uma função determinística da distribuição de rótulos do conjunto de validação, não da entrada).
+
+**A "convergência" detectada na rodada 74 foi o modelo ficando preso no Estado A, não estabilizando bem:** as rodadas 71, 72, 73 e 74 são todas o Estado A — 4 rodadas idênticas seguidas. O `ConvergenceTracker` (`src/mosaicfl/core/convergence.py`) mede só estabilidade (delta pequeno entre rodadas consecutivas dentro da janela de `patience`), não qualidade — ficar travado repetindo o mesmo colapso também satisfaz esse critério. `best_round=4` (F1 macro=0,220, todas as 5 classes com sinal, heterogeneidade por cliente com cara orgânica — ver `per_client_f1_json`) permanece muito distante da rodada 74 (F1 macro=0,025) — a métrica de convergência e a métrica de qualidade divergem completamente sob DP.
+
+**Conexão com a seção 13 (label skew) — nem todo estado atrator expõe a mesma assimetria:** o Estado C (`curado_pronto`, rodada 40) mostra assimetria por hospital brutal — um cliente com F1=0,813 pra essa classe, o outro com F1=0,023 — batendo exatamente com o skew já documentado (`curado_pronto` = 67,2% BPSP × 1,5% HSL). Já o Estado B (`melhora_internado_breve`, rodada 60) mostra os dois clientes quase empatados (F1=0,391 e 0,388) — sem essa assimetria, consistente com `melhora_internado_breve` não estar entre as classes de skew extremo da tabela da seção 13 (26,0% BPSP vs. 12,6% HSL, mais moderado). O padrão de colapso não é genérico — a assimetria entre hospitais só aparece nos estados atratores das classes onde o label skew já era extremo.
+
+**Por que provavelmente acontece:** soluções degeneradas ("prever sempre a classe X") são muito mais robustas a perturbação de peso do que uma fronteira de decisão multiclasse de verdade — não dependem de nenhuma direção fina do espaço de parâmetros pra continuar "funcionando" (no sentido de produzir a mesma saída). Ruído gaussiano injetado a cada rodada (DP-FedAvg, McMahan et al. 2018) tende a empurrar o modelo pra fora de uma fronteira de decisão genuína (frágil, sensível a pequenas mudanças de peso) só que não necessariamente pra fora de um poço degenerado (robusto por definição) — daí o padrão observado: sinal multiclasse real e não-repetido nas primeiras ~20 rodadas (antes do ruído acumulado dominar), seguido de oscilação entre um pequeno número de poços degenerados pelo resto do treino.
+
+**Implicação para o TCC:** fortalece a seção 13/14 com um mecanismo mais específico e mais fácil de defender do que "F1 colapsa sob DP" — o colapso não é uma curva descendente suave, é uma cadeia de estados atratores discretos e recorrentes, e o critério de convergência padrão (estabilidade de métrica) não distingue "convergiu bem" de "ficou preso num poço ruim". Isso também é um argumento adicional a favor do `checkpoint_criterion` (sempre salvar o melhor round, nunca o último) já em produção — sem ele, o modelo efetivamente implantado seria escolhido por sorte de qual estado atrator o treino calhou de estar quando o loop parou.
+
+**Ressalva:** análise feita sobre um único treino (`training_id=85`, DP uniforme). Não foi confirmado ainda se o mesmo padrão de estados atratores aparece no cenário `layer_group` (ruído reduzido na cabeça de classificação) — se aparecer, com estados diferentes ou com frequência diferente, é evidência adicional relevante pra decisão sobre ruído seletivo (seção 14, "Ruído por camada"); se não aparecer, é candidato a argumento a favor do `layer_group` que vai além do F1 agregado isolado.
+
+**Suporte na interface:** `convergence_round` (rodada real de convergência, distinta de `ConvergenceTracker.converged_round` — este último é um índice interno da janela deslizante, não o round; migration 035) e a detecção de estados atratores (`RepeatedStateGroup`, rodadas com `per_class_f1` idêntico) agora aparecem em `/fl-training-results`, tanto na lista principal quanto no card de comparação mais-recente-vs-melhor-treinamento, pra essa análise não depender de investigação manual via SQL a cada vez.
+
+**Achado adicional (2026-08-02) — o pico de cada classe não coincide nem com o melhor round agregado nem entre si:** com `class_best_rounds` (rodada em que cada classe individualmente atinge seu maior F1, independente do critério agregado) também exposto em `/fl-training-results`, o `training_id=86` (Caminho B, DP uniforme, σ=0,5, **`run_classification=ajuste`** — mesmo cenário de teste do `training_id=85/84`, não um resultado formal pra citar como final) mostra o padrão de forma nítida: `best_round=26` (critério `f1_macro` agregado, accuracy=0,564, f1_macro=0,202) e `convergence_round=47` (accuracy=0,068, f1_macro=0,025) — mas nenhuma das 5 classes tem seu próprio pico em nenhuma das duas rodadas:
+
+| Classe | Rodada do pico | F1 no pico | F1 no `best_round` (26) |
+|---|---|---|---|
+| `curado_pronto` | 36 | 0,743 | 0,677 |
+| `curado_internado` | 9 | 0,047 | 0,000 |
+| `melhora_pronto` | 5 | 0,090 | 0,000 |
+| `melhora_internado_breve` | 18 | 0,456 | 0,322 |
+| `melhora_internado_grave` | 8 | 0,261 | 0,012 |
+
+Os 5 picos acontecem em 5 rodadas diferentes entre si (36, 9, 5, 18, 8) — nenhuma rodada do treino é boa pra todas as classes ao mesmo tempo. Em 3 das 5 classes (`curado_internado`, `melhora_pronto`, `melhora_internado_grave`), o `best_round` agregado mostra F1 próximo de zero, enquanto a classe teve um pico real e não-trivial em outro momento — a seleção por `f1_macro` agregado (dominada pela classe majoritária, `curado_pronto`) esconde esses picos individuais. **Não é um argumento pra trocar o critério de seleção do checkpoint** (um único checkpoint por definição não pode estar em 5 rodadas ao mesmo tempo) — é evidência de que os estados atratores (achado acima) não são só 2-3 poços degenerados fixos: entre eles, o treino passa por vários mínimos locais parciais e instáveis, cada um bom só pra uma classe específica, nenhum estável o bastante pra "vencer" e virar o estado predominante.
+
+**Escopo do achado — não é uma propriedade universal de DP-FedAvg, é específico do cenário testado até agora:** os dois achados desta seção (estados atratores E picos por classe descoordenados) vêm exclusivamente de treinos com `dp_noise_strategy=uniform` (`training_id` 85 e 86 — mesmo ruído σ=0,5 aplicado igualmente a todo o modelo). O cenário `layer_group` (ruído reduzido na cabeça de classificação, ver "Ruído por camada" mais acima nesta seção) ainda não foi testado com a mesma análise por classe/rodada — é perfeitamente possível que reduzir o ruído especificamente na camada de decisão produza uma dinâmica diferente (menos oscilação entre estados atratores, picos por classe mais alinhados entre si, ou nenhuma dessas duas coisas). **Até o `layer_group` ser testado e comparado com o mesmo nível de detalhe, os dois achados desta seção devem ser lidos como "observado sob DP uniforme", não como conclusão geral sobre o comportamento de DP-FedAvg no MOSAIC-FL.**
+
+**Primeiro dado do `layer_group` — PRELIMINAR, treino ainda em andamento (2026-08-02):** com `training_id=87` (`layer_group`, σ=0,5, `head_scale=0,5`, `run_classification=ajuste`) rodando em paralelo à escrita desta seção, uma checagem parcial (68 rodadas completas, `status=running`, **`best_round`/`convergence_round` ainda não definidos — o treino não convergiu/parou ainda**) já mostra um padrão que vale registrar antes de esquecer o número exato, mesmo sem fechar conclusão:
+
+| Classe | Pico F1 — `uniform` (#86, completo) | Pico F1 — `layer_group` (#87, completo) |
+|---|---|---|
+| `curado_pronto` | 0,743 (round 36) | 0,755 (round 12) |
+| `curado_internado` | 0,047 (round 9) | **0,140 (round 4)** |
+| `melhora_pronto` | 0,090 (round 5) | 0,091 (round 7) |
+| `melhora_internado_breve` | 0,456 (round 18) | 0,509 (round 23) |
+| `melhora_internado_grave` | 0,261 (round 8) | 0,266 (round 12) |
+
+`layer_group` empata ou supera em todas as 5 classes — com destaque pra `curado_internado` (uma das classes historicamente travadas em F1≈0 nos treinos sem DP também, ver seção 13), quase triplicando o pico observado sob `uniform`. É o primeiro sinal empírico a favor da hipótese original que motivou o `layer_group` (seção 14: reduzir ruído na cabeça de classificação preservaria sinal de classe rara já frágil por label skew). Dado final (`training_id=87` completou em 2026-08-02): `best_round=23` (f1_macro=0,2525, accuracy=0,4938, mesma rodada do pico de `melhora_internado_breve` — a única classe cujo pico coincide com o `best_round` agregado nos dois treinos vistos até agora), `convergence_round=80`, `n_rounds_done=81`.
+
+**Ressalvas que continuam de pé mesmo com o treino completo:**
+1. Comparação válida exige F1 **e** ε juntos (decisão registrada em 2026-07-28, ver `project_plano_teste_dp_noise_layer_group` na memória do projeto) — ver números de ε abaixo, que mudam a leitura.
+2. Pico por classe ≠ `best_round` agregado, exceto por `melhora_internado_breve` neste treino (achado logo acima) — comparar picos isolados não é o mesmo que comparar os dois treinos pelo critério que de fato importa pra decisão (`checkpoint_criterion=f1_macro`).
+
+**Limitação encontrada ao vivo (2026-08-02) — `ConvergenceTracker` não detecta "sem melhora", só "sem mudança consecutiva":** enquanto `training_id=87` ainda rodava, a autora observou que o treino "só tem degradado" — checagem confirmou: o pico real de `f1_macro` aconteceu na **rodada 23** (0,2525), e por dezenas de rodadas seguintes **nenhuma bateu esse valor de novo**, só oscilando entre estados piores (0,025 a 0,25, repetindo o mesmo pequeno conjunto de valores — mesma dinâmica de estados atratores desta seção, agora também observada sob `layer_group`, não só `uniform`). O treino só formalmente "convergiu" na **rodada 80** — 57 rodadas depois do pico real, e só porque calhou de ficar preso no mesmo estado por `patience` rodadas seguidas o suficiente pra disparar o critério. Não é um caso de "nunca converge": é um caso de convergência formal chegando tarde demais pra ser útil — o `early stop` funcionou tecnicamente (parou na 81, não foi até 110), mas gastou 58 rodadas inteiras (23→81) sem nenhum ganho real, só queimando orçamento de privacidade.
+
+Causa: `ConvergenceTracker.check()` (`src/mosaicfl/core/convergence.py`) mede **estabilidade entre rodadas consecutivas** (`|f1[r] - f1[r-1]| < threshold` por `patience` rodadas seguidas) — não mede se o modelo está melhorando. Isso tem duas falhas, ambas já confirmadas empiricamente nesta seção:
+
+1. **Não detecta platô ruim que oscila ciclicamente** (achado de hoje, `training_id=87`): o modelo pula entre os mesmos poços a cada rodada — o delta entre rodadas *consecutivas* continua grande mesmo estando preso no mesmo pequeno repertório de estados há dezenas de rodadas sem progresso — então o critério nunca dispara.
+2. **Quando dispara, pode estar capturando um poço ruim "parado por acaso"**, não uma boa solução (achado anterior desta seção, `training_id=84/85`: 4 rodadas seguidas idênticas por estarem presas no mesmo colapso = "convergência" formal, mesmo sendo o pior estado observado no treino).
+
+O critério padrão usado em early stopping de ML (PyTorch/Keras/scikit-learn, por padrão) é diferente: convergiu quando o **melhor valor visto não melhora há `patience` rodadas** — resolveria os dois problemas ao mesmo tempo (pegaria o caso de hoje, sem ser enganado por oscilação cíclica entre poços). **Decisão da autora (2026-08-02): não implementar agora** — só documentar como limitação conhecida, dado que já houve 2 correções reais no mecanismo de early stop nesta mesma semana ([[project_early_stop_real_caminho_b]] na memória do projeto) e mais uma mudança de critério sem tempo de validação cuidadosa teria risco alto de introduzir um terceiro bug. Candidato concreto pra revisão futura, não urgente.
+
+### `convergence_round` × `best_round`: por que o ε precisa ser medido no `best_round`, não no total do treino (2026-08-02)
+
+A limitação acima tem uma consequência prática direta sobre como comparar `uniform` × `layer_group` de forma justa. `dp_epsilon_simple`/`dp_epsilon_rdp` (persistidos em `fl_trainings`, expostos em `/fl-training-results`) são calculados sobre o **total de rodadas realmente executadas** (`n_rounds_done`) — não sobre a rodada em que o modelo estava na sua melhor forma (`best_round`). Isso é adequado quando o treino para logo depois de convergir (ε do treino ≈ ε até a boa solução). Mas quando o critério de convergência não dispara (achado acima) e o treino continua rodando sem melhorar, o ε total infla por rodadas que **não contribuem em nada pro checkpoint efetivamente salvo** — o `checkpoint_criterion` já garante que só o `best_round` fica ativo, mas o ε reportado continua contando o treino inteiro.
+
+**Números reais, extraídos direto do log por rodada** (`dp_noise_applied`, crescimento linear e determinístico dado σ fixo — não precisou esperar o treino terminar):
+
+| Treino | Estratégia | `best_round` | ε simples NO `best_round` | `convergence_round` | ε simples TOTAL (`n_rounds_done`) | ε RDP TOTAL |
+|---|---|---|---|---|---|---|
+| `training_id=86` | `uniform` (1 grupo, σ=0,5) | 26 | **≈251,9** | 47 | 465,1 (`n_rounds_done=48`) | 160,8 |
+| `training_id=87` | `layer_group` (3 grupos somados, σ=0,5, head_scale=0,5) | 23 | **≈445,7** | 80 | 1.569,7 (`n_rounds_done=81`) | 1.181,0 |
+
+**Confirmado com o treino completo:** o `layer_group` gasta **o dobro de ε por rodada** que o `uniform` (19,379 vs 9,690, confirmado desde a rodada 1 nos dois treinos) — consequência direta da contabilidade ingênua já documentada acima ("Ruído por camada": soma `RDPAccountant.step()` uma vez por grupo com ruído, tratando os 3 grupos como mecanismos independentes, cota superior conhecidamente imprecisa; fundamentação teórica completa na seção 17.2 abaixo). Mesmo comparando ε **no melhor round de cada um** (a comparação justa, não o total do treino), o pico do `layer_group` já custou quase o dobro em privacidade formal (≈445,7) do que o pico do `uniform` (≈251,9) — o ganho de F1 nas classes raras (achado acima: `curado_internado` quase triplicou) vem par a par com um custo de privacidade maior, não é de graça. E olhando o ε TOTAL (o que efetivamente fica registrado como "custo do treino" em `fl_trainings`), a diferença fica ainda mais desfavorável ao `layer_group` — 1.569,7 vs 465,1 — porque ele também precisou de 55 rodadas a mais (81 vs 48) pra convergência formal disparar, exatamente o efeito descrito abaixo.
+
+**Isso é exatamente o que a autora identificou ao vivo, e o dado final confirma:** "para casos de dados não uniformes, o dp-layer-group poderia ser mais indicado, só que pra isso ter resultados efetivos, precisamos que o modelo não se degrade." Tradução técnica, agora com números fechados: o `layer_group` preservou mais sinal de classe rara por rodada (achado acima), mas **isso só vira um resultado defensável olhando o ε no `best_round`, não o ε total do treino** — o `convergence_round` chegou 57 rodadas depois do pico (23→80), e nesse intervalo o ε "oficial" mais que triplicou (445,7→1.569,7) sem nenhum ganho de qualidade. Comparar os dois treinos pelo ε total, sem essa ressalva, penalizaria o `layer_group` por um problema do critério de convergência (seção acima), não por um problema real do próprio ruído seletivo.
+
+**Recomendação pra próximas rodadas de teste:** ao reportar F1×ε no TCC, usar sempre **ε no `best_round`**, não o ε total do treino — é a métrica que corresponde ao que de fato fica implantado (`checkpoint_criterion`). O ε total só é informativo sobre o "custo do processo de busca", não sobre o "custo do modelo entregue". Isso vale tanto pra `uniform` quanto pra `layer_group`, mas importa mais pro segundo, dado que ele demorou muito mais pra convergir formalmente neste teste (achado desta subseção) — **mesmo assim, mesmo usando ε no `best_round` (a métrica correta), o `layer_group` ainda saiu mais caro em privacidade que o `uniform` (≈445,7 vs ≈251,9)** — o ganho de F1 em classe rara tem custo real, não é conclusão trivial a favor do `layer_group` de forma alguma.
+
+---
+
+## 17. Revisão de Literatura — DP Layer-wise vs. Uniforme, Composição de Privacidade, e Critérios de Convergência (2026-08-02)
+
+Pedido explícito da autora: revisar literatura com maior confiabilidade (venues revisados por pares, preferência por journals/conferências estabelecidas sobre preprints) pra sustentar três afirmações feitas na seção 16 com base só em dados empíricos do MOSAIC-FL — (1) ruído seletivo por camada/grupo vs. uniforme em DP, (2) por que a contabilidade de ε difere entre as duas estratégias, e (3) critérios de convergência/early stopping (`convergence_round` × `best_round`). Mesmo padrão de revisão da seção 14 (bibliotecas digitais, exclusão de preprints não revisados quando há alternativa peer-reviewed).
+
+### 17.1 DP Layer-wise/Group-wise vs. Uniforme — literatura geral
+
+**He, Li, Yu, Zhang, Kulkarni, Lee, Backurs, Yu & Bian — Exploring the Limits of Differentially Private Deep Learning with Group-wise Clipping**
+- **Autores:** Jiyan He, Xuechen Li, Da Yu, Huishuai Zhang, Janardhan Kulkarni, Yin Tat Lee, Arturs Backurs, Nenghai Yu, Jiang Bian (Microsoft Research / MSR Asia)
+- **Publicação:** International Conference on Learning Representations (ICLR) 2023 — **revisado por pares** (poster). arXiv:2212.01539 como preprint associado.
+- **Citação formal (IEEE):** J. He, X. Li, D. Yu, H. Zhang, J. Kulkarni, Y. T. Lee, A. Backurs, N. Yu, and J. Bian, "Exploring the Limits of Differentially Private Deep Learning with Group-wise Clipping," in *Proc. Int. Conf. Learning Representations (ICLR)*, 2023.
+
+**Resultado relevante:** em vez de clipar o gradiente inteiro de uma vez (clipping "flat", equivalente ao `uniform` do MOSAIC-FL), os autores clipam gradientes por grupo de parâmetros (camada por camada), permitindo que o clipping aconteça durante o próprio backpropagation — mais eficiente em memória/tempo. Acham que **clipping por grupo com limiares adaptados por grupo iguala ou supera o clipping uniforme**, dado o mesmo orçamento de épocas de treino, inclusive em fine-tuning de LLMs (GPT-3) onde o desempenho privado supera o não-privado de um modelo menor (GPT-2) em ε=1.
+
+**Avaliação/relevância para o MOSAIC-FL:** confirma, numa referência forte (ICLR, Microsoft Research), que dividir o modelo em grupos e tratar cada um com parâmetros de privacidade diferentes **não é uma ideia exótica** — é uma linha de pesquisa ativa e validada empiricamente em escala. Mas: (a) o trabalho deles é sobre **clipping** por grupo (o limiar de norma, `S` no MOSAIC-FL), não sobre **ruído** reduzido por grupo como o `layer_group` faz (`FL_DP_NOISE_HEAD_SCALE`) — mecanismo relacionado mas não idêntico; (b) é DP-SGD centralizado, não DP-FedAvg federado — o cenário estrutural é diferente do MOSAIC-FL (mesma ressalva já registrada na seção 14 sobre Phan et al., IJCAI 2019); (c) **não trata do problema específico de classes raras/label skew** que motivou o `layer_group` no MOSAIC-FL — o ganho reportado é em utilidade agregada, não em classes minoritárias.
+
+**Yuan & Chen — Differential private federated learning with per-sample adaptive clipping and layer-wise gradient perturbation**
+- **Autores:** Jiangyong Yuan, Yong Chen
+- **Publicação:** *Computer Networks* (Elsevier), vol. 261, artigo 111139, abril de 2025 — **revisado por pares**
+- **DOI:** 10.1016/j.comnet.2025.111139
+- **Citação formal (IEEE):** J. Yuan and Y. Chen, "Differential private federated learning with per-sample adaptive clipping and layer-wise gradient perturbation," *Computer Networks*, vol. 261, art. 111139, 2025.
+
+**Resultado relevante:** proposta (DP-PSAC-FL) combina clipping adaptativo por amostra (acoplado à taxa de aprendizado, elimina ajuste manual de limiar) com uma estratégia de **perturbação por camada** — seleciona e perturba aleatoriamente elementos dentro de cada camada do gradiente local, mantendo outras camadas intactas, especificamente para **reduzir a degradação de acurácia causada pelo ruído** em FL.
+
+**Avaliação/relevância para o MOSAIC-FL:** é a referência mais próxima encontrada do que o `layer_group` faz de fato — **federada** (não centralizada, ao contrário de He et al. acima) e explicitamente motivada por reduzir o custo de acurácia do ruído por camada. Ainda assim, o mecanismo de "perturbar elementos aleatórios dentro de cada camada" é diferente do MOSAIC-FL (que aplica escala fixa de ruído por *grupo inteiro* de camadas — embedding/transformer/head — não por elemento individual dentro de uma camada) — é evidência de que a ideia geral (ruído não-uniforme por camada em DP-FedAvg) tem tração recente na literatura peer-reviewed, não confirmação direta do mecanismo específico usado aqui.
+
+**Síntese 17.1:** a literatura recente (2023-2025, ambas peer-reviewed) confirma que tratar diferentes partes do modelo de forma diferente sob DP — seja por clipping (He et al.) seja por ruído (Yuan & Chen) — é uma direção de pesquisa ativa com resultados positivos em utilidade agregada. **Nenhuma das duas trata especificamente do efeito em classes raras/minoritárias sob label skew extremo** (o que motivou o `layer_group` no MOSAIC-FL, seção 13/14) — essa conexão continua sendo uma contribuição específica do projeto, não algo já estabelecido na literatura revisada.
+
+### 17.2 Por que o ε difere entre `uniform` e `layer_group` — fundamentação da composição
+
+A seção 16 já registrou o achado empírico (`layer_group` gasta ≈2× o ε por rodada do `uniform`) e a explicação de código (`RDPAccountant.step()` chamado uma vez por grupo com ruído, tratando os 3 grupos — `embedding`, `transformer`, `head` — como mecanismos independentes cuja perda de privacidade se **soma**). A pergunta da autora foi *por quê* isso acontece — a resposta é o teorema de composição da privacidade diferencial.
+
+**Mironov — Rényi Differential Privacy**
+- **Autor:** Ilya Mironov (Google Brain)
+- **Publicação:** *2017 IEEE 30th Computer Security Foundations Symposium (CSF)*, pp. 263–275 — **revisado por pares**
+- **Citação formal (IEEE):** I. Mironov, "Rényi Differential Privacy," in *Proc. 2017 IEEE 30th Computer Security Foundations Symposium (CSF)*, 2017, pp. 263–275.
+
+**Resultado relevante:** introduz a definição de RDP (privacidade diferencial de Rényi) — a métrica que o `RDPAccountant` do MOSAIC-FL usa — e prova seu **teorema de composição**: a perda de privacidade (em termos de divergência de Rényi) de uma sequência de mecanismos aplicados **se soma**, mecanismo a mecanismo, para qualquer ordem de α (o parâmetro de Rényi). É a mesma classe de resultado que sustenta a composição básica/avançada de DP "clássica" (Dwork & Roth, já citados na seção 16 para a definição de ε), só que numa métrica mais fácil de compor com precisão.
+
+**Avaliação/relevância para o MOSAIC-FL — é literalmente a causa raiz do achado de ε:** o `layer_group` aplica ruído gaussiano em **3 grupos separados** (`embedding`, `transformer`, `head`) e contabiliza cada aplicação como um mecanismo RDP próprio, cuja perda se soma pelo teorema de Mironov — 3 "eventos" de perda de privacidade por rodada em vez de 1. Como cada grupo individualmente tem sensibilidade/ruído próximos aos do `uniform` (mesmo σ base, só a cabeça reduzida pela metade), a soma dos 3 fica **perto do dobro** do que um único mecanismo (`uniform`, 1 grupo) custaria — exatamente os ≈2× observados empiricamente (seção 16). **Isso confirma que o achado não é um artefato de implementação isolado do MOSAIC-FL** — é a consequência matemática esperada de aplicar múltiplos mecanismos gaussianos independentes e compô-los pela via padrão (RDP), consistente com a própria ressalva já registrada na seção 14 ("Ruído por camada"): a única forma conhecida de evitar essa soma (Phan et al., IJCAI 2019, Teorema 3, já citado na seção 14) exige tratar os grupos como um único mecanismo com redistribuição de ruído sujeita a `Σr_k=1` — o que o MOSAIC-FL **não implementa hoje** (mesma ressalva já registrada: adaptar exigiria trabalho teórico próprio, fora do escopo atual).
+
+**Síntese 17.2:** o custo de ε maior do `layer_group` não é um bug nem uma escolha arbitrária de implementação — é a consequência esperada e bem fundamentada (Mironov 2017, teorema de composição RDP) de dividir o ruído em múltiplos mecanismos contabilizados separadamente. A única saída teoricamente válida pra reduzir esse custo sem abrir mão do ruído seletivo já está identificada (Phan et al., seção 14) mas não implementada.
+
+### 17.3 `convergence_round` × `best_round` — critérios de convergência/early stopping
+
+**Prechelt — Early Stopping — But When?**
+- **Autor:** Lutz Prechelt (Universidade de Karlsruhe)
+- **Publicação:** *Neural Networks: Tricks of the Trade*, Lecture Notes in Computer Science, vol. 1524, Springer, 1998 — **revisado por pares** (capítulo de livro derivado de workshop NIPS 1996). Referência clássica do campo, ainda amplamente citada.
+- **DOI:** 10.1007/3-540-49430-8_3
+- **Citação formal (IEEE):** L. Prechelt, "Early Stopping — But When?," in *Neural Networks: Tricks of the Trade*, G. B. Orr and K.-R. Müller, Eds., Lecture Notes in Computer Science, vol. 1524. Berlin, Heidelberg: Springer, 1998.
+
+**Resultado relevante:** referência fundacional que compara sistematicamente critérios de parada antecipada, formalizando a família de critérios "sem melhora no melhor valor de validação visto há `patience` épocas" (a essência do que hoje é o comportamento padrão de `EarlyStopping` em PyTorch/Keras/scikit-learn) — em contraste com critérios baseados só em estabilidade/delta entre épocas consecutivas.
+
+**Avaliação/relevância para o MOSAIC-FL:** é a fundamentação clássica do critério recomendado na seção 16 ("sem melhora no melhor valor há N rodadas") em oposição ao `ConvergenceTracker` atual (estabilidade de delta consecutivo). Confirma que o critério "padrão de ML" citado na seção 16 não é uma opinião informal — é a prática estabelecida desde 1998, com décadas de uso e ferramentas construídas em cima dele.
+
+**Niu, Dong, Qin & Gu — FLrce: Resource-Efficient Federated Learning With Early-Stopping Strategy**
+- **Autores:** Ziru Niu, Hai Dong (RMIT University), A. K. Qin (Swinburne University of Technology), Tao Gu (Macquarie University)
+- **Publicação:** *IEEE Transactions on Mobile Computing*, vol. 23, no. 12, pp. 14514–14529, 2024 — **revisado por pares**
+- **DOI:** 10.1109/TMC.2024.3447000
+- **Citação formal (IEEE):** Z. Niu, H. Dong, A. K. Qin, and T. Gu, "FLrce: Resource-Efficient Federated Learning With Early-Stopping Strategy," *IEEE Trans. Mobile Computing*, vol. 23, no. 12, pp. 14514–14529, 2024.
+
+**Resultado relevante — o mais diretamente aplicável ao achado do MOSAIC-FL:** o critério de early stopping do FLrce **não é baseado em patience sobre acurácia** (diferente de Prechelt) — é baseado em detectar quando o modelo global começa a **oscilar entre ótimos locais de clientes diferentes** (medido via similaridade de cosseno entre as atualizações de parâmetro dos clientes selecionados; conflito = similaridade negativa). Os próprios autores descrevem o sintoma: *"the global model will oscillate between w\*₂ and w\*₃, making it hard to further improve the mean accuracy"* — o modelo global fica pulando entre duas soluções locais diferentes, sem conseguir melhorar. O treino para quando o número de atualizações conflitantes ultrapassa um limiar `ψ`.
+
+**Avaliação/relevância para o MOSAIC-FL — bate quase literalmente com os "estados atratores" da seção 16:** o fenômeno que o FLrce descreve (oscilação entre ótimos locais/de cliente, medida via conflito de gradiente) é a mesma classe de comportamento observada empiricamente nos treinos 84/85/87 (F1 por classe pulando entre um pequeno conjunto de estados fixos, sem progresso). A diferença é o *mecanismo de detecção*: o `ConvergenceTracker` do MOSAIC-FL olha só a métrica agregada (accuracy/f1_macro) no servidor; o FLrce olha diretamente o **grau de conflito entre as atualizações dos clientes antes da agregação** — um sinal mais direto da causa (divergência entre hospitais, non-IID) do que o efeito (oscilação da métrica agregada). É uma pista concreta de que o `per_client_f1_json`/gradientes já capturados por cliente no MOSAIC-FL (migration 027) poderiam alimentar um critério de convergência mais parecido com o do FLrce do que com o de Prechelt — não implementado, fica como direção de pesquisa registrada.
+
+**Síntese 17.3:** dois critérios estabelecidos na literatura peer-reviewed confirmam a limitação já documentada na seção 16 por caminhos diferentes — Prechelt (1998, clássico) mostra que "patience sobre o melhor valor" é o padrão canônico que o `ConvergenceTracker` não segue; FLrce (2024, IEEE TMC) mostra que, especificamente em FL, a oscilação entre ótimos locais (exatamente o padrão observado nos estados atratores do MOSAIC-FL) é um fenômeno já estudado, com um mecanismo de detecção mais direto (conflito de gradiente entre clientes) do que estabilidade/patience sobre a métrica agregada. Nenhum dos dois foi implementado no MOSAIC-FL ainda — decisão da autora de não mexer agora (seção 16) — mas ambos dão fundamentação sólida pra uma futura revisão do `ConvergenceTracker`, com o FLrce como pista de um caminho potencialmente mais adequado ao cenário federado non-IID específico do projeto do que a adaptação mais óbvia (só trocar por patience-sobre-melhor-valor, que resolveria o sintoma mas não usaria o sinal por-cliente que o MOSAIC-FL já coleta).
+
+### 17.4 "Convergência" é a métrica certa pra dado não-uniforme? — não como está; `best_round` já protege a qualidade sozinho (2026-08-02)
+
+Pergunta direta da autora: dado tudo isso, faz sentido usar "convergência" (estabilidade) como conceito pra dado non-IID, ou o `best_round` sozinho já resolveria? A resposta, juntando os achados das seções 16-17.3:
+
+**A equivalência "estabilidade = qualidade" (o pressuposto por trás do `ConvergenceTracker`) vem de ML centralizado/IID, onde ela é razoável** — uma vez que o otimizador se estabiliza, é porque achou um mínimo local, e estabilidade realmente indica que não há mais o que ganhar. **Sob non-IID (label skew extremo BPSP×HSL, seção 13) somado a ruído DP a cada rodada, essa equivalência quebra**: a agregação (FedAvg/FedProx) não converge pra um ponto único — fica sendo empurrada entre soluções de "compromisso" diferentes conforme os hospitais puxam em direções opostas (mesma dinâmica que o FLrce descreve, seção 17.3), e o ruído DP ocasionalmente chuta o modelo pra fora de uma solução boa. **Estabilidade pode indicar "achei uma boa solução" OU "estou preso girando no mesmo poço ruim" — as duas produzem o mesmo sinal (delta pequeno) pro `ConvergenceTracker` atual.** Os dois casos já confirmados empiricamente nesta seção: `training_id=85` "convergeu" no pior estado observado no treino inteiro; `training_id=87` só "convergeu" 57 rodadas depois do pico real, tendo passado esse intervalo inteiro oscilando sem ganho algum.
+
+**Ponto conceitual central: a qualidade do modelo implantado já NÃO depende de "convergência" hoje.** `checkpoint_criterion` (independente do `ConvergenceTracker`) já salva a melhor rodada sempre, não importa quando (ou se) a convergência dispara — é o mesmo mecanismo que já protegia o resultado antes da correção do early stop desta semana ([[project_early_stop_real_caminho_b]]). "Convergência" hoje só decide **quando o loop para**, nunca **o que fica salvo**. Ou seja: a pergunta "convergência vs. best_round" não é sobre qualidade do modelo (o `best_round` já vence por definição, sempre) — é sobre **quanto tempo e orçamento de privacidade (ε) se desperdiça esperando um sinal de parada que, sob non-IID, não é confiável**.
+
+**Quantificação do desperdício, com os dois treinos reais desta semana** (simulando um critério alternativo — "parar `patience`=15 rodadas depois da última vez que `best_round` melhorou", a família de critério fundamentada em Prechelt 1998, seção 17.3):
+
+| Treino | `best_round` | Parada real (critério de estabilidade atual) | Parada simulada (patience=15 sobre o melhor) | Rodadas economizadas | ε economizado (aprox., linear) |
+|---|---|---|---|---|---|
+| `training_id=86` (`uniform`) | 26 | 48 | ~41 | 7 (~15%) | ≈68 (9,69/rodada) |
+| `training_id=87` (`layer_group`) | 23 | 81 | ~38 | **43 (~53%)** | **≈834 (19,38/rodada) — mais da metade do ε total gasto no treino** |
+
+O impacto é maior exatamente no cenário que mais interessa pra dado não-uniforme (`layer_group`, seção 16): mais da metade do ε gasto no `training_id=87` foi rodadas girando sem melhora depois da rodada 23, só porque o critério de parada estava medindo a coisa errada (estabilidade, não progresso).
+
+**Ressalva — patience-sobre-melhor não resolve a causa raiz, só o sintoma de desperdício:** trocar o critério não faz o modelo parar de oscilar entre estados atratores (achado da seção 16) — só faz o TREINO parar de desperdiçar tempo/ε **depois** que a oscilação já está acontecendo sem progresso. A causa raiz (non-IID entre BPSP/HSL somado a ruído DP) continua intacta. Um critério que olhasse diretamente o **conflito entre atualizações dos clientes** antes da agregação (FLrce, seção 17.3, via `per_client_f1_json`/gradientes já capturados no MOSAIC-FL) seria mais nativo à causa — mas essa é uma mudança maior, não implementada.
+
+**Conclusão registrada:** "convergência" como estabilidade de métrica agregada não é a métrica certa pra decidir a QUALIDADE sob dado não-uniforme (isso já é resolvido por `best_round`/`checkpoint_criterion`, independentemente) — mas continua sendo relevante como critério de **quando parar de gastar tempo/privacidade**, só que precisa ser redefinida (patience sobre o melhor valor, não estabilidade de delta) pra cumprir esse papel de forma confiável sob non-IID. **Decisão da autora permanece: não implementar agora** (mesma decisão da seção 16, risco de um 3º bug em early stop na mesma semana) — esta subseção fica registrada como justificativa completa (conceitual + quantificada) pra uma futura revisão.
+
+### 17.5 `best_round` × ε × checkpoint × RAG — o que está consistente e o que não está (2026-08-02)
+
+Pedido explícito da autora: analisar `best_round`×ε, `best_round`×checkpoint, checkpoint×ε, e qual resultado a RAG usa. Juntando os 22 treinos com DP já completos no banco (`training_id` 48-65 do Caminho A + 83/85/86/87 do Caminho B):
+
+**`best_round` × ε — não são independentes, os dois são função do σ escolhido:**
+
+| σ (ruído/rodada) | ε por rodada | `best_round` típico | ε no `best_round` | Interpretação |
+|---|---|---|---|---|
+| 2,0 (ruído pesado) | ≈2,42 | ~3, sempre | ~7,3 | privacidade formal melhor, mas o modelo mal teve tempo de aprender antes do ruído dominar |
+| 1,0 | ≈4,85 | ~5, quase sempre | ~24,2 | intermediário |
+| 0,5 (usado nos treinos atuais) | ≈9,69 (uniforme) / ≈19,38 (layer_group) | 4 a 36, muito variável | 38,8 a 445,7 | privacidade formal pior, mas mais rodadas de sinal real antes de desestabilizar |
+
+**Não é uma correlação nova ou surpreendente** — é o trade-off clássico de privacidade×utilidade (menos ruído → melhor utilidade, pior privacidade formal; mais ruído → o inverso). O que é específico do MOSAIC-FL é a implicação prática: como ε cresce de forma linear e determinística por rodada (confirmado nos logs de todos os treinos), **`ε` no `best_round` não é uma variável que dá pra otimizar isoladamente** — ela é inteiramente determinada por em qual rodada o pico aconteceu, que por sua vez é controlado pelo σ. Reduzir σ pra deixar o modelo aprender mais rodadas antes de desestabilizar necessariamente aumenta o ε acumulado até o pico — não dá pra ter "ε baixo no melhor round" e "modelo bem treinado" ao mesmo tempo, só escolhendo o critério de parada.
+
+**Achado lateral:** o padrão "pico muito cedo, sem repetir depois" (`training_id=85`, `best_round=4`) não é exclusivo do Caminho B ou do `layer_group` — reaparece em `training_id=64` (Caminho A, σ=0,5, `best_round=4`), enquanto os outros 4 treinos irmãos com exatamente a mesma configuração (`training_id` 49/52/57/58) picam consistentemente na rodada 29. Ou seja, esse comportamento já existia antes do `layer_group`/early stop — é inerente a rodar DP-FedAvg sob non-IID, independente do caminho ou da estratégia de ruído; só não tinha sido notado porque ninguém tinha olhado `best_round` versus o resto da trajetória antes.
+
+**`best_round` × checkpoint — CONSISTENTE, confirmado nos 3 treinos recentes:**
+
+| Treino | `best_round` | `checkpoint_round` (round salvo em `fl_checkpoints`) |
+|---|---|---|
+| 85 | 4 | 4 |
+| 86 | 26 | 26 |
+| 87 | 23 | 23 |
+
+Os pesos do modelo batem certinho com o `best_round` nos três — a correção do bug documentado em `project_bug_checkpoint_nao_era_melhor_rodada` (memória do projeto) continua funcionando. **`checkpoint` × ε, portanto, é o mesmo número que `best_round` × ε acima** — não é uma quarta variável independente, é a mesma pergunta.
+
+**RAG × `best_round` — INCONSISTENTE, achado novo:** `_build_rag_knowledge_base()` (`infrastructure/mosaicfl_server/strategy/core.py:1013`) constrói a base vetorial do RAG a partir de `rag_patterns_json` — perfis extraídos pelos CLIENTES (`FedProxClient._extract_rag_patterns()`, `src/mosaicfl/core/client.py:588`, usa `generate_all_profiles()`, um forward com atenção sobre o `val_loader` inteiro). Esses padrões só são pedidos quando `extract_rag_patterns=True` (`on_evaluate_config_fn`, `superlink.py`), que hoje é `strategy.is_final_round(rnd)` — **a última rodada de verdade (teto ou alvo de early stop), não o `best_round`**. Como o cliente usa os pesos que RECEBEU do servidor naquela rodada (`self.parameters`, sempre a última agregação, nunca retrocede pro `best_round`), **a base de conhecimento do RAG reflete o modelo da última rodada, que pode ser um dos estados degenerados desta seção — não o modelo que efetivamente fica salvo/ativo e serve as predições**.
+
+**Comparação com a calibração, que JÁ tem uma correção parcial pro mesmo problema:** `_persist_federated_calibration()` (`core.py:1031-1048`, achado 2026-07-28, docstring já registra isso) explicitamente troca `self.global_model.state_dict()` por `self._best_state_dict` **na hora de salvar o checkpoint** — pra não reintroduzir o bug do checkpoint. Mas essa correção é só **parcial**: o calibrador em si (temperatura `T` ou os breakpoints isotônicos) foi AJUSTADO pelos clientes usando os logits do modelo da última rodada (mesma limitação do RAG) — só os PESOS salvos no checkpoint é que foram trocados pro `best_round`. Ou seja, mesmo com a correção existente, **o calibrador persistido pode não corresponder à distribuição de confiança real do modelo que está sendo servido** — descasamento já suspeitado informalmente na avaliação do `training_id=85` mais cedo nesta sessão, agora confirmado com a linha exata de código responsável.
+
+**Achado adicional — `rag_precision_at_k` está estruturalmente impossibilitado de ser preenchido:** `_inject_rag_patterns()` (`fit_config_mixin.py:30-41`) reenvia os padrões do RAG pros clientes avaliarem Precision@k **na PRÓXIMA rodada de avaliação** (docstring: "Precision@k só fica disponível a partir da 2ª rodada de avaliação em diante"). Como a extração acontece exatamente em `is_final_round` — por definição a ÚLTIMA rodada do treino — **nunca existe uma "próxima rodada"** pra esse reenvio acontecer. Confirmado no banco: `rag_precision_at_k`/`rag_k` são `NULL` nos três treinos recentes (85, 86, 87) e, checando mais amplamente, não há registro de nenhum treino real do Caminho B com esse campo preenchido. Não é falha pontual — é uma consequência estrutural de `extract_rag_patterns` e `is_last_round` serem a mesma condição.
+
+**Resumo pra decisão da autora:**
+
+| Par | Consistente? | Observação |
+|---|---|---|
+| `best_round` × ε | Sim, mas acoplados | ε no `best_round` não é livre pra otimizar — é função do σ |
+| `best_round` × checkpoint | **Sim** | pesos salvos = pesos do melhor round, confirmado |
+| checkpoint × ε | Mesmo que `best_round`×ε | são a mesma pergunta, checkpoint segue `best_round` |
+| RAG × `best_round` | **Não** | base de conhecimento vem do modelo da última rodada, não do `best_round` |
+| Calibrador × `best_round` | **Parcial** | pesos do checkpoint = `best_round`, mas o calibrador em si foi ajustado no modelo da última rodada |
+| `rag_precision_at_k` | **Nunca preenchido** | estruturalmente impossível dado o timing atual de `extract_rag_patterns` |
+
+**Estado:** registrado como limitação conhecida, não corrigido agora (mesmo critério de priorização desta sessão — já houve correções reais suficientes em early stop/convergência esta semana). Candidato concreto pra revisão futura: mover `extract_rag_patterns`/`calibrate` pra usarem os pesos do `best_round` (reenviar `self._best_state_dict` aos clientes numa rodada dedicada, em vez de usar o que quer que `self.parameters` seja naquele momento) — resolveria RAG e a parte que falta da calibração ao mesmo tempo, com o mesmo mecanismo.
+
+### 17.6 Revisão de literatura — existe respaldo pra RAG usar o `best_round` em vez do estado de convergência sob non-IID? (2026-08-02)
+
+Pedido explícito da autora: pesquisar se há respaldo bibliográfico (mesmo padrão de confiabilidade — venues revisados por pares preferidos) especificamente para a recomendação da seção 17.5 (RAG/extração de padrões deveria usar os pesos do `best_round`, não do estado de convergência/última rodada), sob dado non-IID. Buscas realizadas (WebSearch, 2026-08-02) e o que cada uma retornou:
+
+1. **`"retrieval-augmented generation embedding model checkpoint selection best validation model quality"`** — achou prática geral de selecionar o melhor checkpoint por métrica de validação (ex.: nDCG@10) antes de usar um modelo de embedding pra retrieval, mas nenhum resultado tratou especificamente de **federated learning** ou **non-IID**.
+2. **`"representation quality degradation non-IID federated learning intermediate checkpoints catastrophic forgetting"`** — achou literatura de *catastrophic forgetting* em FL non-IID (modelo local esquece conhecimento global após treino local) e um preprint específico sobre representações "preservadas mas desalinhadas" (detalhe abaixo).
+3. **`"federated retrieval-augmented generation FedRAG non-IID knowledge base client 2024 2025"`** — achou a área de "Federated RAG" como linha de pesquisa ativa e recente (2024-2025), incluindo uma revisão sistemática peer-reviewed.
+4. **Verificação direta do texto completo** da revisão sistemática (via WebFetch do PDF) — buscando especificamente menção a escolha de checkpoint/rodada pra construir a base de retrieval, comparação melhor-checkpoint-vs-final, e efeito de non-IID na qualidade de embedding/retrieval.
+5. **`"Mechanistic Evidence" "Preserved-but-Misaligned Representations" non-IID FedAvg published venue peer review"`** — checar se o preprint mais promissor (item 2) já tem versão revisada por pares.
+
+**O que foi encontrado, com avaliação de confiabilidade:**
+
+- **Chakraborty, Dahal & Gupta — "Federated Retrieval-Augmented Generation: A Systematic Mapping Study"**, Findings of the Association for Computational Linguistics: EMNLP 2025, Suzhou, China — **revisado por pares** (ACL Findings). DOI: 10.18653/v1/2025.findings-emnlp.388. Citação formal (IEEE): A. Chakraborty, C. Dahal, and V. Gupta, "Federated Retrieval-Augmented Generation: A Systematic Mapping Study," in *Findings of the Association for Computational Linguistics: EMNLP 2025*, 2025. Mapeia a literatura de FedRAG (2020-2025), confirmando "heterogeneidade entre clientes" (non-IID) como um dos **desafios em aberto** da área — mas, **conferido o texto completo do PDF**, não discute em nenhum ponto qual rodada/checkpoint do treino federado deveria alimentar a base de retrieval, nem compara checkpoint ótimo vs. estado final/convergido. Confirma que a área existe e é ativa, não sustenta a recomendação específica.
+- **He, Yuan, Wu, Liu & Ni — "pFedRAG"**, Findings ACL: EMNLP 2025 — **revisado por pares**. DOI: 10.18653/v1/2025.findings-emnlp.769. Sistema de RAG federado personalizado testado em datasets médicos non-IID — o cenário mais próximo do MOSAIC-FL encontrado na literatura (federado + RAG + non-IID + médico). Pelos metadados/abstract disponíveis, também não trata explicitamente de seleção de checkpoint/rodada pra construção da base de conhecimento (não foi possível confirmar via texto completo, só abstract/metadados — ressalva de confiança menor que o item anterior, que teve o PDF completo verificado).
+- **"Mechanistic Evidence for Preserved-but-Misaligned Representations in Non-IID FedAvg"** — **preprint, arXiv, sem confirmação de revisão por pares** (publicado há poucas semanas). Conceitualmente é a peça mais próxima de uma explicação causal: mostra, via probing de representações congeladas e descoberta de circuitos, que a degradação de FedAvg sob non-IID nem sempre é "conhecimento destruído" — pode ser conhecimento **preservado mas desalinhado** com o caminho final de decisão. Isso é consistente com o padrão observado no MOSAIC-FL (estados atratores, seção 16), mas **não é citável com o mesmo peso das referências peer-reviewed já usadas nesta pesquisa** — incluído aqui só como pista conceitual, não como respaldo firme.
+
+**Conclusão honesta — não existe respaldo bibliográfico direto pra essa recomendação específica.** Nenhuma fonte encontrada (peer-reviewed ou preprint) trata explicitamente de "qual checkpoint/rodada usar pra construir a base de conhecimento de um sistema RAG federado sob non-IID" — é uma pergunta genuinamente não respondida na literatura revisada, não só um detalhe que passou despercebido nesta busca. O que SUSTENTA a recomendação da seção 17.5 é, por extrapolação, a combinação de dois resultados já bem estabelecidos nesta pesquisa, aplicados por analogia (não por citação direta a essa combinação exata):
+1. **Prechelt (1998, seção 17.3):** a prática padrão de ML, depois do treino, é usar o checkpoint de melhor validação pra QUALQUER uso a jusante — não há razão conceitual pra RAG ser uma exceção a essa regra geral, mas Prechelt não fala de RAG/retrieval especificamente.
+2. **Achados empíricos do próprio MOSAIC-FL (seção 16):** o modelo na última rodada pode estar num estado atrator pior que o `best_round`, então usar a última rodada pra extrair padrões de atenção corre o risco concreto (já demonstrado com dados reais) de usar um modelo pior.
+
+**Registrar no TCC como:** achado de engenharia do MOSAIC-FL, com racional apoiado em prática geral de ML (Prechelt) e evidência empírica própria — não como aplicação de um resultado específico da literatura de FedRAG, que ainda não cobre essa pergunta.
+
+---
+
+## 18. Decisão — Por Que a Privacidade do MOSAIC-FL se Apoia na Arquitetura Federada, Não em DP-FedAvg (2026-08-02)
+
+**Origem da decisão:** achado inicial em 2026-07-03 (curva Acc×ε, `training_id` 48-65, ver `project_dp_curve_makefile` na memória do projeto), validado e aprofundado nesta sessão (2026-08-02) com a rede federada REAL (Caminho B, 2 máquinas físicas, `training_id` 83/85/86/87) — não mais só simulação. As duas rodadas de evidência, com ~5 semanas de intervalo, convergem pra mesma conclusão.
+
+### 18.1 O argumento em uma frase
+
+**O Federated Learning já entrega privacidade prática por desenho** (dado bruto do paciente nunca sai do hospital — só parâmetros do modelo trafegam, mesma base dos Treinamentos Reais 1-3 sem DP, Acc≈67%/F1≈0,51, `training_id=43`). **DP-FedAvg adicionaria uma garantia FORMAL (ε,δ) por cima disso — mas em nenhuma configuração testada, em 22 treinos ao longo de 5 semanas, essa garantia chegou perto de ser útil, e o custo pra tentar chegar lá é alto e multifacetado.**
+
+### 18.2 Tabela completa — todas as configurações de DP já testadas (22 treinos, 2026-07-03 a 2026-08-02)
+
+| id | Caminho | Estratégia | σ | `best_round` | ε simples no `best_round` | ε RDP total | ε simples total | macro_f1 | accuracy |
+|---|---|---|---|---|---|---|---|---|---|
+| 50,53,60,61,62,65 | A | uniform | 2,0 | 3 (sempre) | ≈7,3 | 13,4–15,2 | 55,7–67,8 | 0,15–0,21 | 0,22–0,37 |
+| 48,51,54,55,56,63 | A | uniform | 1,0 | 1–5 | 4,8–24,2 | 37,9 | 135,7 | 0,10–0,15 | 0,26–0,31 |
+| 49,52,57,58,59,64 | A | uniform | 0,5 | 4–29 | 38,8–281,0 | 121,9–144,3 | 329,4–407,0 | 0,18–0,21 | 0,38–0,50 |
+| 83 | B | uniform | 0,5 | 36 | 348,8 | 318,9 | 1.065,9 | 0,224 | 0,644 |
+| 85 | B | uniform | 0,5 | 4 | 38,8 | 231,0 | 726,7 | 0,220 | 0,521 |
+| 86 | B | uniform | 0,5 | 26 | 251,9 | 160,8 | 465,1 | 0,202 | 0,564 |
+| 87 | B | layer_group | 0,5 | 23 | 445,7 | 1.181,0 | 1.569,7 | 0,253 | 0,494 |
+| — (referência) | A | **sem DP** | — | — | — | — | — | **0,511** | **0,673** |
+
+Nota: ε "no `best_round`" é sempre calculado por interpolação linear (ε total × `best_round`/`n_rounds_done`) — válido porque o crescimento de ε é linear e determinístico dado σ fixo, confirmado empiricamente em todos os treinos (ver seção 17.5).
+
+### 18.3 Nenhuma configuração testada atinge privacidade formal útil
+
+Usando os limiares já estabelecidos nesta pesquisa (seção "O que o epsilon significa", 2026-07-28): ε≤10 = proteção formal significativa; 10<ε≤100 = proteção fraca; ε>100 = sem proteção prática (`e^ε` grande demais pra restringir qualquer coisa útil sobre o que um adversário pode inferir).
+
+**Mesmo no MELHOR caso observado em 22 treinos** (σ=2,0, `best_round`, ε RDP total ≈13,4–15,2) — a configuração com ruído mais pesado, onde o modelo mal teve tempo de aprender antes de saturar — **o ε fica LOGO ACIMA do limiar de "proteção significativa"**, já na faixa "fraca". Em todas as outras 18 configurações (σ=0,5/1,0, Caminho A ou B, `uniform` ou `layer_group`), o ε fica bem dentro de "sem proteção prática" — por vezes na casa dos milhares (`layer_group`, ε RDP=1.181,0).
+
+### 18.4 O custo não é só accuracy — é multifacetado (achados desta sessão)
+
+| Custo | Onde foi confirmado |
+|---|---|
+| Acurácia/F1 agregados severamente reduzidos | Baseline sem DP: F1=0,511. Com DP: F1 nunca passa de 0,253 em nenhuma das 22 configurações — perda de mais da metade da qualidade agregada, na melhor das hipóteses |
+| Colapso estrutural em "estados atratores" | Seção 16 — o modelo cai repetidamente em soluções degeneradas (prever 1 classe fixa), não converge suavemente |
+| Critério de convergência não confiável sob DP+non-IID | Seção 16/17.3/17.4 — `ConvergenceTracker` mede estabilidade, não qualidade; pode declarar convergência formal no pior estado do treino, ou só disparar dezenas de rodadas depois do pico real |
+| ε e `best_round` acoplados — não dá pra otimizar um sem o outro | Seção 17.5 — reduzir σ pra deixar o modelo aprender mais também aumenta o ε acumulado até o pico; é o mesmo trade-off privacidade×utilidade, sem atalho |
+| `layer_group` (tentativa de mitigação) custa ~2× mais ε que `uniform`, mesmo no `best_round` | Seção 16/17.2 — consequência matemática da composição RDP (Mironov 2017) ao tratar 3 grupos de camada como mecanismos independentes |
+| RAG usa o modelo da última rodada, não do `best_round` implantado | Seção 17.5 — achado novo, a base de conhecimento do RAG pode refletir um modelo pior que o que efetivamente decide |
+| Calibrador federado parcialmente descasado do `best_round` | Seção 17.5 — mesma classe de problema do RAG, só parcialmente corrigido |
+| `rag_precision_at_k` estruturalmente nunca preenchido sob DP (ou sem DP) | Seção 17.5 — timing de `extract_rag_patterns` colide com o fim do treino |
+
+### 18.5 Decisão
+
+**A privacidade do MOSAIC-FL, pra fins do TCC, se apoia na arquitetura do Federated Learning em si** (localidade de dados — nenhum dado bruto de paciente sai do hospital, só parâmetros do modelo trafegam pela rede real via SuperLink/TLS) — **não numa garantia formal de Differential Privacy**. DP-FedAvg permanece implementado no código (Strategy pattern, `FL_DP_NOISE*`, opcional, desligado por padrão — nunca removido, ver [[feedback_strategy_pattern_nunca_substituir]]) como capacidade explorada e **rejeitada com evidência**, não como recurso pendente de mais tempo/tuning. Registrar no TCC como resultado negativo reportado com rigor ([[feedback_resultados_negativos]]): DP-FedAvg foi avaliado seriamente (22 treinos, 3 níveis de σ, 2 estratégias de ruído, 2 caminhos de implementação, rede federada real), e a conclusão — mesmo no melhor cenário, o custo multifacetado supera o benefício de privacidade formal alcançável — é, ela mesma, uma contribuição do trabalho, não uma lacuna.
+
+---
+
 ## 6. Regulatório
 
 ### 6.1 ANVISA — RDC 657/2022
