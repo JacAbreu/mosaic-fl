@@ -12,42 +12,6 @@ Extensão preditiva do ClinicalPath (Linhares et al., 2023) combinando:
 
 ---
 
-## TL;DR — Resumo executivo para atualização com a orientadora
-
-*(Seção adicionada em 2026-08-12 para facilitar comunicação de progresso — resume o que foi feito e descoberto até aqui. Detalhamento completo, com números e evidências, em cada link citado.)*
-
-### O que o projeto é
-
-MOSAIC-FL combina Aprendizado Federado (dois hospitais reais, BPSP e HSL, cada um com seu próprio banco de dados) com RAG para prever trajetórias clínicas de pacientes a partir de exames laboratoriais, sem que dado bruto de paciente saia de nenhum hospital. Extensão do ClinicalPath (Linhares et al., 2023).
-
-### O que foi implementado e validado
-
-- **Duas fases de execução**: Caminho A (simulação em processo único, usada para ajuste de hiperparâmetro) e Caminho B (rede federada real — `SuperLink`/`ServerApp`/`SuperNode`, TLS, duas máquinas físicas, três bancos Postgres totalmente isolados).
-- **Arquitetura**: BEHRT simplificado (Transformer para sequências clínicas) + FedProx (termo proximal) + RAG (Ollama/gemma3:4b, com justificativa textual da predição) + Differential Privacy (DP-FedAvg com contabilidade RDP).
-- **Treinamento Real (Caminho B)**: matriz formal de 12 configurações (3 cenários de privacidade × parada antecipada × peso de classe), todas executadas até a conclusão.
-
-### Principais achados
-
-1. **Colapso estrutural de classes raras.** Duas das cinco classes de prognóstico (`curado_internado`, `melhora_pronto`) ficam em F1=0 em praticamente todas as execuções formais — explicado por um *label skew* extremo e quase invertido entre os dois hospitais (uma classe que é 67% dos casos num hospital é 1,5% no outro, e vice-versa). Peso de classe manual não resolveu sozinho.
-2. **Custo de privacidade formal (DP) é severo.** Avaliado a fundo (22 treinos, 3 níveis de ruído, 2 estratégias) — nenhuma configuração testada atinge um orçamento de privacidade (ε) formalmente útil sem degradar demais a qualidade do modelo. Decisão tomada com essa evidência: a garantia de privacidade do projeto se apoia na **arquitetura** do FL (dado nunca sai do hospital), não em DP.
-3. **"Estados atratores" sob DP.** Sob ruído de privacidade diferencial, o modelo às vezes converge para um mesmo conjunto pequeno de resultados degenerados, que se repetem *entre treinos totalmente independentes* — um padrão que merece investigação futura mais aprofundada.
-4. **Quatro incidentes de engenharia reais**, encontrados e corrigidos só ao operar a rede federada real (nunca visíveis numa simulação de processo único) — incluindo um que teria invalidado silenciosamente um resultado já dado como concluído, se não tivesse sido auditado antes.
-5. **Achado crítico (2026-08-11): o Caminho B nunca usou o algoritmo de agregação FedNova.** Todos os 12 treinos formais agregaram por FedProx puro (equivalente a FedAvg) — uma lacuna de implementação nunca fechada desde uma simplificação da primeira validação de conectividade (não uma decisão deliberada). Confirmado no código-fonte da própria biblioteca Flower. **Correção em andamento, prazo sexta-feira (2026-08-14)**: portar o FedNova, reexecutar os 12 treinos, comparar os dois resultados.
-6. **Leave-one-out corrigido no Caminho B: o modelo isolado (silo) supera o federado nos dois hospitais.** BPSP +2,75 p.p. de F1 macro, HSL +19,89 p.p. — este último bem acima do que ruído de execução única explicaria. **Isso contradiz o teste equivalente feito antes na fase de ajuste** (que sugeria o oposto); a causa da contradição foi encontrada e confirmada diretamente no código: aquele teste anterior avaliava o hospital isolado contra um conjunto de teste que continuava incluindo o outro hospital — o mesmo tipo de erro de avaliação que motivou este experimento. O novo teste, no Caminho B, não pode cometer esse erro por desenho (nenhum cliente vê dado de outro hospital). É plausível — hipótese ainda não confirmada — que esse resultado esteja ligado ao achado 5 (a diluição de sinal que o FedNova deveria corrigir).
-
-### Pendências ativas, em ordem de prioridade
-
-1. Portar FedNova ao Caminho B, reexecutar os 12 treinos formais, comparar com o resultado atual (FedProx) — prazo 2026-08-14.
-2. Peso de classe auto-agregado, estilo Astraea (condicionado a tempo disponível).
-3. Avaliação humana (escala Likert) da qualidade da justificativa textual do RAG — ferramenta pronta, execução registrada como trabalho futuro por restrição de prazo.
-
-> **Nota sobre a seção [Experimentos](#experimentos) abaixo:** a tabela "Exp 1–19" vem da **fase de
-> ajuste** — código ainda em correção de bugs, esquema de labels e critério de checkpoint mudando no
-> meio do caminho. Não citar esses números como resultado final do TCC. Detalhe completo da
-> reclassificação em [`docs/Linha_do_Tempo_MOSAIC-FL.md`](docs/Linha_do_Tempo_MOSAIC-FL.md), seção
-> "Fechamento da Fase de Ajuste".
-
----
 
 ## Escopo de Avaliação — Leia antes de avaliar este projeto
 
@@ -756,7 +720,7 @@ EOF
 from infrastructure.mosaicfl_server.config_loader import ChromaDBConfigLoader
 loader = ChromaDBConfigLoader()
 
-loader.write({"proximal_mu": 0.005, "stop": False})  # aplica no próximo round
+: False})  # aplica no próximo round
 loader.write({"stop": True})                          # para após o round atual
 loader.clear()                                        # remove config (usa defaults)
 ```
